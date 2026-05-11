@@ -4,6 +4,8 @@ const nextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: 'icons.llamao.fi' },
       { protocol: 'https', hostname: 'token-icons.llamao.fi' },
+      { protocol: 'https', hostname: 'icons.llama.fi' },
+      { protocol: 'https', hostname: 'cdn.llama.fi' },
     ],
   },
 }

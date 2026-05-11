@@ -6,7 +6,6 @@ const CHAINS = {
     name: 'Ethereum (Core)',
     rpc: 'https://ethereum.publicnode.com',
     pool: '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2',
-    llamaChain: 'Ethereum',
     llamaPrefix: 'ethereum',
     icon: 'https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg',
   },
@@ -14,7 +13,6 @@ const CHAINS = {
     name: 'Arbitrum',
     rpc: 'https://arbitrum-one.publicnode.com',
     pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
-    llamaChain: 'Arbitrum',
     llamaPrefix: 'arbitrum',
     icon: 'https://icons.llamao.fi/icons/chains/rsz_arbitrum.jpg',
   },
@@ -22,7 +20,6 @@ const CHAINS = {
     name: 'Base',
     rpc: 'https://base.publicnode.com',
     pool: '0xA238Dd80C259a72e81d7e4664a9801593F98d1c5',
-    llamaChain: 'Base',
     llamaPrefix: 'base',
     icon: 'https://icons.llamao.fi/icons/chains/rsz_base.jpg',
   },
@@ -30,7 +27,6 @@ const CHAINS = {
     name: 'Polygon',
     rpc: 'https://polygon-bor-rpc.publicnode.com',
     pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
-    llamaChain: 'Polygon',
     llamaPrefix: 'polygon',
     icon: 'https://icons.llamao.fi/icons/chains/rsz_polygon.jpg',
   },
@@ -38,7 +34,6 @@ const CHAINS = {
     name: 'Optimism',
     rpc: 'https://optimism.publicnode.com',
     pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
-    llamaChain: 'Optimism',
     llamaPrefix: 'optimism',
     icon: 'https://icons.llamao.fi/icons/chains/rsz_optimism.jpg',
   },
@@ -46,7 +41,6 @@ const CHAINS = {
     name: 'Avalanche',
     rpc: 'https://avalanche-c-chain-rpc.publicnode.com',
     pool: '0x794a61358D6845594F94dc1DB02A252b5b4814aD',
-    llamaChain: 'Avalanche',
     llamaPrefix: 'avax',
     icon: 'https://icons.llamao.fi/icons/chains/rsz_avalanche.jpg',
   },
@@ -66,6 +60,19 @@ async function ethCall(rpc: string, to: string, data: string): Promise<string> {
   const json = await res.json()
   const raw = (json.result as string | undefined) ?? '0x0'
   return raw === '0x' ? '0x0' : raw
+}
+
+// Decode address[] ABI return (offset + length + packed addresses)
+function decodeAddressArray(hex: string): string[] {
+  const d = hex.startsWith('0x') ? hex.slice(2) : hex
+  if (d.length < 128) return []
+  const length = parseInt(d.slice(64, 128), 16)
+  const addrs: string[] = []
+  for (let i = 0; i < length; i++) {
+    const start = 128 + i * 64 + 24
+    addrs.push('0x' + d.slice(start, start + 40))
+  }
+  return addrs
 }
 
 function parseSlots(hex: string): bigint[] {
@@ -93,7 +100,7 @@ function decodeConfig(c: bigint) {
   }
 }
 
-async function batch<T, R>(items: T[], fn: (item: T) => Promise<R>, size = 20): Promise<R[]> {
+async function batch<T, R>(items: T[], fn: (item: T) => Promise<R>, size = 15): Promise<R[]> {
   const out: R[] = []
   for (let i = 0; i < items.length; i += size) {
     const chunk = await Promise.all(items.slice(i, i + size).map(fn))
@@ -109,52 +116,44 @@ export async function GET(req: NextRequest) {
   const cfg = CHAINS[key] ?? CHAINS['ethereum-core']
 
   try {
-    // 1. DeFiLlama yields → Aave V3 asset list for this chain
-    const yieldsRes = await fetch('https://yields.llama.fi/pools', { cache: 'no-store' })
-    const { data: allPools } = await yieldsRes.json() as { data: Array<{
-      project: string; chain: string; symbol: string; tvlUsd: number
-      apyBase: number | null; apyBaseBorrow: number | null
-      underlyingTokens: string[] | null
-    }> }
+    // 1. Get reserve list directly from on-chain (getReservesList selector: 0xd1946dbc)
+    const listRaw = await ethCall(cfg.rpc, cfg.pool, '0xd1946dbc')
+    const assets = decodeAddressArray(listRaw)
 
-    const allAavePools = allPools
-      .filter(p => p.project === 'aave-v3' && p.chain === cfg.llamaChain && p.underlyingTokens?.length)
-      .sort((a, b) => b.tvlUsd - a.tvlUsd)
-
-    // Deduplicate by underlying token — keep highest-TVL pool per asset
-    const seenTokens = new Set<string>()
-    const pools = allAavePools.filter(p => {
-      const addr = p.underlyingTokens![0].toLowerCase()
-      if (seenTokens.has(addr)) return false
-      seenTokens.add(addr)
-      return true
-    })
-
-    if (!pools.length) {
+    if (!assets.length) {
       return NextResponse.json({ reserves: [], chain: cfg.name, chains: buildChainMeta() })
     }
 
-    // 2. getReserveData(asset) for each pool — batched
-    const reserveDataRaw = await batch(pools, async (pool) => {
-      const asset = pool.underlyingTokens![0]
+    // 2. Fetch prices + symbols from DeFiLlama coins API
+    const ids = assets.map(a => `${cfg.llamaPrefix}:${a.toLowerCase()}`).join(',')
+    let coins: Record<string, { price: number; symbol?: string; decimals?: number }> = {}
+    try {
+      const pr = await fetch(`https://coins.llama.fi/prices/current/${ids}`, { cache: 'no-store' })
+      coins = (await pr.json()).coins ?? {}
+    } catch { /* prices optional */ }
+
+    // 3. getReserveData(asset) for each asset — batched
+    const reserveDataRaw = await batch(assets, async (asset) => {
       const padded = asset.slice(2).padStart(64, '0')
       const raw = await ethCall(cfg.rpc, cfg.pool, '0x35ea6a75' + padded)
-      return { pool, asset, raw }
+      return { asset, raw }
     })
 
-    // 3. totalSupply on aToken + vDebt — all in parallel
-    const processed = await batch(reserveDataRaw, async ({ pool, asset, raw }) => {
+    // 4. totalSupply on aToken + vDebt — batched
+    const processed = await batch(reserveDataRaw, async ({ asset, raw }) => {
       const s = parseSlots(raw)
       if (s.length < 11) return null
 
-      const config     = decodeConfig(s[0])
-      const onchainSupplyApy = Number(s[2]) / RAY * 100
-      const onchainBorrowApy = Number(s[4]) / RAY * 100
+      const config           = decodeConfig(s[0])
+      const supplyApy        = Number(s[2]) / RAY * 100
+      const borrowApy        = Number(s[4]) / RAY * 100
       const aTokenAddress    = toAddr(s[8])
       const vDebtAddress     = toAddr(s[10])
 
-      const dec     = config.decimals || 18
-      const divisor = 10 ** dec
+      const coinKey = `${cfg.llamaPrefix}:${asset.toLowerCase()}`
+      const coinData = coins[coinKey]
+      const dec      = coinData?.decimals ?? (config.decimals || 18)
+      const divisor  = 10 ** dec
 
       const [aRaw, vRaw] = await Promise.all([
         ethCall(cfg.rpc, aTokenAddress, '0x18160ddd'),
@@ -164,44 +163,30 @@ export async function GET(req: NextRequest) {
       const totalSupplied = Number(BigInt(aRaw)) / divisor
       const totalBorrowed = Number(BigInt(vRaw)) / divisor
       const utilization   = totalSupplied > 0 ? (totalBorrowed / totalSupplied) * 100 : 0
+      const price         = coinData?.price ?? 0
+      const symbol        = coinData?.symbol ?? asset.slice(0, 6)
 
       return {
-        symbol: pool.symbol,
+        symbol,
         assetAddress: asset,
         aTokenAddress,
         vDebtAddress,
-        // prefer DeFiLlama APY (smoother/averaged) — fall back to on-chain
-        supplyApy: pool.apyBase        ?? onchainSupplyApy,
-        borrowApy: pool.apyBaseBorrow  ?? onchainBorrowApy,
+        supplyApy,
+        borrowApy,
         utilization,
         totalSupplied,
         totalBorrowed,
+        price,
+        totalSuppliedUsd:  totalSupplied * price,
+        totalBorrowedUsd:  totalBorrowed * price,
+        supplyCapUsd:      config.supplyCap > 0 ? config.supplyCap * price : null,
+        borrowCapUsd:      config.borrowCap > 0 ? config.borrowCap * price : null,
         ...config,
       }
     })
 
-    const valid = processed.filter(Boolean) as NonNullable<(typeof processed)[number]>[]
-
-    // 4. Prices from DeFiLlama coins API
-    const ids = reserveDataRaw.map(r => `${cfg.llamaPrefix}:${r.asset.toLowerCase()}`).join(',')
-    let coins: Record<string, { price: number }> = {}
-    try {
-      const pr = await fetch(`https://coins.llama.fi/prices/current/${ids}`, { cache: 'no-store' })
-      coins = (await pr.json()).coins ?? {}
-    } catch { /* prices optional */ }
-
-    const reserves = valid.map((r, i) => {
-      const key2  = `${cfg.llamaPrefix}:${reserveDataRaw[i].asset.toLowerCase()}`
-      const price = coins[key2]?.price ?? 0
-      return {
-        ...r,
-        price,
-        totalSuppliedUsd: r.totalSupplied * price,
-        totalBorrowedUsd: r.totalBorrowed * price,
-        supplyCapUsd:     r.supplyCap > 0 ? r.supplyCap * price : null,
-        borrowCapUsd:     r.borrowCap > 0 ? r.borrowCap * price : null,
-      }
-    }).sort((a, b) => b.totalSuppliedUsd - a.totalSuppliedUsd)
+    const reserves = (processed.filter(Boolean) as NonNullable<(typeof processed)[number]>[])
+      .sort((a, b) => b.totalSuppliedUsd - a.totalSuppliedUsd)
 
     return NextResponse.json({
       reserves,
