@@ -42,6 +42,14 @@ const sections = [
     status: 'live' as const,
   },
   {
+    href: '/yield-tracker',
+    title: 'Yield Tracker',
+    description:
+      'Compare PT fixed-yield loops, Morpho lending markets, and Aave rates. Live gas-adjusted net profit calculations for sUSDe, weETH, and PT strategies.',
+    tags: ['Pendle PT', 'Morpho Loops', 'Aave Rates'],
+    status: 'live' as const,
+  },
+  {
     href: '#',
     title: 'Cross-chain Monitoring',
     description:
