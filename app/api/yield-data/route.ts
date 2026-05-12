@@ -293,7 +293,7 @@ export async function GET() {
       fetchPendle(),
       fetchMorphoAll(),
       safe(fetchAaveRates,   []),
-      safe(fetchEthenaYield, {}),
+      safe(fetchEthenaYield, { staking_apy: 0, avg30d_apy: 0, protocol_apy: 0 }),
       safe(fetchGas,         {}),
       safe(fetchPeg,         { price: null, change_24h: null, status: 'unknown' }),
     ])
