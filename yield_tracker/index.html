@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yield Tracker</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d0f14; color: #e2e8f0; font-family: 'SF Mono','Fira Code',monospace; font-size: 13px; }
+
+header {
+  background: #13161e; border-bottom: 1px solid #1e2330;
+  padding: 13px 26px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 20;
+}
+header h1 { font-size: 15px; font-weight: 700; color: #f1f5f9; }
+header h1 span { color: #6366f1; }
+.meta { color: #64748b; font-size: 11px; display: flex; gap: 14px; align-items: center; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 5px; animation: pulse 2s infinite; }
+.dot.err { background: #ef4444; animation: none; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.35} }
+
+main { padding: 18px 26px; max-width: 1400px; margin: 0 auto; }
+
+/* Controls */
+.controls {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+  background: #13161e; border: 1px solid #1e2330; border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 14px;
+}
+.cg { display: flex; flex-direction: column; gap: 3px; }
+.cg label { color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.cg input {
+  background: #0d0f14; border: 1px solid #2d3348; color: #f1f5f9;
+  padding: 6px 10px; border-radius: 6px; font-family: inherit; font-size: 12px; width: 110px;
+}
+.cg input:focus { outline: none; border-color: #6366f1; }
+.gas-pill {
+  align-self: flex-end; background: #1e2330; border-radius: 6px;
+  padding: 6px 12px; font-size: 11px; color: #94a3b8; white-space: nowrap;
+}
+.gas-pill strong { color: #f1f5f9; }
+button {
+  background: #6366f1; color: #fff; border: none; border-radius: 6px;
+  padding: 7px 18px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700;
+  align-self: flex-end;
+}
+button:hover { background: #4f46e5; }
+
+/* Risk Panel */
+.risk-panel {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.risk-card {
+  background: #13161e; border: 1px solid #1e2330; border-radius: 8px;
+  padding: 12px 14px;
+}
+.risk-card.alert { border-color: #ef4444; background: #1a0e0e; }
+.risk-card.warn  { border-color: #eab308; background: #1a160a; }
+.risk-card.good  { border-color: #22c55e; background: #0a1a0e; }
+.rk-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #64748b; margin-bottom: 4px; }
+.rk-val { font-size: 18px; font-weight: 700; color: #f1f5f9; }
+.rk-sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+.rk-val.g { color: #4ade80; } .rk-val.y { color: #fbbf24; } .rk-val.r { color: #f87171; }
+
+/* Recommendation */
+.rec { background: #0f172a; border: 1px solid #1e3a5f; border-radius: 8px; padding: 11px 14px; margin-bottom: 14px; font-size: 12px; line-height: 1.6; }
+.rec-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #3b82f6; font-weight: 700; margin-bottom: 4px; }
+.rec strong { color: #f1f5f9; }
+
+/* Stats bar */
+.stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.stat { background: #13161e; border: 1px solid #1e2330; border-radius: 8px; padding: 10px 14px; flex: 1; min-width: 120px; }
+.stat .s-lbl { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+.stat .s-val { font-size: 19px; font-weight: 700; }
+.g { color: #4ade80; } .y { color: #fbbf24; } .r { color: #f87171; } .m { color: #475569; } .w { color: #f1f5f9; }
+
+/* Sections */
+section { margin-bottom: 24px; }
+.sec-hdr { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; margin-bottom: 8px; padding-bottom: 7px; border-bottom: 1px solid #1e2330; display: flex; align-items: center; justify-content: space-between; }
+.sec-hdr span { color: #475569; font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* Filter bar */
+.fb { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.fb input[type=text] { background: #13161e; border: 1px solid #1e2330; color: #f1f5f9; padding: 5px 10px; border-radius: 6px; font-family: inherit; font-size: 12px; width: 170px; }
+.fb input[type=text]:focus { outline: none; border-color: #6366f1; }
+.fb label { color: #64748b; font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.fb input[type=checkbox] { accent-color: #6366f1; }
+
+/* Tables */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { text-align: left; padding: 7px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #475569; border-bottom: 1px solid #1e2330; white-space: nowrap; cursor: pointer; user-select: none; }
+.tbl th:hover { color: #94a3b8; }
+.tbl td { padding: 8px 10px; border-bottom: 1px solid #161921; white-space: nowrap; vertical-align: middle; }
+.tbl tr:hover td { background: #13161e; }
+.tbl tr.hl td { background: #0a150a; }
+
+/* Badges */
+.badge { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+.bg { background: #14532d; color: #4ade80; }
+.by { background: #713f12; color: #fbbf24; }
+.br { background: #450a0a; color: #f87171; }
+.bm { background: #1e2330; color: #64748b; }
+.bi { background: #1e1b4b; color: #818cf8; }
+
+/* Trend arrows */
+.up   { color: #f87171; } /* borrow up = bad */
+.down { color: #4ade80; } /* borrow down = good */
+.flat { color: #475569; }
+
+/* HF table tooltip */
+.hf-toggle { color: #6366f1; cursor: pointer; font-size: 10px; text-decoration: underline; white-space: nowrap; }
+.hf-popup {
+  display: none; position: absolute; z-index: 100;
+  background: #13161e; border: 1px solid #2d3348; border-radius: 8px;
+  padding: 10px; min-width: 320px; font-size: 11px; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+}
+.hf-popup.show { display: block; }
+.hf-popup table { width: 100%; border-collapse: collapse; }
+.hf-popup th { color: #64748b; font-size: 10px; padding: 4px 8px; text-align: right; border-bottom: 1px solid #1e2330; }
+.hf-popup th:first-child { text-align: left; }
+.hf-popup td { padding: 5px 8px; text-align: right; border-bottom: 1px solid #161921; }
+.hf-popup td:first-child { text-align: left; color: #94a3b8; }
+.hf-popup tr.active td { color: #6366f1; font-weight: 700; }
+
+.loading { display: flex; align-items: center; justify-content: center; height: 160px; color: #475569; }
+.err-banner { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; }
+.empty { color: #475569; font-size: 12px; padding: 16px 0; }
+a { color: #6366f1; text-decoration: none; } a:hover { text-decoration: underline; }
+
+/* ── Strategy Calculator ─────────────────────────────────────────── */
+.calc-wrap {
+  background: #13161e; border: 1px solid #1e2330; border-radius: 10px;
+  padding: 16px; margin-bottom: 14px;
+}
+.calc-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: #6366f1; font-weight: 700; margin-bottom: 14px;
+}
+.calc-body { display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
+@media (max-width: 900px) { .calc-body { grid-template-columns: 1fr; } }
+
+.calc-inputs { display: flex; flex-direction: column; gap: 10px; }
+.calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.calc-field { display: flex; flex-direction: column; gap: 3px; }
+.calc-field label { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #64748b; }
+.calc-field input, .calc-field select {
+  background: #0d0f14; border: 1px solid #2d3348; color: #f1f5f9;
+  padding: 7px 10px; border-radius: 6px; font-family: inherit; font-size: 12px; width: 100%;
+}
+.calc-field input:focus, .calc-field select:focus { outline: none; border-color: #6366f1; }
+.calc-field.full { grid-column: span 2; }
+.preset-row { grid-column: span 2; }
+select option { background: #13161e; }
+
+.calc-results { display: flex; flex-direction: column; gap: 10px; }
+
+.result-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+.res-card {
+  background: #0d0f14; border: 1px solid #1e2330; border-radius: 8px;
+  padding: 10px 12px;
+}
+.res-lbl { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+.res-val { font-size: 16px; font-weight: 700; color: #f1f5f9; }
+.res-val.g { color: #4ade80; } .res-val.r { color: #f87171; } .res-val.y { color: #fbbf24; }
+
+.loop-breakdown { overflow-x: auto; }
+.loop-breakdown table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.loop-breakdown th {
+  text-align: right; padding: 5px 8px; color: #475569;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+  border-bottom: 1px solid #1e2330;
+}
+.loop-breakdown th:first-child { text-align: left; }
+.loop-breakdown td { padding: 5px 8px; text-align: right; border-bottom: 1px solid #161921; }
+.loop-breakdown td:first-child { text-align: left; color: #94a3b8; }
+.loop-breakdown tr.total-row td { color: #f1f5f9; font-weight: 700; border-top: 1px solid #2d3348; }
+.loop-breakdown tr.total-row td:first-child { color: #6366f1; }
+
+.compare-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.cmp-card {
+  background: #0d0f14; border: 1px solid #1e2330; border-radius: 8px;
+  padding: 10px 12px; cursor: pointer; transition: border-color .15s;
+}
+.cmp-card:hover { border-color: #4f46e5; }
+.cmp-card.active { border-color: #6366f1; background: #13152a; }
+.cmp-name { font-size: 12px; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+.cmp-apy  { font-size: 18px; font-weight: 700; }
+.cmp-meta { font-size: 10px; color: #64748b; margin-top: 3px; }
+
+.calc-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.calc-tab {
+  padding: 5px 14px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  cursor: pointer; background: #0d0f14; border: 1px solid #1e2330; color: #64748b;
+}
+.calc-tab.active { background: #1e1b4b; border-color: #6366f1; color: #818cf8; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Yield <span>Tracker</span></h1>
+  <div class="meta">
+    <span><span class="dot" id="dot"></span><span id="stTxt">connecting...</span></span>
+    <span id="updAt">—</span>
+    <span id="cntdn" style="color:#6366f1"></span>
+  </div>
+</header>
+
+<main>
+  <!-- Controls -->
+  <div class="controls">
+    <div class="cg"><label>Capital (USD)</label><input type="number" id="capital" value="4100" min="100" step="100"></div>
+    <div class="cg"><label>Health Factor</label><input type="number" id="hf" value="2.0" min="1.1" max="5" step="0.1"></div>
+    <div class="cg"><label>Min PT APY (%)</label><input type="number" id="minApy" value="0" min="0" step="1"></div>
+    <div class="gas-pill" id="gasPill">Gas — loading...</div>
+    <button onclick="recalc()">Recalculate</button>
+  </div>
+
+  <!-- ── Strategy Calculator ─────────────────────────────────────── -->
+  <div class="calc-wrap">
+    <div class="calc-title">Strategy Calculator</div>
+
+    <div class="calc-tabs">
+      <div class="calc-tab active" onclick="setCalcTab('builder',this)">Builder</div>
+      <div class="calc-tab" onclick="setCalcTab('compare',this)">Compare Strategies</div>
+    </div>
+
+    <!-- Builder tab -->
+    <div id="calcBuilder">
+      <div class="calc-body">
+        <!-- Left: inputs -->
+        <div class="calc-inputs">
+          <div class="calc-row preset-row">
+            <div class="calc-field full">
+              <label>Strategy Preset</label>
+              <select id="cPreset" onchange="loadPreset()">
+                <option value="pt-apyusd-morpho">PT-apyUSD + Morpho (borrow USDC)</option>
+                <option value="pt-apxusd-morpho">PT-apxUSD + Morpho (borrow USDC)</option>
+                <option value="susde-aave">sUSDe → Aave (borrow USDC → buy more sUSDe)</option>
+                <option value="susde-morpho">sUSDe → Morpho (borrow USDC → buy more sUSDe)</option>
+                <option value="susde-aave-emode">sUSDe → Aave eMode (90% LTV, high leverage)</option>
+                <option value="weeth-aave">weETH → Aave (borrow ETH loop)</option>
+                <option value="custom">Custom Strategy</option>
+              </select>
+            </div>
+          </div>
+          <div class="calc-row">
+            <div class="calc-field">
+              <label>Capital (USD)</label>
+              <input type="number" id="cCapital" value="4100" min="100" step="100" oninput="calcNow()">
+            </div>
+            <div class="calc-field">
+              <label>Duration (days)</label>
+              <input type="number" id="cDays" value="36" min="1" step="1" oninput="calcNow()">
+            </div>
+          </div>
+          <div class="calc-row">
+            <div class="calc-field">
+              <label>Collateral APY (%)</label>
+              <input type="number" id="cColApy" value="19.33" step="0.1" oninput="calcNow()">
+            </div>
+            <div class="calc-field">
+              <label>Borrow APY (%)</label>
+              <input type="number" id="cBorApy" value="11.18" step="0.1" oninput="calcNow()">
+            </div>
+          </div>
+          <div class="calc-row">
+            <div class="calc-field">
+              <label>LLTV (%)</label>
+              <input type="number" id="cLltv" value="86" min="1" max="99" step="1" oninput="calcNow()">
+            </div>
+            <div class="calc-field">
+              <label>Target HF</label>
+              <input type="number" id="cHf" value="2.0" min="1.05" max="10" step="0.05" oninput="calcNow()">
+            </div>
+          </div>
+          <div class="calc-row">
+            <div class="calc-field">
+              <label>Gas / loop tx ($)</label>
+              <input type="number" id="cGasPerLoop" value="15" min="0" step="1" oninput="calcNow()">
+            </div>
+            <div class="calc-field">
+              <label>Collateral Token</label>
+              <input type="text" id="cColToken" value="PT-apyUSD" oninput="calcNow()">
+            </div>
+          </div>
+          <div style="font-size:10px;color:#475569;margin-top:2px">
+            ↑ Live PT APY/borrow rates from tracker auto-fill when selecting Pendle presets
+          </div>
+        </div>
+
+        <!-- Right: results -->
+        <div class="calc-results">
+          <div class="result-grid" id="calcResultGrid">
+            <div class="res-card"><div class="res-lbl">Net APY</div><div class="res-val" id="rNetApy">—</div></div>
+            <div class="res-card"><div class="res-lbl">Leverage</div><div class="res-val" id="rLev">—</div></div>
+            <div class="res-card"><div class="res-lbl">Total Position</div><div class="res-val" id="rTotalPos">—</div></div>
+            <div class="res-card"><div class="res-lbl">Total Debt</div><div class="res-val" id="rDebt">—</div></div>
+            <div class="res-card"><div class="res-lbl">Gross Profit</div><div class="res-val" id="rGross">—</div></div>
+            <div class="res-card"><div class="res-lbl">Gas Cost</div><div class="res-val" id="rGas">—</div></div>
+            <div class="res-card"><div class="res-lbl">Net Profit</div><div class="res-val g" id="rNet">—</div></div>
+            <div class="res-card"><div class="res-lbl">vs Simple Hold</div><div class="res-val" id="rVsSimple">—</div></div>
+            <div class="res-card"><div class="res-lbl">Liq. Price</div><div class="res-val y" id="rLiqPrice">—</div></div>
+            <div class="res-card"><div class="res-lbl">B/E Borrow Rate</div><div class="res-val" id="rBeBorrow">—</div></div>
+            <div class="res-card"><div class="res-lbl">B/E Capital</div><div class="res-val" id="rBeCapital">—</div></div>
+            <div class="res-card"><div class="res-lbl">Loop Txns</div><div class="res-val" id="rLoopTxns">—</div></div>
+          </div>
+
+          <div class="loop-breakdown" style="overflow-x:auto">
+            <table id="loopBreakTable">
+              <thead><tr>
+                <th>Step</th>
+                <th>Action</th>
+                <th>Amount</th>
+                <th>Total Collateral</th>
+                <th>Total Debt</th>
+                <th>Current LTV</th>
+                <th>HF</th>
+              </tr></thead>
+              <tbody id="loopBreakBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compare tab -->
+    <div id="calcCompare" style="display:none">
+      <div style="font-size:11px;color:#64748b;margin-bottom:10px">
+        Click any card to add to comparison. Capital and duration from Builder inputs.
+      </div>
+      <div class="compare-grid" id="compareGrid"></div>
+      <div id="compareTable" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+  </div>
+
+  <!-- Live Protocol Rates -->
+  <section>
+    <div class="sec-hdr">Live Protocol Rates <span>Aave v3 Ethereum · Ethena sUSDe · Morpho sUSDe markets</span></div>
+    <div id="protocolRatesOut"><div class="loading">Loading...</div></div>
+  </section>
+
+  <!-- Risk Panel -->
+  <div class="risk-panel" id="riskPanel"></div>
+
+  <div id="errBanner" class="err-banner" style="display:none"></div>
+  <div id="rec" class="rec" style="display:none"><div class="rec-lbl">Best opportunity right now</div><div id="recTxt"></div></div>
+
+  <!-- Stats -->
+  <div class="stats" id="statsBar"></div>
+
+  <!-- Loop Opportunities -->
+  <section>
+    <div class="sec-hdr">Pendle + Morpho Loop Opportunities <span>matched PT collateral markets · HF sensitivity · liquidation price</span></div>
+    <div class="fb">
+      <input type="text" id="loopSearch" placeholder="Search..." oninput="renderLoops()">
+      <label><input type="checkbox" id="loopOnlyMatched" checked onchange="renderLoops()"> Matched only</label>
+      <label><input type="checkbox" id="loopOnlyPos" onchange="renderLoops()"> Profitable only</label>
+    </div>
+    <div id="loopsOut"><div class="loading">Loading...</div></div>
+  </section>
+
+  <!-- Pendle Markets -->
+  <section>
+    <div class="sec-hdr">All Pendle PT Markets — Fixed Yield <span>Sorted by APY · min $500k liq · &gt;5d remaining</span></div>
+    <div class="fb"><input type="text" id="pendleSearch" placeholder="Search..." oninput="renderPendle()"></div>
+    <div id="pendleOut"><div class="loading">Loading...</div></div>
+  </section>
+
+  <!-- Morpho Markets -->
+  <section>
+    <div class="sec-hdr">All Morpho PT Collateral Markets <span>Whitelisted · min $10k liq · supply vs borrow breakdown</span></div>
+    <div class="fb"><input type="text" id="morphoSearch" placeholder="Search..." oninput="renderMorpho()"></div>
+    <div id="morphoOut"><div class="loading">Loading...</div></div>
+  </section>
+</main>
+
+<!-- HF popup (shared) -->
+<div class="hf-popup" id="hfPopup"></div>
+
+<script>
+let RAW = null;
+
+const f2  = n => n == null ? '—' : (+n).toFixed(2);
+const f1  = n => n == null ? '—' : (+n).toFixed(1);
+const f4  = n => n == null ? '—' : (+n).toFixed(4);
+const usd = n => n == null ? '—' : '$' + (+n).toLocaleString('en-US', {maximumFractionDigits: 0});
+const pct = n => n == null ? '—' : f2(n) + '%';
+const inp = id => parseFloat(document.getElementById(id).value) || 0;
+
+function apyBadge(v) {
+  if (v == null) return '<span class="badge bm">—</span>';
+  const c = v >= 15 ? 'bg' : v >= 10 ? 'by' : 'br';
+  return `<span class="badge ${c}">${f2(v)}%</span>`;
+}
+function apyColor(v) { return v >= 15 ? 'g' : v >= 8 ? 'y' : 'r'; }
+function netColor(v) { return v > 0 ? 'g' : 'r'; }
+function utilColor(v) { return v > 95 ? 'r' : v > 90 ? 'y' : 'g'; }
+function trendArrow(t, type) {
+  // for borrow rate: up=bad(red), down=good(green)
+  // for util: up=bad, down=good
+  if (t === 'up')   return `<span class="up">↑</span>`;
+  if (t === 'down') return `<span class="down">↓</span>`;
+  return `<span class="flat">→</span>`;
+}
+
+function calcLoop(ptApy, borrowApy, lltv, days, capital, gasLoop, hf) {
+  const ltv = (lltv / 100) / hf;
+  const lev = 1 / (1 - ltv);
+  const netApy = (ptApy / 100) * lev - (borrowApy / 100) * (lev - 1);
+  const gross  = capital * netApy * days / 365;
+  return { netApy: netApy * 100, lev, gross, net: gross - gasLoop, ltv: ltv * 100 };
+}
+
+function morphoUrl(id) { return `https://app.morpho.org/ethereum/market/${id}`; }
+function pendleUrl(addr) { return `https://app.pendle.finance/trade/pools/${addr}`; }
+
+function recalc() { if (RAW) render(RAW); }
+
+// ── Render ─────────────────────────────────────────────────────────────────
+
+function render(data) {
+  RAW = data;
+  renderProtocolRates(data);
+  renderRisk(data);
+  renderStats(data);
+  renderRec(data);
+  renderLoops();
+  renderPendle();
+  renderMorpho();
+  renderGas(data.gas);
+  syncCalcWithLiveData(data);
+}
+
+function renderGas(gas) {
+  if (!gas) return;
+  const gwei = gas.gwei;
+  const eth  = gas.eth_usd;
+  const cs   = gas.cost_simple;
+  const cl   = gas.cost_loop;
+  const pill = document.getElementById('gasPill');
+  if (gwei != null) {
+    pill.innerHTML = `⛽ <strong>${f1(gwei)} gwei</strong> · Simple ~<strong>${usd(cs)}</strong> · Loop ~<strong>${usd(cl)}</strong>`;
+  } else {
+    pill.innerHTML = '⛽ Gas unavailable';
+  }
+}
+
+function renderProtocolRates(data) {
+  const aave   = data.aave   || [];
+  const ethena = data.ethena || {};
+  const ml     = data.morpho_lending || [];
+  const el     = document.getElementById('protocolRatesOut');
+  if (!el) return;
+
+  if (!aave.length && !ethena.staking_apy) {
+    el.innerHTML = '<div class="empty">Rate data unavailable.</div>';
+    return;
+  }
+
+  // Compact money formatter (shows $161M not $161,631,016)
+  const usdM = n => !n ? '—' : n >= 1e9 ? '$'+(n/1e9).toFixed(1)+'B' : n >= 1e6 ? '$'+Math.round(n/1e6)+'M' : '$'+Math.round(n).toLocaleString();
+
+  const aaveHtml = aave.map(a => `
+    <tr>
+      <td class="w" style="font-weight:600">${a.symbol}</td>
+      <td class="${a.supply_apy > 0 ? 'g' : 'm'}">${a.supply_apy > 0 ? pct(a.supply_apy) : '—'}</td>
+      <td class="${a.borrow_apy > 8 ? 'r' : a.borrow_apy > 4 ? 'y' : a.borrow_apy > 0 ? 'g' : 'm'}">${a.borrow_apy > 0 ? pct(a.borrow_apy) : '—'}</td>
+      <td class="m">${a.ltv > 0 ? a.ltv+'%' : '—'}</td>
+      <td class="m">${usdM(a.total_supply_usd)}</td>
+    </tr>`).join('');
+
+  const susdeMarkets = ml.filter(m => m.collateral.toLowerCase().includes('susde') && m.liquidity_usd > 0).slice(0, 5);
+  const susdeHtml = susdeMarkets.map(m => `
+    <tr>
+      <td class="w" style="font-weight:600">${m.collateral}/${m.loan}</td>
+      <td class="${m.borrow_apy > 8 ? 'r' : m.borrow_apy > 4 ? 'y' : 'g'}">${pct(m.borrow_apy)}</td>
+      <td class="${utilColor(m.utilization)}">${f1(m.utilization)}%</td>
+      <td class="m">${f1(m.lltv)}%</td>
+      <td class="m">${usdM(m.liquidity_usd)}</td>
+    </tr>`).join('');
+
+  // Ethena rate pills (compact, no risk-card)
+  const ethenaPills = [
+    ['Staking APY', ethena.staking_apy, 'g'],
+    ['30d Avg', ethena.avg30d_apy, ''],
+    ['Protocol', ethena.protocol_apy, ''],
+  ].map(([label, val, cls]) => `
+    <div style="background:#13161e;border:1px solid #1e2330;border-radius:8px;padding:8px 12px;flex:1;min-width:90px">
+      <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">${label}</div>
+      <div style="font-size:16px;font-weight:700" class="${cls||'w'}">${val != null ? pct(val) : '—'}</div>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">
+      <div style="flex:1;min-width:260px;overflow-x:auto">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#6366f1;font-weight:700;margin-bottom:6px">Aave v3 — Ethereum</div>
+        <table class="tbl" style="min-width:300px">
+          <thead><tr><th>Asset</th><th>Supply APY</th><th>Borrow APY</th><th>LTV</th><th>TVL</th></tr></thead>
+          <tbody>${aaveHtml || '<tr><td colspan="5" class="m">No data</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div style="flex:1;min-width:260px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#6366f1;font-weight:700;margin-bottom:6px">Ethena sUSDe</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:${susdeMarkets.length ? '12px' : '0'}">${ethenaPills}</div>
+        ${susdeMarkets.length ? `
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;font-weight:600;margin:10px 0 5px">Morpho sUSDe Markets</div>
+        <div style="overflow-x:auto">
+        <table class="tbl" style="min-width:280px">
+          <thead><tr><th>Market</th><th>Borrow APY</th><th>Util</th><th>LLTV</th><th>Liq.</th></tr></thead>
+          <tbody>${susdeHtml}</tbody>
+        </table></div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderRisk(data) {
+  const peg = data.peg || {};
+  const gas = data.gas || {};
+  const loops = (data.loops || []).filter(l => l.loop);
+
+  const pegPrice  = peg.price;
+  const pegStatus = peg.status;
+  const pegChange = peg.change_24h;
+
+  let pegClass = 'good', pegLabel = 'HEALTHY';
+  if (pegStatus === 'depeg')   { pegClass = 'alert'; pegLabel = 'DE-PEG!'; }
+  if (pegStatus === 'unknown') { pegClass = '';       pegLabel = 'UNKNOWN'; }
+  if (pegPrice != null && pegPrice < 0.999) { pegClass = 'warn'; pegLabel = 'SLIGHT SLIP'; }
+
+  // Highest utilization
+  const maxUtil = loops.reduce((m, l) => Math.max(m, l.utilization || 0), 0);
+  const maxUtilM = loops.find(l => (l.utilization || 0) === maxUtil);
+  const utilClass = maxUtil > 95 ? 'alert' : maxUtil > 90 ? 'warn' : 'good';
+
+  // Highest borrow rate
+  const maxBorrow = loops.reduce((m, l) => Math.max(m, l.borrow_apy || 0), 0);
+  const borrowClass = maxBorrow > 15 ? 'alert' : maxBorrow > 10 ? 'warn' : 'good';
+
+  document.getElementById('riskPanel').innerHTML = `
+    <div class="risk-card ${pegClass}">
+      <div class="rk-lbl">apxUSD Peg</div>
+      <div class="rk-val ${pegStatus === 'ok' ? 'g' : 'r'}">${pegPrice != null ? '$'+f4(pegPrice) : '—'}</div>
+      <div class="rk-sub">${pegLabel} · 24h: ${pegChange != null ? (pegChange >= 0 ? '+' : '') + f4(pegChange) + '%' : '—'}</div>
+    </div>
+    <div class="risk-card ${utilClass}">
+      <div class="rk-lbl">Peak Utilization</div>
+      <div class="rk-val ${utilColor(maxUtil)}">${f1(maxUtil)}%</div>
+      <div class="rk-sub">${maxUtilM ? maxUtilM.collateral.replace('PT-','').split('-')[0] : '—'} · ${maxUtil > 95 ? '⚠ rate spike risk' : maxUtil > 90 ? 'watch closely' : 'normal'}</div>
+    </div>
+    <div class="risk-card ${borrowClass}">
+      <div class="rk-lbl">Peak Borrow Rate</div>
+      <div class="rk-val ${maxBorrow > 12 ? 'r' : maxBorrow > 8 ? 'y' : 'g'}">${pct(maxBorrow)}</div>
+      <div class="rk-sub">${maxBorrow > 15 ? '⚠ loop may be unprofitable' : maxBorrow > 10 ? 'elevated' : 'normal'}</div>
+    </div>
+    <div class="risk-card">
+      <div class="rk-lbl">ETH Gas</div>
+      <div class="rk-val ${gas.gwei != null ? 'g' : 'm'}">${gas.gwei != null ? f1(gas.gwei)+' gwei' : '—'}</div>
+      <div class="rk-sub">ETH ${gas.eth_usd != null ? '$'+Math.round(gas.eth_usd) : '—'} · ${gas.cost_simple != null ? 'Simple ~'+usd(gas.cost_simple) : ''}</div>
+    </div>
+    <div class="risk-card">
+      <div class="rk-lbl">Markets Tracked</div>
+      <div class="rk-val w">${(data.loops||[]).length}</div>
+      <div class="rk-sub">${(data.loops||[]).filter(l=>l.loop).length} matched · ${(data.pendle||[]).length} Pendle pools</div>
+    </div>
+  `;
+}
+
+function renderStats(data) {
+  const capital  = inp('capital');
+  const hf       = inp('hf');
+  const gasSimple = (data.gas || {}).cost_simple || inp('gasSimpleV') || 35;
+  const gasLoop  = (data.gas || {}).cost_loop   || inp('gasLoopV')  || 150;
+  const pendle   = data.pendle || [];
+  const loops    = (data.loops || []).filter(l => l.loop);
+
+  const bestPT   = pendle[0];
+  const bestLoop = loops[0];
+
+  let ptNet = null, loopNet = null, loopApy = null;
+  if (bestPT?.days_left) ptNet = capital * (bestPT.pt_apy / 100) * bestPT.days_left / 365 - gasSimple;
+  if (bestLoop?.days_left) {
+    const { netApy } = calcLoop(bestLoop.pendle_pt_apy, bestLoop.borrow_apy, bestLoop.lltv, bestLoop.days_left, capital, gasLoop, hf);
+    loopNet = capital * (netApy / 100) * bestLoop.days_left / 365 - gasLoop;
+    loopApy = netApy;
+  }
+
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat"><div class="s-lbl">Best PT APY</div><div class="s-val ${bestPT ? apyColor(bestPT.pt_apy) : ''}">${bestPT ? pct(bestPT.pt_apy) : '—'}</div></div>
+    <div class="stat"><div class="s-lbl">Simple PT Net (${bestPT?.days_left||0}d)</div><div class="s-val ${ptNet!=null?netColor(ptNet):''}">${usd(ptNet)}</div></div>
+    <div class="stat"><div class="s-lbl">Best Loop Net APY</div><div class="s-val ${loopApy!=null?apyColor(loopApy):''}">${loopApy!=null?pct(loopApy):'—'}</div></div>
+    <div class="stat"><div class="s-lbl">Best Loop Net (${bestLoop?.days_left||0}d)</div><div class="s-val ${loopNet!=null?netColor(loopNet):''}">${usd(loopNet)}</div></div>
+  `;
+}
+
+function renderRec(data) {
+  const capital  = inp('capital');
+  const hf       = inp('hf');
+  const gas      = data.gas || {};
+  const gasSimple = gas.cost_simple || 35;
+  const gasLoop  = gas.cost_loop   || 150;
+  const pendle   = data.pendle || [];
+  const loops    = (data.loops || []).filter(l => l.loop);
+
+  const bestPT   = pendle[0];
+  const bestLoop = loops[0];
+
+  if (!bestPT) { document.getElementById('rec').style.display = 'none'; return; }
+
+  let ptNet = null, loopNet = null, loopApy = null;
+  if (bestPT?.days_left) ptNet = capital * (bestPT.pt_apy / 100) * bestPT.days_left / 365 - gasSimple;
+  if (bestLoop?.days_left) {
+    const { netApy } = calcLoop(bestLoop.pendle_pt_apy, bestLoop.borrow_apy, bestLoop.lltv, bestLoop.days_left, capital, gasLoop, hf);
+    loopNet = capital * (netApy / 100) * bestLoop.days_left / 365 - gasLoop;
+    loopApy = netApy;
+  }
+
+  let txt = '';
+  if (loopNet != null && loopNet > (ptNet||0) && loopNet > 0) {
+    txt = `<strong>Loop strategy wins:</strong> ${bestLoop.collateral} → ${f2(loopApy)}% net APY = <strong>${usd(loopNet)}</strong> in ${bestLoop.days_left}d on ${usd(capital)}. Gas (${usd(gasLoop)}) justified.`;
+  } else if (ptNet != null && ptNet > 0) {
+    const extra = loopNet != null ? ` Loop adds ${usd((loopNet||0)-(ptNet||0))} vs extra ${usd(gasLoop-gasSimple)} gas — not worth it at this size.` : '';
+    txt = `<strong>Simple PT is best:</strong> ${bestPT.name} → ${f2(bestPT.pt_apy)}% fixed = <strong>${usd(ptNet)}</strong> in ${bestPT.days_left}d on ${usd(capital)}.${extra}`;
+  } else {
+    txt = `<strong>No profitable strategy</strong> after gas at ${usd(capital)}. Try increasing capital or wait for lower gas / higher rates.`;
+  }
+
+  document.getElementById('recTxt').innerHTML = txt;
+  document.getElementById('rec').style.display = 'block';
+}
+
+// ── HF Popup ─────────────────────────────────────────────────────────────────
+
+let _popEl = null;
+function showHF(el, loop, days) {
+  const capital  = inp('capital');
+  const gasLoop  = (RAW?.gas || {}).cost_loop || 150;
+  const hfCfg    = inp('hf');
+  const popup    = document.getElementById('hfPopup');
+
+  const HFS = [1.5, 1.75, 2.0, 2.5, 3.0];
+  let rows = '';
+  for (const hf of HFS) {
+    const r   = calcLoop(loop.pendle_pt_apy, loop.borrow_apy, loop.lltv, days, capital, gasLoop, hf);
+    const liq = r.net / capital * 100;
+    const act = Math.abs(hf - hfCfg) < 0.01 ? 'class="active"' : '';
+    rows += `<tr ${act}>
+      <td>HF ${hf}</td>
+      <td>${f2(r.ltv)}%</td>
+      <td>${f2(r.lev)}x</td>
+      <td>${apyBadge(r.netApy)}</td>
+      <td class="${netColor(r.net)}">${usd(r.gross)}</td>
+      <td class="${netColor(r.net)}" style="font-weight:700">${usd(r.net)}</td>
+    </tr>`;
+  }
+  popup.innerHTML = `
+    <table>
+      <thead><tr><th>HF</th><th>LTV</th><th>Lev</th><th>Net APY</th><th>Gross</th><th>Net (after gas)</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="font-size:10px;color:#475569;margin-top:6px">Capital: ${usd(capital)} · Days: ${days} · Gas loop: ${usd(gasLoop)}</div>`;
+
+  const rect = el.getBoundingClientRect();
+  popup.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+  popup.style.left = Math.min(rect.left, window.innerWidth - 340) + 'px';
+  popup.classList.add('show');
+  _popEl = el;
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.hf-toggle') && !e.target.closest('.hf-popup')) {
+    document.getElementById('hfPopup').classList.remove('show');
+    _popEl = null;
+  }
+});
+
+// ── Loops table ───────────────────────────────────────────────────────────────
+
+function renderLoops() {
+  const capital    = inp('capital');
+  const hf         = inp('hf');
+  const minApy     = inp('minApy');
+  const search     = (document.getElementById('loopSearch').value||'').toLowerCase();
+  const onlyMatch  = document.getElementById('loopOnlyMatched').checked;
+  const onlyPos    = document.getElementById('loopOnlyPos').checked;
+  const gas        = (RAW?.gas) || {};
+  const gasLoop    = gas.cost_loop  || 150;
+  const gasSimple  = gas.cost_simple || 35;
+  if (!RAW) return;
+
+  let rows = (RAW.loops || []);
+  if (onlyMatch) rows = rows.filter(r => r.loop);
+  if (search) rows = rows.filter(r => (r.collateral+r.loan).toLowerCase().includes(search));
+
+  rows = rows.map(r => {
+    if (!r.loop || !r.days_left) return { ...r, _c: null };
+    const c = calcLoop(r.pendle_pt_apy, r.borrow_apy, r.lltv, r.days_left, capital, gasLoop, hf);
+    return { ...r, _c: c };
+  });
+
+  if (minApy > 0) rows = rows.filter(r => r._c && r._c.netApy >= minApy);
+  if (onlyPos)    rows = rows.filter(r => r._c && r._c.net > 0);
+
+  if (!rows.length) { document.getElementById('loopsOut').innerHTML = '<div class="empty">No markets match filters.</div>'; return; }
+
+  const html = `<div style="overflow-x:auto"><table class="tbl">
+    <thead><tr>
+      <th>Collateral (PT)</th><th>Loan</th>
+      <th>Borrow APY</th><th>Util</th><th>LLTV</th>
+      <th>PT APY</th><th>Net APY</th><th>Lev</th>
+      <th>Gross (${rows[0]?.days_left||'?'}d)</th><th>Net (after gas)</th>
+      <th>Liq. Price</th><th>B/E Borrow</th><th>B/E Capital</th>
+      <th>HF Sens.</th><th>Morpho Liq.</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const c = r._c;
+      const trend = r.trend || {};
+      const ba = trendArrow(trend.borrow, 'borrow');
+      const liqP = r.liquidation_price != null ? `<span style="color:#94a3b8">$${f4(r.liquidation_price)}</span>` : '—';
+      const beB  = r.breakeven_borrow  != null ? `<span class="y">${pct(r.breakeven_borrow)}</span>` : '—';
+      const beC  = r.breakeven_capital != null ? `<span class="m">${usd(r.breakeven_capital)}</span>` : '—';
+      const hfBtn = c ? `<span class="hf-toggle" onclick="showHF(this, ${JSON.stringify(r).replace(/</g,'&lt;')}, ${r.days_left})">HF table</span>` : '—';
+      return `<tr class="${c && c.net > 0 ? 'hl' : ''}">
+        <td><a href="${morphoUrl(r.market_id)}" target="_blank">${r.collateral}</a></td>
+        <td class="m">${r.loan}</td>
+        <td class="${r.borrow_apy > 12 ? 'r' : r.borrow_apy > 9 ? 'y' : 'g'}">${pct(r.borrow_apy)} ${ba}</td>
+        <td class="${utilColor(r.utilization)}">${f1(r.utilization)}%</td>
+        <td class="m">${f1(r.lltv)}%</td>
+        <td>${r.pendle_pt_apy != null ? apyBadge(r.pendle_pt_apy) : '<span class="badge bm">no match</span>'}</td>
+        <td>${c ? apyBadge(c.netApy) : '—'}</td>
+        <td class="m">${c ? f2(c.lev)+'x' : '—'}</td>
+        <td class="w">${c ? usd(c.gross) : '—'}</td>
+        <td class="${c ? netColor(c.net) : 'm'}" style="font-weight:${c?'700':'400'}">${c ? usd(c.net) : '—'}</td>
+        <td>${liqP}</td>
+        <td>${beB}</td>
+        <td>${beC}</td>
+        <td style="position:relative">${hfBtn}</td>
+        <td class="m">${usd(r.liquidity_usd)}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+  document.getElementById('loopsOut').innerHTML = html;
+}
+
+// ── Pendle table ──────────────────────────────────────────────────────────────
+
+function renderPendle() {
+  const capital  = inp('capital');
+  const gasSimple = (RAW?.gas || {}).cost_simple || 35;
+  const minApy   = inp('minApy');
+  const search   = (document.getElementById('pendleSearch').value||'').toLowerCase();
+  if (!RAW) return;
+
+  let rows = (RAW.pendle || []);
+  if (search) rows = rows.filter(r => r.name.toLowerCase().includes(search));
+  if (minApy > 0) rows = rows.filter(r => r.pt_apy >= minApy);
+
+  rows = rows.map(r => {
+    const gross = capital * (r.pt_apy / 100) * (r.days_left || 0) / 365;
+    return { ...r, _gross: gross, _net: gross - gasSimple };
+  });
+
+  if (!rows.length) { document.getElementById('pendleOut').innerHTML = '<div class="empty">No markets match filters.</div>'; return; }
+
+  const html = `<div style="overflow-x:auto"><table class="tbl">
+    <thead><tr>
+      <th>PT Name</th><th>Fixed APY</th><th>Underlying APY</th>
+      <th>PT Price</th><th>Discount</th><th>24h Volume</th>
+      <th>Expires</th><th>Days</th>
+      <th>Gross (capital)</th><th>Net (after gas)</th><th>Pool Liq.</th>
+    </tr></thead>
+    <tbody>${rows.map(r => `
+      <tr>
+        <td><a href="${pendleUrl(r.address)}" target="_blank">${r.name}</a></td>
+        <td>${apyBadge(r.pt_apy)}</td>
+        <td class="m">${pct(r.underlying_apy)}</td>
+        <td class="m">${r.pt_price != null ? '$'+f4(r.pt_price) : '—'}</td>
+        <td class="${r.pt_discount > 5 ? 'g' : 'm'}">${r.pt_discount != null ? f2(r.pt_discount)+'%' : '—'}</td>
+        <td class="m">${usd(r.volume_24h)}</td>
+        <td class="m">${r.expiry}</td>
+        <td class="${r.days_left < 14 ? 'r' : r.days_left < 30 ? 'y' : 'm'}">${r.days_left}d</td>
+        <td class="w">${usd(r._gross)}</td>
+        <td class="${netColor(r._net)}">${usd(r._net)}</td>
+        <td class="m">${usd(r.liquidity_usd)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+  document.getElementById('pendleOut').innerHTML = html;
+}
+
+// ── Morpho table ──────────────────────────────────────────────────────────────
+
+function renderMorpho() {
+  const search = (document.getElementById('morphoSearch').value||'').toLowerCase();
+  if (!RAW) return;
+
+  let rows = (RAW.loops || []);
+  if (search) rows = rows.filter(r => (r.collateral+r.loan).toLowerCase().includes(search));
+  rows = [...rows].sort((a, b) => b.liquidity_usd - a.liquidity_usd);
+
+  if (!rows.length) { document.getElementById('morphoOut').innerHTML = '<div class="empty">No markets match.</div>'; return; }
+
+  const html = `<div style="overflow-x:auto"><table class="tbl">
+    <thead><tr>
+      <th>Collateral</th><th>Loan</th>
+      <th>Borrow APY</th><th>Supply APY</th>
+      <th>Utilization</th><th>LLTV</th>
+      <th>Total Supplied</th><th>Total Borrowed</th><th>Available Liq.</th>
+      <th>Pendle Match</th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const trend = r.trend || {};
+      const bu = trendArrow(trend.borrow, 'borrow');
+      return `<tr>
+        <td><a href="${morphoUrl(r.market_id)}" target="_blank">${r.collateral}</a></td>
+        <td class="m">${r.loan}</td>
+        <td class="${r.borrow_apy > 12 ? 'r' : r.borrow_apy > 9 ? 'y' : 'g'}">${pct(r.borrow_apy)} ${bu}</td>
+        <td class="g">${pct(r.supply_apy)}</td>
+        <td class="${utilColor(r.utilization)}">${f1(r.utilization)}%</td>
+        <td class="m">${f1(r.lltv)}%</td>
+        <td class="m">${usd(r.supply_total_usd)}</td>
+        <td class="m">${usd(r.borrow_total_usd)}</td>
+        <td class="m">${usd(r.liquidity_usd)}</td>
+        <td>${r.pendle_pt_apy != null ? `<span class="badge bg">${f2(r.pendle_pt_apy)}%</span>` : '<span class="badge bm">—</span>'}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+  document.getElementById('morphoOut').innerHTML = html;
+}
+
+// ── Strategy Calculator ───────────────────────────────────────────────────────
+
+const PRESETS = {
+  'pt-apyusd-morpho': {
+    name: 'PT-apyUSD + Morpho',
+    colApy: 19.33, borApy: 11.18, lltv: 86, hf: 2.0,
+    days: 36, colToken: 'PT-apyUSD', borToken: 'USDC',
+    note: 'Fixed PT yield · expires Jun 18 · Morpho USDC borrow',
+  },
+  'pt-apxusd-morpho': {
+    name: 'PT-apxUSD + Morpho',
+    colApy: 15.33, borApy: 12.25, lltv: 86, hf: 2.0,
+    days: 36, colToken: 'PT-apxUSD', borToken: 'USDC',
+    note: 'Fixed PT yield · expires Jun 18 · Morpho USDC borrow',
+  },
+  'susde-aave': {
+    name: 'sUSDe → Aave loop',
+    colApy: 9.5, borApy: 6.5, lltv: 75, hf: 1.5,
+    days: 365, colToken: 'sUSDe', borToken: 'USDC',
+    note: 'Ethena staking yield · Aave v3 borrow · no maturity',
+  },
+  'susde-morpho': {
+    name: 'sUSDe → Morpho loop',
+    colApy: 9.5, borApy: 7.0, lltv: 86, hf: 1.5,
+    days: 365, colToken: 'sUSDe', borToken: 'USDC',
+    note: 'Ethena staking yield · Morpho borrow · no maturity',
+  },
+  'susde-aave-emode': {
+    name: 'sUSDe → Aave eMode',
+    colApy: 9.5, borApy: 5.5, lltv: 90, hf: 1.2,
+    days: 365, colToken: 'sUSDe', borToken: 'USDC',
+    note: 'eMode: 90% LTV · high leverage · higher liq risk',
+  },
+  'weeth-aave': {
+    name: 'weETH → Aave (ETH loop)',
+    colApy: 4.5, borApy: 2.5, lltv: 82, hf: 1.5,
+    days: 365, colToken: 'weETH', borToken: 'WETH',
+    note: 'LST yield · borrow ETH · ETH-denominated returns',
+  },
+  'custom': {
+    name: 'Custom Strategy',
+    colApy: 10, borApy: 6, lltv: 80, hf: 2.0,
+    days: 30, colToken: 'Asset', borToken: 'Stablecoin',
+    note: 'Enter your own parameters',
+  },
+};
+
+let _compareSelected = new Set();
+
+function setCalcTab(tab, el) {
+  document.querySelectorAll('.calc-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('calcBuilder').style.display  = tab === 'builder'  ? '' : 'none';
+  document.getElementById('calcCompare').style.display  = tab === 'compare' ? '' : 'none';
+  if (tab === 'compare') renderCompare();
+}
+
+function loadPreset() {
+  const key = document.getElementById('cPreset').value;
+  const p   = PRESETS[key];
+  if (!p) return;
+
+  let colApy = p.colApy, borApy = p.borApy, lltv = p.lltv, days = p.days;
+
+  if (RAW) {
+    const aave  = RAW.aave   || [];
+    const ethena = RAW.ethena || {};
+    const ml    = RAW.morpho_lending || [];
+    const aaveAsset = sym => aave.find(a => a.symbol === sym);
+
+    if (key === 'pt-apyusd-morpho' || key === 'pt-apxusd-morpho') {
+      const token = key === 'pt-apyusd-morpho' ? 'pt-apyusd' : 'pt-apxusd';
+      const pm = (RAW.pendle || []).find(m => m.name.toLowerCase().includes(token));
+      const lm = (RAW.loops  || []).find(l => l.collateral && l.collateral.toLowerCase().includes(token) && l.loan === 'USDC' && l.loop);
+      if (pm) { colApy = pm.pt_apy; days = pm.days_left || p.days; }
+      if (lm) { borApy = lm.borrow_apy; lltv = lm.lltv; }
+    } else if (key === 'susde-aave') {
+      const usdc = aaveAsset('USDC'), susdeA = aaveAsset('SUSDE');
+      if (ethena.staking_apy)  colApy = ethena.staking_apy;
+      if (usdc?.borrow_apy)    borApy = usdc.borrow_apy;
+      if (susdeA?.ltv)         lltv   = susdeA.ltv;
+    } else if (key === 'susde-morpho') {
+      // best sUSDe Morpho market by liquidity (sorted server-side)
+      const mSusde = ml.find(m => m.collateral.toLowerCase().includes('susde'));
+      if (ethena.staking_apy)  colApy = ethena.staking_apy;
+      if (mSusde?.borrow_apy)  borApy = mSusde.borrow_apy;
+      if (mSusde?.lltv)        lltv   = mSusde.lltv;
+    } else if (key === 'susde-aave-emode') {
+      const usdc = aaveAsset('USDC');
+      if (ethena.staking_apy)  colApy = ethena.staking_apy;
+      if (usdc?.borrow_apy)    borApy = usdc.borrow_apy;
+      // eMode LTV stays at preset 90%
+    } else if (key === 'weeth-aave') {
+      const aaveWeeth = aaveAsset('WEETH'), aaveWeth = aaveAsset('WETH');
+      // Use Pendle weETH underlying yield (restaking) instead of Aave supply APY (=0)
+      const pendleWeeth = (RAW.pendle || []).find(m => m.name.toLowerCase().includes('weeth'));
+      if (pendleWeeth?.underlying_apy) colApy = pendleWeeth.underlying_apy;
+      else if (aaveWeeth?.supply_apy)  colApy = aaveWeeth.supply_apy;
+      if (aaveWeth?.borrow_apy)        borApy = aaveWeth.borrow_apy;
+      if (aaveWeeth?.ltv)              lltv   = aaveWeeth.ltv;
+    }
+  }
+
+  document.getElementById('cColApy').value  = colApy;
+  document.getElementById('cBorApy').value  = borApy;
+  document.getElementById('cLltv').value    = lltv;
+  document.getElementById('cDays').value    = days;
+  document.getElementById('cHf').value      = p.hf;
+  document.getElementById('cColToken').value = p.colToken;
+  calcNow();
+}
+
+function buildLoopSteps(capital, lltv, hf, minStep = 0.5) {
+  const targetLtv = (lltv / 100) / hf;
+  const steps = [];
+  let totalCol = capital;
+  let totalDebt = 0;
+
+  for (let i = 0; i < 30; i++) {
+    const canBorrow = totalCol * targetLtv - totalDebt;
+    if (canBorrow < minStep) break;
+    totalDebt += canBorrow;
+    totalCol  += canBorrow;
+    steps.push({
+      round:    i + 1,
+      borrowed: canBorrow,
+      totalCol,
+      totalDebt,
+      ltv:      (totalDebt / totalCol) * 100,
+      hf:       (lltv / 100) * totalCol / totalDebt,
+    });
+  }
+  return steps;
+}
+
+function calcNow() {
+  const capital  = parseFloat(document.getElementById('cCapital').value)  || 0;
+  const colApy   = parseFloat(document.getElementById('cColApy').value)   || 0;
+  const borApy   = parseFloat(document.getElementById('cBorApy').value)   || 0;
+  const lltv     = parseFloat(document.getElementById('cLltv').value)     || 86;
+  const hf       = parseFloat(document.getElementById('cHf').value)       || 2;
+  const days     = parseFloat(document.getElementById('cDays').value)     || 365;
+  const gasPerTx = parseFloat(document.getElementById('cGasPerLoop').value) || 15;
+  const colToken = document.getElementById('cColToken').value || 'Asset';
+
+  if (!capital || !colApy) return;
+
+  // Loop steps
+  const steps = buildLoopSteps(capital, lltv, hf);
+  const totalCol  = steps.length ? steps[steps.length-1].totalCol  : capital;
+  const totalDebt = steps.length ? steps[steps.length-1].totalDebt : 0;
+  const leverage  = totalCol / capital;
+
+  // P&L
+  const netApy = (colApy / 100) * leverage - (borApy / 100) * (leverage - 1);
+  const gross  = capital * netApy * days / 365;
+  // txns: initial buy + each loop needs 3 txns (supply, borrow, buy) + final
+  const txns   = 1 + steps.length * 3;
+  const gasCost = txns * gasPerTx;
+  const net    = gross - gasCost;
+
+  // Simple hold comparison
+  const simpleGross = capital * (colApy / 100) * days / 365;
+  const simpleNet   = simpleGross - gasPerTx; // just 1 buy tx
+  const vsSimple    = net - simpleNet;
+
+  // Liquidation price (current price assumed = $1 for stables, or use collateral ratio)
+  const liqPrice = totalDebt / (totalCol * (lltv / 100));
+
+  // Break-even borrow
+  const beBorrow = leverage > 1 ? (colApy * leverage / (leverage - 1)) : null;
+
+  // Break-even capital
+  const extraApyFrac = Math.max(0, netApy - colApy / 100);
+  const beCapital = extraApyFrac > 0
+    ? Math.round((gasCost - gasPerTx) / (extraApyFrac * days / 365))
+    : null;
+
+  // Update result cards
+  const nc = v => v > 0 ? 'g' : v < 0 ? 'r' : '';
+  const set = (id, val, cls) => {
+    const el = document.getElementById(id);
+    el.textContent = val;
+    if (cls !== undefined) el.className = 'res-val ' + cls;
+  };
+
+  set('rNetApy',    (netApy * 100).toFixed(2) + '%', netApy > 0.1 ? 'g' : 'r');
+  set('rLev',       leverage.toFixed(2) + 'x',       '');
+  set('rTotalPos',  '$' + Math.round(totalCol).toLocaleString(), '');
+  set('rDebt',      '$' + Math.round(totalDebt).toLocaleString(), 'y');
+  set('rGross',     '$' + gross.toFixed(2), gross > 0 ? 'g' : 'r');
+  set('rGas',       '$' + gasCost.toFixed(2), 'y');
+  set('rNet',       '$' + net.toFixed(2), nc(net));
+  set('rVsSimple',  (vsSimple >= 0 ? '+' : '') + '$' + vsSimple.toFixed(2) + ' vs hold', nc(vsSimple));
+  set('rLiqPrice',  '$' + liqPrice.toFixed(4), liqPrice < 0.8 ? 'g' : liqPrice < 0.9 ? 'y' : 'r');
+  set('rBeBorrow',  beBorrow != null ? beBorrow.toFixed(1) + '%' : '—', 'y');
+  set('rBeCapital', beCapital != null ? '$' + beCapital.toLocaleString() : '—', 'm');
+  set('rLoopTxns',  txns + ' txns', 'm');
+
+  // Loop breakdown table
+  const tbody = document.getElementById('loopBreakBody');
+  let rows = `<tr>
+    <td>Initial</td>
+    <td>Buy ${colToken}</td>
+    <td style="text-align:right">$${capital.toLocaleString()}</td>
+    <td style="text-align:right">$${capital.toLocaleString()}</td>
+    <td style="text-align:right">$0</td>
+    <td style="text-align:right">0.00%</td>
+    <td style="text-align:right">∞</td>
+  </tr>`;
+  for (const s of steps) {
+    rows += `<tr>
+      <td>Loop ${s.round}</td>
+      <td>Borrow → buy ${colToken}</td>
+      <td style="text-align:right;color:#fbbf24">$${s.borrowed.toFixed(0)}</td>
+      <td style="text-align:right">$${s.totalCol.toFixed(0)}</td>
+      <td style="text-align:right;color:#f87171">$${s.totalDebt.toFixed(0)}</td>
+      <td style="text-align:right;color:${s.ltv > (lltv/hf*0.98) ? '#4ade80' : '#94a3b8'}">${s.ltv.toFixed(2)}%</td>
+      <td style="text-align:right;color:#6366f1">${s.hf.toFixed(2)}</td>
+    </tr>`;
+  }
+  rows += `<tr class="total-row">
+    <td>Total</td>
+    <td>${steps.length} loops · ${txns} txns · $${gasCost.toFixed(0)} gas</td>
+    <td style="text-align:right"></td>
+    <td style="text-align:right">$${totalCol.toFixed(0)}</td>
+    <td style="text-align:right">$${totalDebt.toFixed(0)}</td>
+    <td style="text-align:right">${(totalDebt/totalCol*100).toFixed(2)}%</td>
+    <td style="text-align:right">${hf.toFixed(2)}</td>
+  </tr>
+  <tr style="background:#0a150a">
+    <td colspan="2" style="color:#4ade80;font-weight:700">Net Profit (${days}d)</td>
+    <td colspan="5" style="text-align:right;font-size:14px;font-weight:700;color:${nc(net) === 'g' ? '#4ade80' : '#f87171'}">
+      $${net.toFixed(2)} &nbsp;·&nbsp; ${(netApy * 100).toFixed(2)}% APY
+    </td>
+  </tr>`;
+  tbody.innerHTML = rows;
+}
+
+function renderCompare() {
+  const presetKeys = Object.keys(PRESETS);
+  const capital = parseFloat(document.getElementById('cCapital').value) || 4100;
+  const days    = parseFloat(document.getElementById('cDays').value) || 36;
+  const gasPerTx = parseFloat(document.getElementById('cGasPerLoop').value) || 15;
+
+  // Cards
+  const cardHtml = presetKeys.map(key => {
+    const p = PRESETS[key];
+    const steps = buildLoopSteps(capital, p.lltv, p.hf);
+    const totalCol = steps.length ? steps[steps.length-1].totalCol : capital;
+    const leverage = totalCol / capital;
+    const netApy = (p.colApy / 100) * leverage - (p.borApy / 100) * (leverage - 1);
+    const txns = 1 + steps.length * 3;
+    const gross = capital * netApy * days / 365;
+    const net = gross - txns * gasPerTx;
+    const active = _compareSelected.has(key) ? 'active' : '';
+    return `<div class="cmp-card ${active}" onclick="toggleCompare('${key}')">
+      <div class="cmp-name">${p.name}</div>
+      <div class="cmp-apy ${netApy > 0.1 ? 'g' : 'r'}">${(netApy*100).toFixed(1)}%</div>
+      <div class="cmp-meta">${p.colToken} · ${leverage.toFixed(2)}x · $${net.toFixed(0)} net (${days}d)</div>
+      <div class="cmp-meta" style="color:#475569;margin-top:2px">${p.note}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('compareGrid').innerHTML = cardHtml;
+
+  // Comparison table
+  if (_compareSelected.size > 0) {
+    const selected = [..._compareSelected].map(k => PRESETS[k] ? { key: k, ...PRESETS[k] } : null).filter(Boolean);
+    let th = '<th>Metric</th>' + selected.map(p => `<th>${p.name}</th>`).join('');
+    const rows = [
+      ['Collateral APY', p => p.colApy.toFixed(2) + '%'],
+      ['Borrow APY', p => p.borApy.toFixed(2) + '%'],
+      ['LLTV', p => p.lltv + '%'],
+      ['Target HF', p => p.hf],
+      ['Leverage', p => {
+        const steps = buildLoopSteps(capital, p.lltv, p.hf);
+        const totalCol = steps.length ? steps[steps.length-1].totalCol : capital;
+        return (totalCol / capital).toFixed(2) + 'x';
+      }],
+      ['Net APY', p => {
+        const steps = buildLoopSteps(capital, p.lltv, p.hf);
+        const totalCol = steps.length ? steps[steps.length-1].totalCol : capital;
+        const lev = totalCol / capital;
+        return ((p.colApy/100*lev - p.borApy/100*(lev-1))*100).toFixed(2) + '%';
+      }],
+      [`Gross (${days}d)`, p => {
+        const steps = buildLoopSteps(capital, p.lltv, p.hf);
+        const totalCol = steps.length ? steps[steps.length-1].totalCol : capital;
+        const lev = totalCol / capital;
+        const netApy = p.colApy/100*lev - p.borApy/100*(lev-1);
+        return '$' + (capital * netApy * days / 365).toFixed(2);
+      }],
+      [`Net (${days}d)`, p => {
+        const steps = buildLoopSteps(capital, p.lltv, p.hf);
+        const totalCol = steps.length ? steps[steps.length-1].totalCol : capital;
+        const lev = totalCol / capital;
+        const netApy = p.colApy/100*lev - p.borApy/100*(lev-1);
+        const txns = 1 + steps.length * 3;
+        const net = capital * netApy * days / 365 - txns * gasPerTx;
+        return `<span style="color:${net > 0 ? '#4ade80' : '#f87171'};font-weight:700">$${net.toFixed(2)}</span>`;
+      }],
+      ['Loop Txns', p => {
+        const steps = buildLoopSteps(capital, p.lltv, p.hf);
+        return (1 + steps.length * 3) + ' txns';
+      }],
+      ['Liq. Price', p => {
+        const steps = buildLoopSteps(capital, p.lltv, p.hf);
+        const totalCol = steps.length ? steps[steps.length-1].totalCol : capital;
+        const totalDebt = steps.length ? steps[steps.length-1].totalDebt : 0;
+        return '$' + (totalDebt / (totalCol * p.lltv / 100)).toFixed(4);
+      }],
+    ].map(([label, fn]) =>
+      `<tr><td style="color:#94a3b8">${label}</td>${selected.map(p => `<td style="text-align:right">${fn(p)}</td>`).join('')}</tr>`
+    ).join('');
+
+    document.getElementById('compareTable').innerHTML = `
+      <table class="tbl">
+        <thead><tr>${th}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } else {
+    document.getElementById('compareTable').innerHTML = '<div style="color:#475569;font-size:11px;padding:12px 0">Select strategies above to compare side-by-side.</div>';
+  }
+}
+
+function toggleCompare(key) {
+  if (_compareSelected.has(key)) _compareSelected.delete(key);
+  else _compareSelected.add(key);
+  renderCompare();
+}
+
+// Auto-fill with live data when tracker loads
+function syncCalcWithLiveData(data) {
+  const key = document.getElementById('cPreset').value;
+  const livePresets = ['pt-apyusd-morpho','pt-apxusd-morpho','susde-aave','susde-morpho','susde-aave-emode','weeth-aave'];
+  if (livePresets.includes(key)) loadPreset();
+}
+
+// Init calculator on page load
+loadPreset();
+calcNow();
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+
+let nextRefresh = 0;
+setInterval(() => {
+  const rem = Math.max(0, Math.ceil((nextRefresh - Date.now()) / 1000));
+  const el = document.getElementById('cntdn');
+  if (el) el.textContent = rem > 0 ? `refresh ${rem}s` : '';
+}, 1000);
+
+async function poll() {
+  try {
+    const resp = await fetch('/api/data');
+    const json = await resp.json();
+    const dot  = document.getElementById('dot');
+    const err  = document.getElementById('errBanner');
+
+    if (json.error) {
+      dot.className = 'dot err';
+      document.getElementById('stTxt').textContent = 'error';
+      err.style.display = 'block';
+      err.textContent = 'Error: ' + json.error;
+    } else if (json.data) {
+      dot.className = 'dot';
+      document.getElementById('stTxt').textContent = 'live';
+      err.style.display = 'none';
+      if (json.updated_at) {
+        document.getElementById('updAt').textContent =
+          'Updated ' + new Date(json.updated_at).toLocaleTimeString();
+      }
+      render(json.data);
+    }
+  } catch (e) {
+    document.getElementById('dot').className = 'dot err';
+    document.getElementById('stTxt').textContent = 'offline';
+  }
+  nextRefresh = Date.now() + 60000;
+  setTimeout(poll, 60000);
+}
+
+poll();
+</script>
+</body>
+</html>
