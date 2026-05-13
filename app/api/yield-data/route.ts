@@ -10,8 +10,8 @@ const MORPHO_MIN_LIQ  = 10_000
 const MORPHO_LENDING_MIN_LIQ = 500_000
 const CAPITAL         = 4100
 const HF              = 2.0
-const GAS_SIMPLE      = 35
-const GAS_LOOP        = 150
+const GAS_SIMPLE      = 5
+const GAS_LOOP        = 20
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ async function fetchEthenaYield() {
 async function fetchGas() {
   const res: any = {}
   try {
-    const r = await fetch('https://eth.llamarpc.com', {
+    const r = await fetch('https://ethereum.publicnode.com', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc:'2.0', method:'eth_gasPrice', params:[], id:1 }),
