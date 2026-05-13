@@ -44,18 +44,27 @@ async function fetchPendle() {
     const liq = m.liquidity?.usd ?? 0
     if (liq < PENDLE_MIN_LIQ) continue
     const pt = m.pt ?? {}
+    const ptApy        = r2(apy * 100)
+    const underlyingApy = r2((m.underlyingApy ?? 0) * 100)
+    const ptDiscPct    = r2((m.ptDiscount ?? 0) * 100)
+    const longYieldApy = r2(underlyingApy - ptApy)
+    const ytLeverage   = ptDiscPct > 0.05 ? r1(100 / ptDiscPct) : null
+    const signal       = longYieldApy > 2 ? 'buy_yt' : longYieldApy < -2 ? 'buy_pt' : 'neutral'
     out.push({
-      name:           pt.symbol ?? m.symbol ?? '?',
-      address:        m.address ?? '',
-      pt_address:     pt.address ?? '',
-      pt_apy:         r2(apy * 100),
-      underlying_apy: r2((m.underlyingApy ?? 0) * 100),
-      pt_price:       pt.price?.usd ? r2(pt.price.usd) : null,
-      pt_discount:    r2((m.ptDiscount ?? 0) * 100),
-      volume_24h:     Math.round(m.tradingVolume?.usd ?? 0),
-      expiry:         (m.expiry ?? '').slice(0, 10),
-      days_left:      days,
-      liquidity_usd:  Math.round(liq),
+      name:            pt.symbol ?? m.symbol ?? '?',
+      address:         m.address ?? '',
+      pt_address:      pt.address ?? '',
+      pt_apy:          ptApy,
+      underlying_apy:  underlyingApy,
+      long_yield_apy:  longYieldApy,
+      yt_leverage:     ytLeverage,
+      signal,
+      pt_price:        pt.price?.usd ? r2(pt.price.usd) : null,
+      pt_discount:     ptDiscPct,
+      volume_24h:      Math.round(m.tradingVolume?.usd ?? 0),
+      expiry:          (m.expiry ?? '').slice(0, 10),
+      days_left:       days,
+      liquidity_usd:   Math.round(liq),
     })
   }
   return out.sort((a, b) => b.pt_apy - a.pt_apy)
