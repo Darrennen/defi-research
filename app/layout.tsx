@@ -8,6 +8,16 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'DeFi Research',
   description: 'Evidence-led analysis on tokenized real-world assets, stablecoins, and DeFi lending markets.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'DeFi Research',
+  },
+  icons: {
+    apple: '/apple-touch-icon.png',
+    icon: '/icon-192.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
