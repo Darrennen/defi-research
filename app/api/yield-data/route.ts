@@ -245,6 +245,30 @@ function loopAtHf(ptApy: number, borrowApy: number, lltvPct: number, days: numbe
   }
 }
 
+// ── Enrich Pendle with alpha vs best DeFi alternative ─────────────────
+
+function enrichPendle(pendle: any[], aave: any[]) {
+  const best = (syms: string[]) =>
+    Math.max(0, ...aave.filter((a: any) => syms.includes(a.symbol)).map((a: any) => a.supply_apy))
+  const usdBest = r2(best(['USDC', 'USDT', 'DAI']))
+  const ethBest = r2(best(['WETH', 'WSTETH', 'WEETH']))
+
+  const TIER1 = ['SUSDE', 'STETH', 'WSTETH', 'WEETH', 'USDE', 'SUSDS', 'USDG', 'SUSDZ', 'SNUSD', 'RSUSD']
+  const TIER2 = ['RSETH', 'EZETH', 'CBETH', 'RETH', 'PUFETH', 'EETH', 'APXUSD', 'APYUSD']
+
+  return pendle.map((p: any) => {
+    const upper  = (p.name || '').toUpperCase()
+    const isEth  = (upper.includes('ETH') || upper.includes('BTC')) && !upper.includes('USD')
+    const bestAlt = isEth ? ethBest : usdBest
+    const base   = (p.name || '').replace(/^PT-/i, '').replace(/-\d.*$/, '')
+    const baseUp = base.toUpperCase()
+    const risk_tier =
+      TIER1.some((t: string) => baseUp.includes(t)) ? 1 :
+      TIER2.some((t: string) => baseUp.includes(t)) ? 2 : 3
+    return { ...p, base_asset: base, alpha: r2(p.pt_apy - bestAlt), best_alt_apy: bestAlt, risk_tier }
+  })
+}
+
 function buildLoops(pendle: any[], morphoPt: any[], gas: any) {
   const gasLoop   = gas.cost_loop   ?? GAS_LOOP
   const gasSimple = gas.cost_simple ?? GAS_SIMPLE
@@ -270,16 +294,26 @@ function buildLoops(pendle: any[], morphoPt: any[], gas: any) {
         bevenCapital = Math.round((gasLoop - gasSimple) / (extraFrac * pm.days_left / 365))
     }
 
+    const simplePtProfit = (pm?.pt_apy && pm?.days_left)
+      ? r2(CAPITAL * (pm.pt_apy / 100) * pm.days_left / 365) : null
+    const loopExtra = (loop && simplePtProfit !== null)
+      ? r2(loop.net_profit - simplePtProfit) : null
+
     return {
       ...mm,
-      pendle_pt_apy:     pm?.pt_apy   ?? null,
-      days_left:         pm?.days_left ?? null,
+      pendle_pt_apy:     pm?.pt_apy      ?? null,
+      pendle_underlying: pm?.underlying_apy ?? null,
+      pendle_alpha:      pm?.alpha        ?? null,
+      risk_tier:         pm?.risk_tier    ?? 3,
+      days_left:         pm?.days_left    ?? null,
       pendle_liq:        pm?.liquidity_usd ?? null,
       loop,
       hf_table:          hfTable,
       liquidation_price: liqPrice,
       breakeven_borrow:  bevenBorrow,
       breakeven_capital: bevenCapital,
+      simple_pt_profit:  simplePtProfit,
+      loop_extra:        loopExtra,
       trend: { borrow: 'flat', util: 'flat' },
     }
   })
@@ -314,10 +348,11 @@ export async function GET() {
     const gas     = gasR.status     === 'fulfilled' ? gasR.value     : {}
     const peg     = pegR.status     === 'fulfilled' ? pegR.value     : { price: null, status: 'unknown' }
 
-    const loops = buildLoops(pendle, (morpho as any).ptList, gas)
+    const enriched = enrichPendle(pendle, aave as any[])
+    const loops    = buildLoops(enriched, (morpho as any).ptList, gas)
 
     const data = {
-      pendle,
+      pendle: enriched,
       loops,
       morpho_lending:  (morpho as any).lendingList,
       aave,
