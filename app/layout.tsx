@@ -6,13 +6,13 @@ import Nav from '@/components/Nav'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'DeFi Research',
+  title: 'DNA Research',
   description: 'Evidence-led analysis on tokenized real-world assets, stablecoins, and DeFi lending markets.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'DeFi Research',
+    title: 'DNA Research',
   },
   icons: {
     apple: '/apple-touch-icon.png',
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </main>
         <footer className="border-t border-gray-100 mt-16">
           <div className="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between">
-            <p className="text-xs text-gray-400">DeFi Research — independent analysis</p>
+            <p className="text-xs text-gray-400">DNA Research — independent analysis</p>
             <p className="text-xs text-gray-400">Data: DeFiLlama public APIs</p>
           </div>
         </footer>

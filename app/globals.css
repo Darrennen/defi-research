@@ -7,8 +7,75 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── DNA Design System ─────────────────────────────────────────── */
+:root {
+  --dna-bg:     #131628;
+  --dna-soft:   #1a1f38;
+  --dna-elev:   #21284a;
+  --dna-border: #2a3055;
+  --dna-accent: #7b8fe8;
+  --dna-cream:  #e8e3d0;
+  --dna-text:   #e8e4dc;
+  --dna-muted:  #8892b0;
+  --dna-dim:    #5c6480;
+}
+
 @layer base {
   body {
-    @apply bg-white text-gray-900;
+    background-color: #131628;
+    color: #e8e4dc;
   }
 }
+
+/* ── Gray scale remapped to dark navy ──────────────────────────── */
+.bg-white        { background-color: #1a1f38 !important; }
+.bg-gray-50      { background-color: #1e2440 !important; }
+.bg-gray-100     { background-color: #252c50 !important; }
+.bg-gray-200     { background-color: #2e3660 !important; }
+
+.text-gray-900   { color: #e8e4dc !important; }
+.text-gray-800   { color: #d5d1c8 !important; }
+.text-gray-700   { color: #b8b5ac !important; }
+.text-gray-600   { color: #9a97b0 !important; }
+.text-gray-500   { color: #8892b0 !important; }
+.text-gray-400   { color: #6b7394 !important; }
+.text-gray-300   { color: #4d5478 !important; }
+
+.border-gray-100  { border-color: #2a3055 !important; }
+.border-gray-200  { border-color: #2e3660 !important; }
+.divide-gray-50  > * + * { border-color: #1e2440 !important; }
+.divide-gray-100 > * + * { border-color: #2a3055 !important; }
+
+.hover\:bg-gray-50:hover       { background-color: #1e2440 !important; }
+.hover\:bg-gray-50\/60:hover   { background-color: rgba(30,36,64,.6) !important; }
+.hover\:bg-gray-100:hover      { background-color: #252c50 !important; }
+.hover\:text-gray-900:hover    { color: #e8e4dc !important; }
+.hover\:text-gray-800:hover    { color: #d5d1c8 !important; }
+
+/* ── Semantic badge colors remapped for dark bg ─────────────────── */
+.bg-green-50    { background-color: rgba(74,222,128,.12) !important; }
+.text-green-700 { color: #4ade80 !important; }
+.text-green-600 { color: #4ade80 !important; }
+
+.bg-yellow-50    { background-color: rgba(251,191,36,.12) !important; }
+.text-yellow-700 { color: #fbbf24 !important; }
+.text-yellow-600 { color: #fbbf24 !important; }
+
+.bg-red-50    { background-color: rgba(248,113,113,.12) !important; }
+.text-red-700 { color: #f87171 !important; }
+.text-red-600 { color: #f87171 !important; }
+
+.bg-blue-50    { background-color: rgba(123,143,232,.12) !important; }
+.text-blue-600 { color: #7b8fe8 !important; }
+
+.bg-purple-50    { background-color: rgba(167,139,250,.12) !important; }
+.text-purple-600 { color: #a78bfa !important; }
+
+.bg-orange-50    { background-color: rgba(251,146,60,.12) !important; }
+.text-orange-600 { color: #fb923c !important; }
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #131628; }
+::-webkit-scrollbar-thumb { background: #2a3055; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a4070; }

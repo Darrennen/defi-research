@@ -62,15 +62,25 @@ const sections = [
 function Badge({ status }: { status: 'live' | 'soon' }) {
   if (status === 'live') {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        fontSize: 11, fontWeight: 500,
+        color: '#4ade80', background: 'rgba(74,222,128,.1)',
+        padding: '3px 10px', borderRadius: 99,
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
         Live
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 bg-gray-50 px-2.5 py-1 rounded-full">
-      <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      fontSize: 11, fontWeight: 500,
+      color: '#5c6480', background: 'rgba(92,100,128,.1)',
+      padding: '3px 10px', borderRadius: 99,
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#5c6480', display: 'inline-block' }} />
       Coming soon
     </span>
   )
@@ -80,51 +90,56 @@ export default function Home() {
   return (
     <div>
       {/* Hero */}
-      <div className="pt-14 pb-12 border-b border-gray-100">
-        <p className="text-xs text-gray-400 uppercase tracking-widest font-medium mb-4">
+      <div style={{ paddingTop: 56, paddingBottom: 48, borderBottom: '1px solid #2a3055' }}>
+        <p style={{ fontSize: 11, color: '#5c6480', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 16 }}>
           Independent Research
         </p>
-        <h1 className="text-3xl font-bold text-gray-900 leading-snug max-w-lg">
+        <h1 style={{ fontSize: 30, fontWeight: 700, color: '#e8e4dc', lineHeight: 1.25, maxWidth: 480, margin: '0 0 16px' }}>
           Evidence-led analysis on{' '}
-          <em className="not-italic text-gray-500">digital asset markets</em>
+          <em style={{ fontStyle: 'normal', color: '#7b8fe8' }}>digital asset markets</em>
         </h1>
-        <p className="mt-4 text-sm text-gray-500 max-w-xl leading-relaxed">
+        <p style={{ fontSize: 14, color: '#8892b0', maxWidth: 520, lineHeight: 1.65, margin: 0 }}>
           Data-driven research on tokenized real-world assets, stablecoin risk, and DeFi lending
           markets — powered entirely by public on-chain data.
         </p>
       </div>
 
       {/* Cards */}
-      <div className="pt-10">
-        <p className="text-xs text-gray-400 uppercase tracking-widest font-medium mb-6">
+      <div style={{ paddingTop: 40 }}>
+        <p style={{ fontSize: 11, color: '#5c6480', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 500, marginBottom: 24 }}>
           Research Dashboards
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(340px, 100%), 1fr))', gap: 10 }}>
           {sections.map((s) => {
             const isDisabled = s.status === 'soon'
             const card = (
               <div
-                className={`group p-6 rounded-2xl border transition-all duration-150 ${
-                  isDisabled
-                    ? 'border-gray-100 opacity-50 cursor-default'
-                    : 'border-gray-100 hover:border-gray-200 hover:shadow-md cursor-pointer'
-                }`}
+                style={{
+                  padding: '20px 22px',
+                  borderRadius: 14,
+                  border: `1px solid ${isDisabled ? '#232840' : '#2a3055'}`,
+                  background: isDisabled ? 'rgba(26,31,56,0.4)' : '#1a1f38',
+                  opacity: isDisabled ? 0.5 : 1,
+                  cursor: isDisabled ? 'default' : 'pointer',
+                  transition: 'border-color 0.15s, box-shadow 0.15s, background 0.15s',
+                }}
+                className={isDisabled ? '' : 'dna-card'}
               >
-                <div className="flex items-center justify-between mb-5">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <Badge status={s.status} />
                 </div>
-                <h2 className="font-semibold text-gray-900 mb-2 text-base">{s.title}</h2>
-                <p className="text-sm text-gray-500 leading-relaxed mb-5">{s.description}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-2 flex-wrap">
+                <h2 style={{ fontSize: 15, fontWeight: 600, color: '#e8e4dc', margin: '0 0 8px' }}>{s.title}</h2>
+                <p style={{ fontSize: 13, color: '#8892b0', lineHeight: 1.6, margin: '0 0 18px' }}>{s.description}</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {s.tags.map((t) => (
-                      <span key={t} className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">
+                      <span key={t} style={{ fontSize: 11, color: '#6b7394', background: '#21284a', padding: '2px 8px', borderRadius: 5 }}>
                         {t}
                       </span>
                     ))}
                   </div>
                   {!isDisabled && (
-                    <span className="text-sm text-gray-900 font-medium group-hover:underline underline-offset-2 shrink-0 ml-4">
+                    <span style={{ fontSize: 13, color: '#7b8fe8', fontWeight: 500, marginLeft: 12, whiteSpace: 'nowrap' }}>
                       Open →
                     </span>
                   )}
@@ -135,7 +150,7 @@ export default function Home() {
             return isDisabled ? (
               <div key={s.title}>{card}</div>
             ) : (
-              <Link key={s.title} href={s.href} className="block">
+              <Link key={s.title} href={s.href} style={{ display: 'block', textDecoration: 'none' }}>
                 {card}
               </Link>
             )
@@ -143,10 +158,18 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Data note */}
-      <p className="mt-12 text-xs text-gray-400">
+      {/* Footer note */}
+      <p style={{ marginTop: 48, fontSize: 12, color: '#4d5478' }}>
         Data sourced from DeFiLlama public APIs. Refreshed every 5 minutes. Not financial advice.
       </p>
+
+      <style>{`
+        .dna-card:hover {
+          border-color: #3d4780 !important;
+          background: #1e2440 !important;
+          box-shadow: 0 4px 24px rgba(123,143,232,.08);
+        }
+      `}</style>
     </div>
   )
 }
