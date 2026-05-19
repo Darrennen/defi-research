@@ -1,484 +1,216 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
 
 interface Reserve {
-  symbol: string
-  assetAddress: string
-  aTokenAddress: string
-  vDebtAddress: string
-  supplyApy: number
-  borrowApy: number
-  utilization: number
-  totalSupplied: number
-  totalBorrowed: number
-  totalSuppliedUsd: number
-  totalBorrowedUsd: number
-  ltv: number
-  liquidationThreshold: number
-  liquidationBonus: number
-  decimals: number
-  reserveFactor: number
-  supplyCap: number
-  borrowCap: number
-  supplyCapUsd: number | null
-  borrowCapUsd: number | null
-  price: number
+  symbol: string; assetAddress: string; aTokenAddress: string; vDebtAddress: string
+  supplyApy: number; borrowApy: number; utilization: number
+  totalSupplied: number; totalBorrowed: number; totalSuppliedUsd: number; totalBorrowedUsd: number
+  ltv: number; liquidationThreshold: number; liquidationBonus: number
+  decimals: number; reserveFactor: number; supplyCap: number; borrowCap: number
+  supplyCapUsd: number | null; borrowCapUsd: number | null; price: number
 }
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-function usd(n: number): string {
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
-  if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}K`
-  return `$${n.toFixed(2)}`
-}
-
-function pct(n: number, decimals = 2): string {
-  return `${n.toFixed(decimals)}%`
-}
-
-function compactNum(n: number, symbol: string): string {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M ${symbol}`
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K ${symbol}`
-  return `${n.toFixed(2)} ${symbol}`
-}
-
-function shortAddr(addr: string): string {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
-}
-
-// ─── sub-components ──────────────────────────────────────────────────────────
-
-function MetricCard({
-  label,
-  primary,
-  secondary,
-  accent,
-}: {
-  label: string
-  primary: string
-  secondary?: string
-  accent?: boolean
-}) {
-  return (
-    <div className="border border-gray-100 rounded-xl p-5">
-      <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-2">{label}</p>
-      <p className={`text-xl font-bold ${accent ? 'text-blue-600' : 'text-gray-900'}`}>{primary}</p>
-      {secondary && <p className="text-xs text-gray-400 mt-0.5">{secondary}</p>}
-    </div>
-  )
-}
-
-function CapBar({
-  label,
-  used,
-  cap,
-  symbol,
-  usedUsd,
-  capUsd,
-}: {
-  label: string
-  used: number
-  cap: number
-  symbol: string
-  usedUsd: number
-  capUsd: number | null
-}) {
-  const pctUsed = cap > 0 ? Math.min((used / cap) * 100, 100) : 0
-  const barColor =
-    pctUsed > 95 ? 'bg-red-400' : pctUsed > 80 ? 'bg-yellow-400' : 'bg-green-400'
-
-  return (
-    <div className="flex items-center gap-4 py-3 border-b border-gray-50 last:border-0">
-      <p className="text-xs text-gray-400 w-24 shrink-0">{label}</p>
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pctUsed}%` }} />
-      </div>
-      <div className="text-right shrink-0">
-        <span className="text-sm font-medium text-gray-900">{capUsd ? usd(capUsd) : `${cap.toLocaleString()} ${symbol}`}</span>
-        <span className="text-xs text-gray-400 ml-2">
-          {pct(pctUsed, 0)} used · {compactNum(cap, symbol)}
-        </span>
-      </div>
-    </div>
-  )
-}
-
-function ReserveConfig({
-  reserve,
-  open,
-  onToggle,
-}: {
-  reserve: Reserve
-  open: boolean
-  onToggle: () => void
-}) {
-  const scanBase = 'https://hyperevmscan.io/address'
-
-  return (
-    <div className="border border-gray-100 rounded-xl overflow-hidden">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-4 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-      >
-        <span>Reserve Config</span>
-        <span className="text-gray-400">{open ? '▲' : '▶'}</span>
-      </button>
-
-      {open && (
-        <div className="px-5 pb-5 border-t border-gray-100">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 text-sm">
-            {[
-              ['LTV', pct(reserve.ltv)],
-              ['Liquidation Threshold', pct(reserve.liquidationThreshold)],
-              ['Liquidation Bonus', pct(reserve.liquidationBonus - 100)],
-              ['Reserve Factor', pct(reserve.reserveFactor)],
-              ['Decimals', String(reserve.decimals)],
-              ['Supply Cap', reserve.supplyCap > 0 ? compactNum(reserve.supplyCap, reserve.symbol) : '∞'],
-              ['Borrow Cap', reserve.borrowCap > 0 ? compactNum(reserve.borrowCap, reserve.symbol) : '∞'],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <p className="text-xs text-gray-400 mb-0.5">{k}</p>
-                <p className="font-medium text-gray-900">{v}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-gray-50 flex flex-wrap gap-3 text-xs">
-            <a
-              href={`${scanBase}/${reserve.assetAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-gray-700 underline underline-offset-2"
-            >
-              Asset ↗
-            </a>
-            <a
-              href={`${scanBase}/${reserve.aTokenAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-gray-700 underline underline-offset-2"
-            >
-              aToken ↗
-            </a>
-            <a
-              href={`${scanBase}/${reserve.vDebtAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-gray-700 underline underline-offset-2"
-            >
-              vDebt ↗
-            </a>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── main page ────────────────────────────────────────────────────────────────
+const u = (n: number) => n >= 1e9 ? `$${(n/1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n/1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n/1e3).toFixed(1)}K` : `$${n.toFixed(2)}`
+const p = (n: number, d = 2) => `${n.toFixed(d)}%`
+const cn = (n: number, s: string) => n >= 1e6 ? `${(n/1e6).toFixed(2)}M ${s}` : n >= 1e3 ? `${(n/1e3).toFixed(1)}K ${s}` : `${n.toFixed(2)} ${s}`
 
 export default function HyperLendPage() {
   const [reserves, setReserves] = useState<Reserve[]>([])
   const [selected, setSelected] = useState(0)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
-  const [configOpen, setConfigOpen] = useState(false)
-  const [fetchedAt, setFetchedAt]   = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [cfgOpen, setCfgOpen] = useState(false)
+  const [fetchedAt, setFetchedAt] = useState('')
 
-  async function load() {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
     try {
-      const res  = await fetch('/api/hyperlend')
+      const res = await fetch('/api/hyperlend')
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      setReserves(data.reserves)
-      setFetchedAt(data.fetchedAt)
-    } catch (e) {
-      setError(String(e))
-    } finally {
-      setLoading(false)
-    }
-  }
+      setReserves(data.reserves); setFetchedAt(data.fetchedAt); setSelected(0); setCfgOpen(false)
+    } catch (e) { setError(String(e)) } finally { setLoading(false) }
+  }, [])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   const r = reserves[selected]
+  const totalSupplied = reserves.reduce((s, x) => s + x.totalSuppliedUsd, 0)
+  const totalBorrowed = reserves.reduce((s, x) => s + x.totalBorrowedUsd, 0)
+  const avgUtil = reserves.length ? reserves.reduce((s, x) => s + x.utilization, 0) / reserves.length : 0
 
   return (
     <div>
-      {/* Protocol switcher */}
-      <div className="pt-6 pb-0 flex items-center gap-3 text-sm flex-wrap">
-        <Link
-          href="/aave"
-          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          <Image
-            src="https://icons.llamao.fi/icons/protocols/aave.jpg"
-            alt="Aave"
-            width={18}
-            height={18}
-            className="rounded-sm"
-            unoptimized
-          />
-          Aave V3 →
-        </Link>
-        <span className="text-gray-200">|</span>
-        <Link
-          href="/sparklend"
-          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          SparkLend →
-        </Link>
-        <span className="text-gray-200">|</span>
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          LIVE
-        </span>
-      </div>
-
-      {/* Header */}
-      <div className="pt-6 pb-6 border-b border-gray-100 flex items-start justify-between gap-4">
+      {/* Page header */}
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Image
-              src="https://icons.llamao.fi/icons/protocols/hyperlend.jpg"
-              alt="HyperLend"
-              width={24}
-              height={24}
-              className="rounded-sm"
-              unoptimized
-            />
-            <p className="text-sm text-gray-500 font-medium">HyperLend · Risk Exposures</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <Image src="https://icons.llamao.fi/icons/protocols/hyperlend.jpg" alt="HyperLend" width={20} height={20} style={{ borderRadius: 3 }} unoptimized />
+            <div className="kicker" style={{ margin: 0 }}>HyperLend · Reserve Risk Exposures</div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">On-Chain Lending Risk</h1>
-          <p className="mt-1 text-sm text-gray-400">
-            Per-asset reserve-level risk view across HyperLend Core Pool on HyperEVM.
-          </p>
+          <h1>On-Chain <em>Lending Risk</em></h1>
+          <p className="dek">Per-asset reserve-level risk view across HyperLend Core Pool on HyperEVM.</p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="shrink-0 text-xs text-gray-400 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 hover:text-gray-700 transition-colors disabled:opacity-40"
-        >
+        <button onClick={load} disabled={loading} className="btn ghost" style={{ flexShrink: 0, marginTop: 8, padding: '8px 16px', fontSize: 11 }}>
           {loading ? 'Loading…' : 'Refresh'}
         </button>
       </div>
 
-      {error && (
-        <div className="mt-4 px-4 py-3 bg-red-50 text-red-700 text-sm rounded-lg">
-          Failed to load: {error}
-        </div>
-      )}
+      {error && <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(192,57,43,0.08)', color: 'var(--red)', fontFamily: 'var(--sans)', fontSize: 13, border: '1px solid rgba(192,57,43,0.2)' }}>Failed to load: {error}</div>}
 
       {loading && !reserves.length && (
-        <div className="mt-10 space-y-4">
-          <div className="flex gap-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-9 w-32 bg-gray-100 rounded-lg animate-pulse" />
-            ))}
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
-            ))}
+        <div style={{ marginTop: 24 }}>
+          <div className="ch-row">{[...Array(5)].map((_, i) => <div key={i} className="skel" style={{ height: 32, width: 110, flexShrink: 0 }} />)}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginTop: 24 }}>
+            {[...Array(4)].map((_, i) => <div key={i} className="skel" style={{ height: 88 }} />)}
           </div>
         </div>
       )}
 
       {!loading && reserves.length > 0 && (
         <>
+          {/* Protocol KPIs */}
+          <div className="kpi" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 24 }}>
+            {[
+              { l: 'Total Supplied', v: u(totalSupplied), d: 'HyperEVM Core Pool' },
+              { l: 'Total Borrowed', v: u(totalBorrowed), d: `${reserves.length} active markets` },
+              { l: 'Avg. Utilization', v: p(avgUtil), d: 'across all reserves', warn: avgUtil > 80 },
+            ].map(({ l, v, d, warn }) => (
+              <div className="b" key={l}>
+                <div className="l">{l}</div>
+                <div className="v">{v}</div>
+                <div className={`d${warn ? ' warn' : ''}`}>{d}</div>
+              </div>
+            ))}
+          </div>
+
           {/* Asset tabs */}
-          <div className="mt-6 flex gap-2 overflow-x-auto pb-1">
+          <div className="ch-row" style={{ marginTop: 20 }}>
             {reserves.map((res, i) => (
-              <button
-                key={res.symbol}
-                onClick={() => { setSelected(i); setConfigOpen(false) }}
-                className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm border transition-all ${
-                  i === selected
-                    ? 'border-gray-900 bg-gray-900 text-white font-medium'
-                    : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-800'
-                }`}
-              >
-                <span>{res.symbol}</span>
-                <span className={`text-xs ${i === selected ? 'text-gray-400' : 'text-gray-400'}`}>
-                  {usd(res.totalSuppliedUsd)}
-                </span>
+              <button key={res.symbol} onClick={() => { setSelected(i); setCfgOpen(false) }} className={`ch ${i === selected ? 'on' : ''}`}>
+                {res.symbol.split('-')[0]}
+                <span style={{ marginLeft: 6, fontFamily: 'var(--mono)', fontSize: 10, opacity: 0.7 }}>{u(res.totalSuppliedUsd)}</span>
               </button>
             ))}
           </div>
 
           {r && (
-            <div className="mt-6 space-y-4">
-              {/* Reserve label */}
-              <p className="text-xs text-gray-400">
-                <span className="font-medium text-gray-600">{r.symbol}</span>
-                {' '}on HyperLend (HyperEVM) · HyperLend Core Pool
+            <>
+              <p style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--ink-mute)', margin: '16px 0 16px' }}>
+                <strong style={{ color: 'var(--ink)' }}>{r.symbol}</strong> on HyperLend · HyperEVM Core Pool
               </p>
 
-              {/* Metric cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <MetricCard
-                  label="Total Supplied"
-                  primary={usd(r.totalSuppliedUsd)}
-                  secondary={compactNum(r.totalSupplied, r.symbol)}
-                />
-                <MetricCard
-                  label="Total Borrowed"
-                  primary={usd(r.totalBorrowedUsd)}
-                  secondary={compactNum(r.totalBorrowed, r.symbol)}
-                />
-                <MetricCard
-                  label="Utilization"
-                  primary={pct(r.utilization)}
-                  accent={r.utilization > 80}
-                />
-                <MetricCard
-                  label="Supply APY / Borrow APY"
-                  primary={`${pct(r.supplyApy)} / ${pct(r.borrowApy)}`}
-                  accent
-                />
-              </div>
-
-              {/* Caps */}
-              {(r.supplyCap > 0 || r.borrowCap > 0) && (
-                <div className="border border-gray-100 rounded-xl px-5 py-2">
-                  {r.supplyCap > 0 && (
-                    <CapBar
-                      label="Supply Cap"
-                      used={r.totalSupplied}
-                      cap={r.supplyCap}
-                      symbol={r.symbol}
-                      usedUsd={r.totalSuppliedUsd}
-                      capUsd={r.supplyCapUsd}
-                    />
-                  )}
-                  {r.borrowCap > 0 && (
-                    <CapBar
-                      label="Borrow Cap"
-                      used={r.totalBorrowed}
-                      cap={r.borrowCap}
-                      symbol={r.symbol}
-                      usedUsd={r.totalBorrowedUsd}
-                      capUsd={r.borrowCapUsd}
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Reserve config */}
-              <ReserveConfig
-                reserve={r}
-                open={configOpen}
-                onToggle={() => setConfigOpen((v) => !v)}
-              />
-
-              {/* Risk params summary */}
-              <div className="grid grid-cols-3 gap-3">
+              {/* Reserve KPIs */}
+              <div className="kpi">
                 {[
-                  { label: 'Max LTV', value: pct(r.ltv), color: 'text-gray-900' },
-                  { label: 'Liq. Threshold', value: pct(r.liquidationThreshold), color: 'text-yellow-700' },
-                  { label: 'Liq. Bonus', value: `+${pct(r.liquidationBonus - 100)}`, color: 'text-red-600' },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="border border-gray-100 rounded-xl p-4 text-center">
-                    <p className="text-xs text-gray-400 mb-1">{label}</p>
-                    <p className={`text-lg font-bold ${color}`}>{value}</p>
+                  { l: 'Total Supplied', v: u(r.totalSuppliedUsd), d: cn(r.totalSupplied, r.symbol.split('-')[0]) },
+                  { l: 'Total Borrowed', v: u(r.totalBorrowedUsd), d: cn(r.totalBorrowed, r.symbol.split('-')[0]) },
+                  { l: 'Utilization', v: p(r.utilization), warn: r.utilization > 80 },
+                  { l: 'Supply / Borrow APY', v: `${p(r.supplyApy)} / ${p(r.borrowApy)}`, blue: true },
+                ].map(({ l, v, d, warn, blue }) => (
+                  <div className="b" key={l}>
+                    <div className="l">{l}</div>
+                    <div className="v" style={{ color: warn ? 'var(--amber)' : blue ? 'var(--blue)' : undefined }}>{v}</div>
+                    {d && <div className="d">{d}</div>}
                   </div>
                 ))}
               </div>
 
-              {/* Borrower section */}
-              <div className="border border-gray-100 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-gray-900">
-                    {r.symbol} Borrowers
-                  </h2>
-                  <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-md">
-                    {pct(r.utilization)} utilized
-                  </span>
+              {/* Cap bars */}
+              {(r.supplyCap > 0 || r.borrowCap > 0) && (
+                <div className="panel" style={{ marginTop: 16, padding: '4px 20px' }}>
+                  {r.supplyCap > 0 && (() => {
+                    const pct = r.supplyCap > 0 ? Math.min((r.totalSupplied / r.supplyCap) * 100, 100) : 0
+                    return (
+                      <div className="cap-row">
+                        <div className="lbl">Supply Cap</div>
+                        <div className="cap-track"><div className={`cap-fill ${pct > 95 ? 'hot' : pct > 80 ? 'warn' : ''}`} style={{ width: `${pct}%` }} /></div>
+                        <span className="cap-val">{r.supplyCapUsd ? u(r.supplyCapUsd) : cn(r.supplyCap, r.symbol.split('-')[0])}</span>
+                        <span className="cap-pct">{pct.toFixed(0)}% used</span>
+                      </div>
+                    )
+                  })()}
+                  {r.borrowCap > 0 && (() => {
+                    const pct = r.borrowCap > 0 ? Math.min((r.totalBorrowed / r.borrowCap) * 100, 100) : 0
+                    return (
+                      <div className="cap-row">
+                        <div className="lbl">Borrow Cap</div>
+                        <div className="cap-track"><div className={`cap-fill ${pct > 95 ? 'hot' : pct > 80 ? 'warn' : ''}`} style={{ width: `${pct}%` }} /></div>
+                        <span className="cap-val">{r.borrowCapUsd ? u(r.borrowCapUsd) : cn(r.borrowCap, r.symbol.split('-')[0])}</span>
+                        <span className="cap-pct">{pct.toFixed(0)}% used</span>
+                      </div>
+                    )
+                  })()}
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-4 pb-4 border-b border-gray-50">
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Total Debt</p>
-                    <p className="font-semibold text-gray-900">{usd(r.totalBorrowedUsd)}</p>
-                    <p className="text-xs text-gray-400">{compactNum(r.totalBorrowed, r.symbol)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Borrow APY</p>
-                    <p className="font-semibold text-orange-500">{pct(r.borrowApy)}</p>
-                    <p className="text-xs text-gray-400">variable rate</p>
-                  </div>
-                </div>
-
-                <div className="mt-4 text-center py-6">
-                  <p className="text-sm text-gray-400">
-                    Individual borrower positions require on-chain indexing.
-                  </p>
-                  <a
-                    href={`https://hyperevmscan.io/address/${r.vDebtAddress}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-block text-xs text-gray-500 hover:text-gray-800 underline underline-offset-2"
-                  >
-                    View vDebt token on HyperEVM scan ↗
-                  </a>
-                </div>
-              </div>
-
-              {/* Protocol overview */}
-              <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-50">
-                  <h2 className="text-sm font-semibold text-gray-900">All Reserves Overview</h2>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-50">
-                      {['Asset', 'Supplied', 'Borrowed', 'Util.', 'Supply APY', 'Borrow APY', 'LTV'].map((h, i) => (
-                        <th
-                          key={h}
-                          className={`px-4 py-3 text-xs text-gray-400 font-medium uppercase tracking-wide ${i === 0 ? 'text-left' : 'text-right'}`}
-                        >
-                          {h}
-                        </th>
+              {/* Reserve config */}
+              <div className="cfg-panel" style={{ marginTop: 16 }}>
+                <button className="cfg-toggle" onClick={() => setCfgOpen(v => !v)}>
+                  Reserve Config
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{cfgOpen ? '▲' : '▶'}</span>
+                </button>
+                {cfgOpen && (
+                  <div className="cfg-body">
+                    <div className="cfg-grid">
+                      {[['LTV', p(r.ltv)], ['Liq. Threshold', p(r.liquidationThreshold)], ['Liq. Bonus', p(r.liquidationBonus - 100)], ['Reserve Factor', p(r.reserveFactor)], ['Decimals', String(r.decimals)], ['Supply Cap', r.supplyCap > 0 ? cn(r.supplyCap, r.symbol) : '∞'], ['Borrow Cap', r.borrowCap > 0 ? cn(r.borrowCap, r.symbol) : '∞']].map(([k, v]) => (
+                        <div className="cfg-item" key={k}><div className="k">{k}</div><div className="v">{v}</div></div>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {reserves.map((res, i) => (
-                      <tr
-                        key={res.symbol}
-                        onClick={() => { setSelected(i); setConfigOpen(false) }}
-                        className={`cursor-pointer transition-colors ${i === selected ? 'bg-gray-50' : 'hover:bg-gray-50/60'}`}
-                      >
-                        <td className="px-4 py-3 font-medium text-gray-900">{res.symbol}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{usd(res.totalSuppliedUsd)}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{usd(res.totalBorrowedUsd)}</td>
-                        <td className="px-4 py-3 text-right">
-                          <span className={`font-medium ${res.utilization > 80 ? 'text-yellow-600' : 'text-gray-600'}`}>
-                            {pct(res.utilization)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-blue-600 font-medium">{pct(res.supplyApy)}</td>
-                        <td className="px-4 py-3 text-right text-orange-500 font-medium">{pct(res.borrowApy)}</td>
-                        <td className="px-4 py-3 text-right text-gray-500">{pct(res.ltv)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </div>
+                    <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--rule-soft)', display: 'flex', gap: 16 }}>
+                      {[['Asset', r.assetAddress], ['aToken', r.aTokenAddress], ['vDebt', r.vDebtAddress]].map(([lbl, addr]) => (
+                        <a key={lbl} href={`https://hyperevmscan.io/address/${addr}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue-ink)', textDecoration: 'underline', textUnderlineOffset: 3 }}>{lbl} ↗</a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <p className="text-xs text-gray-400">
-                Data from HyperEVM RPC · hToken + variableDebtToken multicall ·{' '}
-                {fetchedAt ? `Fetched ${new Date(fetchedAt).toLocaleTimeString()}` : 'Live'}
-                {' '}· LT = Liquidation Threshold
+              {/* Risk params */}
+              <div className="risk-grid" style={{ marginTop: 16 }}>
+                {[['Max LTV', p(r.ltv), 'var(--ink)'], ['Liq. Threshold', p(r.liquidationThreshold), 'var(--amber)'], ['Liq. Bonus', `+${p(r.liquidationBonus - 100)}`, 'var(--red)']].map(([lbl, val, color]) => (
+                  <div className="risk-cell" key={lbl as string}><div className="k">{lbl}</div><div className="v" style={{ color: color as string }}>{val}</div></div>
+                ))}
+              </div>
+
+              {/* All reserves table */}
+              <div className="panel" style={{ marginTop: 20 }}>
+                <div className="ph">
+                  <span className="t">All Reserves — HyperEVM</span>
+                  <Image src="https://icons.llamao.fi/icons/chains/rsz_hyperliquid.jpg" alt="HyperEVM" width={16} height={16} style={{ borderRadius: '50%' }} unoptimized />
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="tab">
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', paddingLeft: 22 }}>Asset</th>
+                        <th>Supplied</th><th>Borrowed</th><th>Util.</th><th>Supply APY</th><th>Borrow APY</th><th>LTV</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reserves.map((res, i) => (
+                        <tr key={res.symbol} onClick={() => { setSelected(i); setCfgOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                          style={{ cursor: 'pointer', background: i === selected ? 'var(--blue-soft)' : undefined }}>
+                          <td className="name" style={{ paddingLeft: 22 }}>{res.symbol.split('-')[0]}</td>
+                          <td>{u(res.totalSuppliedUsd)}</td>
+                          <td>{u(res.totalBorrowedUsd)}</td>
+                          <td style={{ color: res.utilization > 80 ? 'var(--amber)' : undefined, fontWeight: res.utilization > 80 ? 600 : undefined }}>{p(res.utilization)}</td>
+                          <td className="pos">{p(res.supplyApy)}</td>
+                          <td style={{ color: 'var(--amber)', fontWeight: 600 }}>{p(res.borrowApy)}</td>
+                          <td className="neg">{p(res.ltv)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <p style={{ marginTop: 24, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.04em' }}>
+                Data from HyperEVM RPC · hToken + variableDebtToken multicall · {fetchedAt ? `Fetched ${new Date(fetchedAt).toLocaleTimeString()}` : 'Live'} · LT = Liquidation Threshold
               </p>
-            </div>
+            </>
           )}
         </>
       )}
