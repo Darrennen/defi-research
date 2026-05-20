@@ -1354,19 +1354,16 @@ footer.site ul a:hover { color: var(--blue); }
   .yt-tabs {
     background: var(--paper);
     border-bottom: 1px solid var(--rule);
-    display: flex; gap: 0; padding: 0 24px; overflow-x: auto;
-    scrollbar-width: none;
+    display: flex; gap: 0; padding: 0 32px; overflow-x: auto;
   }
-  .yt-tabs::-webkit-scrollbar { display: none; }
   .yt-tabs a {
     flex: 1;
-    padding: 14px 18px;
+    padding: 12px 0;
     text-align: center;
     font-family: var(--mono); font-size: 11px; color: var(--ink-soft);
-    text-decoration: none; letter-spacing: 0.06em;
+    text-decoration: none; letter-spacing: 0.04em;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
-    transition: color 150ms;
   }
   .yt-tabs a:hover { color: var(--ink); }
   .yt-tabs a.active { color: var(--blue); border-bottom-color: var(--blue); }
@@ -2058,8 +2055,10 @@ footer.site ul a:hover { color: var(--blue); }
     .yt-header .actions { display: none; }
 
     /* --- tabs: horizontal scroll on mobile --- */
-    .yt-tabs { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
-    .yt-tabs a { flex: none; padding: 13px 14px; white-space: nowrap; }
+    .yt-tabs { padding: 0 16px;
+      overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
+    .yt-tabs::-webkit-scrollbar { display: none; }
+    .yt-tabs a { white-space: nowrap; }
 
     /* --- section layout --- */
     .wrap-wide { padding: 0 16px; }
@@ -2176,7 +2175,6 @@ footer.site ul a:hover { color: var(--blue); }
   <a href="#yt-opps">07 YT Opps</a>
   <a href="#morpho">08 Morpho</a>
   <a href="#strc">09 STRC</a>
-  <a href="#lp-opps">10 LP Opps</a>
 </nav>
 </div><!-- /.yt-sticky-bar -->
 
@@ -2650,32 +2648,20 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="rhs">Fixed yield · sorted by APY · min $500k liquidity · &gt;5d remaining</div>
   </div>
 
-  <div class="filter-bar" style="margin-bottom:14px;">
-    <span class="lbl">Category</span>
-    <div class="chip-row" id="pendle-cat-chips">
-      <span class="chip on" data-cat="all">All</span>
-      <span class="chip" data-cat="stablecoins">Stablecoin</span>
-      <span class="chip" data-cat="liquid-staking">LST</span>
-      <span class="chip" data-cat="liquid-restaking">LRT</span>
-      <span class="chip" data-cat="rwa">RWA</span>
-      <span class="chip" data-cat="points">Points</span>
-    </div>
-  </div>
-
   <div class="tbl-wrap"><table class="tpmkt" id="tpmkt">
     <thead>
       <tr>
         <th>PT Token</th>
         <th>Fixed APY</th>
-        <th>PENDLE +</th>
-        <th>LP APY</th>
         <th>Underlying APY</th>
-        <th>Spread</th>
         <th>Maturity</th>
-        <th>PT Price</th>
-        <th>PT ROI</th>
+        <th>PT price</th>
         <th>Discount</th>
         <th>Liquidity</th>
+        <th>24h Vol</th>
+        <th>Long Yield APY</th>
+        <th>YT Lev</th>
+        <th>Alpha vs DeFi</th>
         <th>Signal · Tier</th>
       </tr>
     </thead>
@@ -2884,7 +2870,7 @@ footer.site ul a:hover { color: var(--blue); }
     <span class="alt">17 Neutral</span> · Best alt rate: 3.30% (Aave)
   </div>
 
-  <div class="yt-grid" id="yt-grid">
+  <div class="yt-grid">
     <div class="yt-card">
       <div class="hd"><span class="nm">PT-superUSDC-26NOV2026</span><span class="tier t3">T3</span></div>
       <div class="signal-pill yt-cheap">YT Cheap · +8.3% Long Yield</div>
@@ -3109,38 +3095,6 @@ footer.site ul a:hover { color: var(--blue); }
 </section>
 
 <!-- =========================================================================
-     10  LP OPPORTUNITIES
-     ========================================================================= -->
-<section class="yt-sec" id="lp-opps">
-  <div class="sec-head">
-    <div class="lhs">
-      <span class="num">10</span>
-      <span class="h-up">LP Opportunities</span>
-    </div>
-    <div class="rhs">Swap fee APY + PENDLE incentives + LP rewards · alternative to PT hold</div>
-  </div>
-
-  <div class="tbl-wrap"><table class="tpmkt" id="tlp">
-    <thead>
-      <tr>
-        <th>Market</th>
-        <th>Fixed APY (PT)</th>
-        <th>Fee APY</th>
-        <th>PENDLE +</th>
-        <th>LP Reward</th>
-        <th>LP Total APY</th>
-        <th>vs PT Hold</th>
-        <th>Underlying APY</th>
-        <th>Days</th>
-        <th>Liquidity</th>
-        <th>Zappable</th>
-      </tr>
-    </thead>
-    <tbody><!-- live --></tbody>
-  </table></div>
-</section>
-
-<!-- =========================================================================
      FOOTER METADATA
      ========================================================================= -->
 <div class="yt-foot">
@@ -3298,7 +3252,7 @@ footer.site ul a:hover { color: var(--blue); }
     } catch(e) { console.error('yield-data fetch failed', e); return; }
     if (!data) return;
 
-    const { pendle = [], loops = [], lp_opps = [], morpho_lending = [], aave = [], ethena = {}, gas = {}, peg = {} } = data;
+    const { pendle = [], loops = [], morpho_lending = [], aave = [], ethena = {}, gas = {}, peg = {} } = data;
 
     /* ---- Header KPIs ---- */
     const gasEl = document.getElementById('kpi-gas');
@@ -3341,101 +3295,25 @@ footer.site ul a:hover { color: var(--blue); }
       }).join('');
     }
 
-    /* ---- Pendle table + category filter ---- */
+    /* ---- Pendle table ---- */
     const pendleTbody = document.querySelector('#tpmkt tbody');
-    let activePendleCat = 'all';
-    function renderPendleTable() {
-      if (!pendleTbody || !pendle.length) return;
-      const filtered = activePendleCat === 'all'
-        ? pendle
-        : pendle.filter(p => (p.category_ids || []).some(c => c.toLowerCase().includes(activePendleCat)));
-      pendleTbody.innerHTML = filtered.map(p => {
-        const spread = p.long_yield_apy ?? 0;
-        const spreadCls = spread > 1 ? 'pos-cell' : spread < -1 ? 'warn-cell' : '';
-        const spreadStr = (spread >= 0 ? '+' : '') + P(spread);
-        const ptRoi = p.pt_roi != null ? (p.pt_roi >= 0 ? '+' : '') + P(p.pt_roi) : '—';
-        const lpApy = p.lp_total_apy > 0 ? P(p.lp_total_apy) : '—';
-        const pendleBonus = p.pendle_apy > 0 ? `<span style="color:var(--blue)">+${P(p.pendle_apy)}</span>` : '—';
-        const catTag = (p.category_ids || []).length ? `<span style="font-size:9px;color:var(--ink-mute);margin-left:4px">${p.category_ids[0]}</span>` : '';
-        return `<tr data-cats="${(p.category_ids||[]).join(',')}">
-  <td><div class="pt-tok"><span class="ic ${p.risk_tier===1?'alt2':p.risk_tier===2?'alt':'alt3'}">${initials(p.name)}</span><div class="lhs"><span class="nm">${p.name}</span><span class="ds">${p.expiry || ''}${catTag}</span></div></div></td>
+    if (pendleTbody && pendle.length) {
+      pendleTbody.innerHTML = pendle.map(p => {
+        const lyaCls = (p.long_yield_apy ?? 0) >= 0 ? 'pos-cell' : 'warn-cell';
+        const ytLev = p.yt_leverage != null ? N(p.yt_leverage, 1) + '×' : '—';
+        return `<tr>
+  <td><div class="pt-tok"><span class="ic ${p.risk_tier===1?'alt2':p.risk_tier===2?'alt':'alt3'}">${initials(p.name)}</span><div class="lhs"><span class="nm">${p.name}</span><span class="ds">${p.expiry || ''}</span></div></div></td>
   <td class="pos-cell">${P(p.pt_apy)}</td>
-  <td>${pendleBonus}</td>
-  <td>${lpApy}</td>
   <td>${P(p.underlying_apy)}</td>
-  <td class="${spreadCls}">${spreadStr}</td>
   <td><div class="maturity-cell"><span class="d">${p.days_left != null ? p.days_left + 'd remaining' : '—'}</span><span class="e">expires ${p.expiry || ''}</span></div></td>
   <td>${p.pt_price != null ? '$' + p.pt_price.toFixed(4) : '—'}</td>
-  <td class="${(p.pt_roi??0) >= 0 ? 'pos-cell' : 'warn-cell'}">${ptRoi}</td>
   <td>${P(p.pt_discount)}</td>
   <td>${U(p.liquidity_usd)}</td>
+  <td>${U(p.volume_24h)}</td>
+  <td class="${lyaCls}">${(p.long_yield_apy ?? 0) >= 0 ? '' : '−'}${P(Math.abs(p.long_yield_apy ?? 0))}</td>
+  <td>${ytLev}</td>
+  <td class="pos-cell">+${P(p.alpha)}</td>
   <td>${signalHtml(p)}</td>
-</tr>`;
-      }).join('');
-    }
-    renderPendleTable();
-
-    // Category filter chips
-    document.querySelectorAll('#pendle-cat-chips .chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.querySelectorAll('#pendle-cat-chips .chip').forEach(c => c.classList.remove('on'));
-        chip.classList.add('on');
-        activePendleCat = chip.dataset.cat;
-        renderPendleTable();
-      });
-    });
-
-    /* ---- YT Opportunities (dynamic) ---- */
-    const ytGrid = document.getElementById('yt-grid');
-    if (ytGrid && pendle.length) {
-      const ytMarkets = pendle
-        .filter(p => p.yt_floating_apy != null)
-        .sort((a, b) => (b.long_yield_apy ?? -999) - (a.long_yield_apy ?? -999))
-        .slice(0, 10);
-      if (ytMarkets.length) {
-        ytGrid.innerHTML = ytMarkets.map(p => {
-          const spread = p.long_yield_apy ?? 0;
-          const pillCls = spread > 1 ? 'yt-cheap' : spread < -2 ? 'pt-cheap' : 'neutral';
-          const pillTxt = spread > 1 ? `YT Cheap · +${P(spread)} Long Yield` : spread < -2 ? `PT Cheap · ${P(Math.abs(spread))} above underlying` : 'Neutral';
-          const beText = p.days_left != null ? `Avg ≥ ${P(p.pt_apy)} for ${p.days_left}d to profit` : '—';
-          const intPct = p.underlying_interest_apy > 0 ? ` (${P(p.underlying_interest_apy)} organic)` : '';
-          return `<div class="yt-card">
-  <div class="hd"><span class="nm">${p.name}</span><span class="tier ${p.risk_tier===1?'t1':p.risk_tier===2?'t2':'t3'}">T${p.risk_tier}</span></div>
-  <div class="signal-pill ${pillCls}">${pillTxt}</div>
-  <div class="grid2">
-    <div><div class="lab">Fixed APY</div><div class="val green">${P(p.pt_apy)}</div></div>
-    <div><div class="lab">Underlying APY</div><div class="val">${P(p.underlying_apy)}${intPct}</div></div>
-    <div><div class="lab">YT Float APY</div><div class="val ${spread>0?'blue':''}">${P(p.yt_floating_apy)}</div></div>
-    <div><div class="lab">YT Leverage</div><div class="val">${p.yt_leverage != null ? p.yt_leverage.toFixed(1) + '×' : '—'}</div></div>
-    <div><div class="lab">LP Total APY</div><div class="val">${p.lp_total_apy > 0 ? P(p.lp_total_apy) : '—'}</div></div>
-    <div><div class="lab">Alpha vs DeFi</div><div class="val ${(p.alpha??0)>0?'green':''}">${p.alpha != null ? (p.alpha>=0?'+':'')+P(p.alpha) : '—'}</div></div>
-  </div>
-  <div class="be"><div class="h">YT Breakeven</div>${beText}</div>
-  <div class="meta"><span>${p.days_left != null ? p.days_left + 'd · ' : ''}${p.expiry || ''}</span><span>${U(p.liquidity_usd)}</span></div>
-</div>`;
-        }).join('');
-      }
-    }
-
-    /* ---- LP Opportunities table ---- */
-    const lpTbody = document.querySelector('#tlp tbody');
-    if (lpTbody && data.lp_opps && data.lp_opps.length) {
-      lpTbody.innerHTML = data.lp_opps.map(lp => {
-        const vsPt = lp.lp_total_apy - lp.pt_apy;
-        const vsPtStr = (vsPt >= 0 ? '+' : '') + P(vsPt);
-        const vsPtCls = vsPt >= 0 ? 'pos-cell' : 'warn-cell';
-        return `<tr>
-  <td><div class="pt-tok"><span class="ic alt3">${initials(lp.name)}</span><div class="lhs"><span class="nm">${lp.name}</span><span class="ds">${lp.protocol || ''}</span></div></div></td>
-  <td class="pos-cell">${P(lp.pt_apy)}</td>
-  <td>${lp.swap_fee_apy > 0 ? P(lp.swap_fee_apy) : '—'}</td>
-  <td class="pos-cell">${lp.pendle_apy > 0 ? P(lp.pendle_apy) : '—'}</td>
-  <td>${lp.lp_reward_apy > 0 ? P(lp.lp_reward_apy) : '—'}</td>
-  <td class="pos-cell" style="font-weight:600">${P(lp.lp_total_apy)}</td>
-  <td class="${vsPtCls}">${vsPtStr}</td>
-  <td>${P(lp.underlying_apy)}</td>
-  <td>${lp.days_left != null ? lp.days_left + 'd' : '—'}</td>
-  <td>${U(lp.liquidity_usd)}</td>
-  <td>${lp.zappable ? '<span style="color:var(--green)">✓ Zap</span>' : '—'}</td>
 </tr>`;
       }).join('');
     }
