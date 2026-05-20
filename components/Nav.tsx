@@ -12,6 +12,7 @@ const links = [
   { href: '/morpho',        label: 'Morpho Blue' },
   { href: '/hyperlend',     label: 'HyperLend' },
   { href: '/yield-tracker', label: 'Yield Tracker' },
+  { href: '/whale-tracker', label: 'Whale Tracker' },
 ]
 
 function Mark({ size = 56 }: { size?: number }) {

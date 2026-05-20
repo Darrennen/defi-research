@@ -73,6 +73,7 @@ export default function MorphoPage() {
   const [activeMarkets, setActiveMarkets] = useState(0)
   const [highUtilMarkets, setHighUtilMarkets] = useState(0)
   const [selected, setSelected] = useState<number | null>(null)
+  const [tab, setTab] = useState<'markets' | 'vaults'>('markets')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [fetchedAt, setFetchedAt] = useState('')
@@ -212,6 +213,20 @@ export default function MorphoPage() {
             </div>
           )}
 
+          {/* Sub-tabs */}
+          <div className="ch-row" style={{ marginTop: 20 }}>
+            <button onClick={() => { setTab('markets'); setSelected(null) }} className={`ch ${tab === 'markets' ? 'on' : ''}`}>
+              Markets
+              <span style={{ marginLeft: 6, fontFamily: 'var(--mono)', fontSize: 10, opacity: 0.7 }}>{activeMarkets}</span>
+            </button>
+            <button onClick={() => { setTab('vaults'); setSelected(null) }} className={`ch ${tab === 'vaults' ? 'on' : ''}`}>
+              MetaMorpho Vaults
+              <span style={{ marginLeft: 6, fontFamily: 'var(--mono)', fontSize: 10, opacity: 0.7 }}>{vaults.length}</span>
+            </button>
+          </div>
+
+          {tab === 'markets' && (
+          <>
           {/* Selected market detail */}
           {m && (
             <div style={{ marginTop: 20 }}>
@@ -368,10 +383,12 @@ export default function MorphoPage() {
               </table>
             </div>
           </div>
+          </>
+          )}
 
-          {/* MetaMorpho Vaults */}
-          {vaults.length > 0 && (
-            <div className="panel" style={{ marginTop: 20 }}>
+          {/* Vaults tab */}
+          {tab === 'vaults' && (
+            <div className="panel" style={{ marginTop: 16 }}>
               <div className="ph">
                 <span className="t">MetaMorpho Vaults — {chainName}</span>
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>Curated liquidity</span>
@@ -403,6 +420,13 @@ export default function MorphoPage() {
                         <td style={{ color: 'var(--ink-mute)' }}>{v.fee > 0 ? p(v.fee) : '—'}</td>
                       </tr>
                     ))}
+                    {vaults.length === 0 && (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-mute)' }}>
+                          No vaults found for {chainName}
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -410,7 +434,7 @@ export default function MorphoPage() {
           )}
 
           <p style={{ marginTop: 24, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.04em' }}>
-            Data from Morpho Blue GraphQL API · {fetchedAt ? `Fetched ${new Date(fetchedAt).toLocaleTimeString()}` : 'Live'} · LLTV = Liquidation LTV · Click any market row for details
+            Data from Morpho Blue GraphQL API · {fetchedAt ? `Fetched ${new Date(fetchedAt).toLocaleTimeString()}` : 'Live'} · LLTV = Liquidation LTV
           </p>
         </>
       )}
