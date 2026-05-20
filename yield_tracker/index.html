@@ -2037,6 +2037,19 @@ footer.site ul a:hover { color: var(--blue); }
     .rates-grid { grid-template-columns: 1fr; }
     .yt-grid { grid-template-columns: 1fr; }
     .calc-out .top-row { grid-template-columns: 1fr 1fr; }
+    .yt-header { padding: 12px 16px; }
+    .yt-header .kpi-strip { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .yt-header .actions { display: none; }
+    .yt-tabs { padding: 0 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
+    .yt-tabs::-webkit-scrollbar { display: none; }
+    .yt-tabs a { white-space: nowrap; }
+    .yt-sec { padding: 24px 16px 20px; }
+  }
+  @media (max-width: 480px) {
+    .yt-header .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    .pos-summary { grid-template-columns: 1fr; }
+    .strc-kpi { grid-template-columns: 1fr; }
+    .calc-out .top-row { grid-template-columns: 1fr; }
   }
 </style>
 </head>

@@ -72,7 +72,7 @@ export default function HyperLendPage() {
       {!loading && reserves.length > 0 && (
         <>
           {/* Protocol KPIs */}
-          <div className="kpi" style={{ gridTemplateColumns: 'repeat(3,1fr)', marginTop: 24 }}>
+          <div className="kpi kpi-3col" style={{ marginTop: 24 }}>
             {[
               { l: 'Total Supplied', v: u(totalSupplied), d: 'HyperEVM Core Pool' },
               { l: 'Total Borrowed', v: u(totalBorrowed), d: `${reserves.length} active markets` },
