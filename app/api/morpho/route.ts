@@ -20,7 +20,7 @@ const CHAINS = {
 
 type ChainKey = keyof typeof CHAINS
 
-const QUERY = `
+const MARKETS_QUERY = `
 query Markets($chainId: Int!) {
   markets(
     where: { chainId_in: [$chainId] }
@@ -31,6 +31,9 @@ query Markets($chainId: Int!) {
     items {
       marketId
       lltv
+      oracleAddress
+      irmAddress
+      creationTimestamp
       collateralAsset { symbol address price { usd } }
       loanAsset { symbol address price { usd } }
       state {
@@ -41,6 +44,31 @@ query Markets($chainId: Int!) {
         borrowAssets
         supplyAssetsUsd
         borrowAssetsUsd
+        fee
+      }
+    }
+  }
+}
+`
+
+const VAULTS_QUERY = `
+query Vaults($chainId: Int!) {
+  vaults(
+    where: { chainId_in: [$chainId] }
+    first: 20
+    orderBy: TotalAssetsUsd
+    orderDirection: Desc
+  ) {
+    items {
+      address
+      name
+      symbol
+      asset { symbol }
+      state {
+        totalAssetsUsd
+        apy
+        netApy
+        fee
       }
     }
   }
@@ -52,15 +80,24 @@ export async function GET(req: NextRequest) {
   const cfg = CHAINS[key] ?? CHAINS.ethereum
 
   try {
-    const res = await fetch(MORPHO_GQL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'defi-research/1.0' },
-      body: JSON.stringify({ query: QUERY, variables: { chainId: cfg.chainId } }),
-      cache: 'no-store',
-    })
+    const [marketsRes, vaultsRes] = await Promise.all([
+      fetch(MORPHO_GQL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'defi-research/1.0' },
+        body: JSON.stringify({ query: MARKETS_QUERY, variables: { chainId: cfg.chainId } }),
+        cache: 'no-store',
+      }),
+      fetch(MORPHO_GQL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'defi-research/1.0' },
+        body: JSON.stringify({ query: VAULTS_QUERY, variables: { chainId: cfg.chainId } }),
+        cache: 'no-store',
+      }),
+    ])
 
-    const json = await res.json()
-    const items: any[] = json.data?.markets?.items ?? []
+    const [marketsJson, vaultsJson] = await Promise.all([marketsRes.json(), vaultsRes.json()])
+
+    const items: any[] = marketsJson.data?.markets?.items ?? []
 
     const markets = items
       .filter((m) => {
@@ -83,6 +120,7 @@ export async function GET(req: NextRequest) {
           : 0
         const totalSupplyUsd = parseFloat(m.state?.supplyAssetsUsd) || 0
         const totalBorrowUsd = parseFloat(m.state?.borrowAssetsUsd) || 0
+        const fee = parseFloat(m.state?.fee) || 0
         const collateralSymbol = m.collateralAsset?.symbol ?? '—'
         const loanSymbol = m.loanAsset?.symbol ?? '—'
 
@@ -93,12 +131,16 @@ export async function GET(req: NextRequest) {
           loanSymbol,
           collateralAddress: (m.collateralAsset?.address ?? '') as string,
           loanAddress: (m.loanAsset?.address ?? '') as string,
+          oracleAddress: (m.oracleAddress ?? '') as string,
+          irmAddress: (m.irmAddress ?? '') as string,
+          creationTimestamp: (m.creationTimestamp ?? 0) as number,
           lltv: Math.round(lltv * 100) / 100,
           supplyApy: Math.round(supplyApy * 100) / 100,
           borrowApy: Math.round(borrowApy * 100) / 100,
           utilization: Math.round(utilization * 100) / 100,
           totalSupplyUsd,
           totalBorrowUsd,
+          fee: Math.round(fee * 10000) / 100,
           collateralPriceUsd: parseFloat(m.collateralAsset?.price?.usd) || 0,
           loanPriceUsd: parseFloat(m.loanAsset?.price?.usd) || 0,
         }
@@ -107,15 +149,30 @@ export async function GET(req: NextRequest) {
     const totalSupplyUsd = markets.reduce((s, m) => s + m.totalSupplyUsd, 0)
     const totalBorrowUsd = markets.reduce((s, m) => s + m.totalBorrowUsd, 0)
     const activeMarkets = markets.filter((m) => m.totalSupplyUsd > 0).length
+    const highUtilMarkets = markets.filter((m) => m.utilization >= 80).length
+
+    const vaultItems: any[] = vaultsJson.data?.vaults?.items ?? []
+    const vaults = vaultItems.map((v) => ({
+      address: v.address as string,
+      name: v.name as string,
+      symbol: v.symbol as string,
+      assetSymbol: v.asset?.symbol ?? '—',
+      totalAssetsUsd: parseFloat(v.state?.totalAssetsUsd) || 0,
+      apy: Math.round((parseFloat(v.state?.apy) || 0) * 10000) / 100,
+      netApy: Math.round((parseFloat(v.state?.netApy) || 0) * 10000) / 100,
+      fee: Math.round((parseFloat(v.state?.fee) || 0) * 10000) / 100,
+    }))
 
     return NextResponse.json({
       markets,
+      vaults,
       chain: cfg.name,
       chainIcon: cfg.icon,
       chains: buildChainMeta(),
       totalSupplyUsd,
       totalBorrowUsd,
       activeMarkets,
+      highUtilMarkets,
       fetchedAt: new Date().toISOString(),
     })
   } catch (err) {
