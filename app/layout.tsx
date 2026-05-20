@@ -18,6 +18,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-theme="light">
+      <head>
+        {/* Apply saved theme before first paint to prevent flash */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('paragrine-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();` }} />
+      </head>
       <body className={`${interTight.variable} ${sourceSerif.variable} ${jetbrainsMono.variable}`}>
         <div className="wrap">
           <Masthead />

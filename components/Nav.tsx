@@ -81,8 +81,8 @@ export default function Masthead() {
             )
           })}
         </nav>
-        <button className="theme-toggle" onClick={toggleTheme}>
-          {theme === 'light' ? 'Dark' : 'Light'}
+        <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+          <Mark size={16} />
         </button>
       </div>
     </header>

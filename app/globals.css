@@ -92,11 +92,11 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 /* ── Theme toggle ────────────────────────────────────────────────── */
 .theme-toggle {
-  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--ink-mute); background: none; border: 1px solid var(--rule); padding: 5px 10px;
-  cursor: pointer; transition: color 120ms, border-color 120ms;
+  background: none; border: 1px solid var(--rule); padding: 5px 7px;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  opacity: 0.6; transition: opacity 120ms, border-color 120ms;
 }
-.theme-toggle:hover { color: var(--ink); border-color: var(--ink); }
+.theme-toggle:hover { opacity: 1; border-color: var(--ink); }
 
 /* ── Hero ────────────────────────────────────────────────────────── */
 .hero { padding: 56px 0 64px; border-bottom: 3px solid var(--ink); max-width: 980px; }
