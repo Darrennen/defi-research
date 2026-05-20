@@ -79,9 +79,18 @@ const dashboards = [
     status: 'live' as const,
   },
   {
-    href: '/hyperlend',
+    href: '/morpho',
     category: 'Protocol Risk',
     num: '05',
+    title: 'Morpho Blue Markets',
+    desc: 'Per-market risk view for Morpho Blue — supply, borrow, utilization, LLTV, and APYs across Ethereum and Base.',
+    chips: ['Morpho Blue', 'Multi-chain', 'LLTV Risk'],
+    status: 'live' as const,
+  },
+  {
+    href: '/hyperlend',
+    category: 'Protocol Risk',
+    num: '06',
     title: 'HyperLend Exposures',
     desc: 'Reserve-level risk view for HyperLend Core Pool on HyperEVM — live on-chain data.',
     chips: ['HyperEVM', 'Live RPC', 'Risk Params'],
@@ -90,7 +99,7 @@ const dashboards = [
   {
     href: '/yield-tracker',
     category: 'Yield Research',
-    num: '06',
+    num: '07',
     title: 'Yield Tracker',
     desc: 'Compare PT fixed-yield loops, Morpho lending markets, and Aave rates across strategies.',
     chips: ['Pendle PT', 'Morpho', 'Aave Rates'],

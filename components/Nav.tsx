@@ -9,6 +9,7 @@ const links = [
   { href: '/treasuries',    label: 'Treasuries' },
   { href: '/lending',       label: 'Lending' },
   { href: '/aave',          label: 'Aave V3' },
+  { href: '/morpho',        label: 'Morpho Blue' },
   { href: '/hyperlend',     label: 'HyperLend' },
   { href: '/yield-tracker', label: 'Yield Tracker' },
 ]
