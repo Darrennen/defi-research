@@ -2031,41 +2031,59 @@ footer.site ul a:hover { color: var(--blue); }
     .yt-grid { grid-template-columns: repeat(2, 1fr); }
   }
   @media (max-width: 720px) {
-    .pos-summary { grid-template-columns: repeat(2, 1fr); }
-    .pos-summary .b { border-right: 0; border-bottom: 1px solid var(--rule); }
-    .strc-kpi { grid-template-columns: repeat(2, 1fr); }
-    .rates-grid { grid-template-columns: 1fr; }
-    .yt-grid { grid-template-columns: 1fr; }
-    .calc-out .top-row { grid-template-columns: 1fr 1fr; }
-
-    /* header — single column, compact */
+    /* --- header --- */
     .yt-header { padding: 10px 16px; grid-template-columns: 1fr; gap: 8px; }
     .yt-header .left .badge { display: none; }
-    .yt-header .kpi-strip { grid-template-columns: repeat(3, 1fr); gap: 6px 12px; padding: 0; }
+    .yt-header .kpi-strip { grid-template-columns: repeat(3, 1fr); gap: 6px 10px; padding: 0; }
     .yt-header .ksk .v { font-size: 13px; }
     .yt-header .actions { display: none; }
 
-    /* tabs — not sticky (header height is variable), horizontal scroll */
+    /* --- tabs: not sticky (header height varies), horizontal scroll --- */
     .yt-tabs { position: relative; top: 0; padding: 0 16px;
       overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
     .yt-tabs::-webkit-scrollbar { display: none; }
     .yt-tabs a { white-space: nowrap; }
 
-    /* sections */
+    /* --- section layout --- */
     .wrap-wide { padding: 0 16px; }
     .yt-sec { padding: 20px 16px 16px; }
     .yt-sec .sec-head { flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
     .yt-sec .sec-head .rhs { display: none; }
 
-    /* scrollable tables */
+    /* --- scrollable table wrappers --- */
     .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .hf-sens-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .yc-group { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-    /* toolbar */
-    .loops-toolbar input.search { min-width: 0; flex: 1; }
-    .loops-toolbar { gap: 8px; }
+    /* --- calculator --- */
+    .calc-toolbar { flex-wrap: wrap; gap: 8px; }
+    .calc-out .top-row { grid-template-columns: 1fr 1fr; }
 
-    /* input rows */
+    /* --- best opportunity banner --- */
+    .best-opp { grid-template-columns: 1fr; gap: 12px; padding: 16px; }
+    .best-opp .nums { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+    /* --- grids --- */
+    .rates-grid { grid-template-columns: 1fr 1fr; }
+    .yt-grid { grid-template-columns: repeat(2, 1fr); }
+
+    /* --- positions --- */
+    .pos-summary { grid-template-columns: repeat(2, 1fr); }
+    .pos-summary .b { border-right: 0; border-bottom: 1px solid var(--rule); }
+    .pos-card .borrow-cost { flex-wrap: wrap; gap: 6px; }
     .pos-input-row { grid-template-columns: 1fr 1fr; }
+
+    /* --- STRC --- */
+    .strc-kpi { grid-template-columns: repeat(2, 1fr); }
+    .strc-kpi .b { border-right: 0; border-bottom: 1px solid var(--rule); }
+
+    /* --- loops toolbar --- */
+    .loops-toolbar { gap: 8px; }
+    .loops-toolbar input.search { min-width: 0; flex: 1; }
+
+    /* --- footer + floating panel --- */
+    .yt-foot { padding: 16px; flex-direction: column; gap: 6px; text-align: center; }
+    .yt-fp { display: none; }
   }
   @media (max-width: 480px) {
     .yt-header .kpi-strip { grid-template-columns: repeat(2, 1fr); }
@@ -2073,6 +2091,8 @@ footer.site ul a:hover { color: var(--blue); }
     .strc-kpi { grid-template-columns: 1fr; }
     .calc-out .top-row { grid-template-columns: 1fr; }
     .pos-input-row { grid-template-columns: 1fr; }
+    .yt-grid { grid-template-columns: 1fr; }
+    .rates-grid { grid-template-columns: 1fr; }
     .yt-sec { padding: 16px 14px 14px; }
     .wrap-wide { padding: 0 14px; }
   }
@@ -2356,7 +2376,7 @@ footer.site ul a:hover { color: var(--blue); }
           <span class="l">HF sensitivity</span>
           <span class="r">Stress-test how output changes with target health factor</span>
         </div>
-        <table class="hfs">
+        <div class="tbl-wrap"><table class="hfs">
           <thead>
             <tr><th>HF</th><th>LTV</th><th>Leverage</th><th>Net APY</th><th>Gross</th><th>Net profit</th></tr>
           </thead>
@@ -2367,7 +2387,7 @@ footer.site ul a:hover { color: var(--blue); }
             <tr><td>2.50×</td><td>34.4%</td><td>1.52×</td><td class="pos">23.27%</td><td>$76</td><td class="bad">$−74</td></tr>
             <tr><td>3.00×</td><td>28.7%</td><td>1.40×</td><td class="pos">21.86%</td><td>$71</td><td class="bad">$−79</td></tr>
           </tbody>
-        </table>
+        </table></div>
       </div>
     </div>
   </div>
@@ -2996,7 +3016,7 @@ footer.site ul a:hover { color: var(--blue); }
     <strong>Shared STRC risk:</strong> All tokens below share the same underlying risk — if Strategy (MSTR) reduces or suspends the STRC preferred dividend, all yields across Saturn, Apyx, and Strata compress simultaneously. These are separate protocols but a single credit event.
   </div>
 
-  <table class="tmorpho">
+  <div class="tbl-wrap"><table class="tmorpho">
     <thead>
       <tr><th>PT Token</th><th>Protocol</th><th>PT Fixed APY</th><th>Underlying APY</th><th>vs STRC base</th><th>Signal</th><th>Days left</th><th>Liquidity</th></tr>
     </thead>
@@ -3032,7 +3052,7 @@ footer.site ul a:hover { color: var(--blue); }
         <td><div class="signal-cell cheap">Buy PT</div></td><td>99d</td><td>$18.09M</td>
       </tr>
     </tbody>
-  </table>
+  </table></div>
 </section>
 
 <!-- =========================================================================
