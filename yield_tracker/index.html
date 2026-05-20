@@ -1341,12 +1341,13 @@ footer.site ul a:hover { color: var(--blue); }
   }
   .yt-header .back:hover { color: var(--blue); }
   .yt-theme-btn {
-    font-size: 16px; line-height: 1; padding: 4px 8px;
-    background: none; border: 1px solid var(--rule); color: var(--ink-soft);
-    cursor: pointer; border-radius: 4px; margin-left: 6px;
-    transition: color 120ms, border-color 120ms;
+    background: none; border: none; padding: 4px; margin-left: 6px;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    opacity: 0.45; transition: opacity 200ms, transform 200ms;
+    transform-origin: center;
   }
-  .yt-theme-btn:hover { color: var(--ink); border-color: var(--ink); }
+  .yt-theme-btn:hover { opacity: 1; transform: scale(1.2); }
+  .yt-theme-btn:active { transform: scale(0.9); transition-duration: 80ms; }
 
   /* ---- TAB NAV ---- */
   .yt-tabs {
