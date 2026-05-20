@@ -102,7 +102,7 @@ export default function MorphoPage() {
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Image src="https://icons.llamao.fi/icons/protocols/morpho.jpg" alt="Morpho" width={20} height={20} style={{ borderRadius: 3 }} unoptimized />
+            <Image src="https://icons.llamao.fi/icons/protocols/morpho-blue" alt="Morpho Blue" width={20} height={20} style={{ borderRadius: 3 }} unoptimized />
             <div className="kicker" style={{ margin: 0 }}>Morpho Blue · Market Risk Exposures</div>
           </div>
           <h1>On-Chain <em>Morpho Markets</em></h1>
