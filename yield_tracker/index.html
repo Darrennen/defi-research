@@ -2057,9 +2057,18 @@ footer.site ul a:hover { color: var(--blue); }
     .hf-sens-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .yc-group { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
-    /* --- calculator --- */
+    /* --- calculator: compact 4-col output, no sensitivity table --- */
     .calc-toolbar { flex-wrap: wrap; gap: 8px; }
-    .calc-out .top-row { grid-template-columns: 1fr 1fr; }
+    .calc-out .top-row { grid-template-columns: repeat(4, 1fr); gap: 1px; }
+    .calc-out .top-row .b { padding: 10px 8px; gap: 3px; }
+    .calc-out .top-row .b .l { font-size: 9px; }
+    .calc-out .top-row .b .v { font-size: 17px; }
+    .calc-out .top-row .b .v.unit { font-size: 11px; }
+    .calc-out .top-row .b .s { display: none; }
+    .hf-sens-card { display: none; }
+    .calc-inputs { padding: 12px; gap: 10px; }
+    .calc-inputs .field input, .calc-inputs .field select { font-size: 13px; padding: 7px 10px; }
+    .calc-inputs .pair-row { gap: 8px; }
 
     /* --- best opportunity banner --- */
     .best-opp { grid-template-columns: 1fr; gap: 12px; padding: 16px; }
@@ -2091,7 +2100,10 @@ footer.site ul a:hover { color: var(--blue); }
     .yt-header .kpi-strip { grid-template-columns: repeat(2, 1fr); }
     .pos-summary { grid-template-columns: 1fr; }
     .strc-kpi { grid-template-columns: 1fr; }
-    .calc-out .top-row { grid-template-columns: 1fr; }
+    /* keep 4-col calc output — just tighten further */
+    .calc-out .top-row .b { padding: 8px 6px; }
+    .calc-out .top-row .b .v { font-size: 14px; }
+    .calc-inputs .pair-row { grid-template-columns: 1fr 1fr; }
     .pos-input-row { grid-template-columns: 1fr; }
     .yt-grid { grid-template-columns: 1fr; }
     .rates-grid { grid-template-columns: 1fr; }
