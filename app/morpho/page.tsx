@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
 
 interface Market {
-  uniqueKey: string
+  marketId: string
   pair: string
   collateralSymbol: string
   loanSymbol: string
@@ -161,7 +161,7 @@ export default function MorphoPage() {
             <div style={{ marginTop: 20 }}>
               <p style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--ink-mute)', margin: '0 0 12px' }}>
                 <strong style={{ color: 'var(--ink)' }}>{m.pair}</strong> · Morpho Blue · {chainName}
-                <span style={{ marginLeft: 12, opacity: 0.5 }}>{m.uniqueKey.slice(0, 10)}…</span>
+                <span style={{ marginLeft: 12, opacity: 0.5 }}>{m.marketId.slice(0, 10)}…</span>
               </p>
 
               {/* Market KPIs */}
@@ -215,7 +215,7 @@ export default function MorphoPage() {
                     {m.loanSymbol} ↗
                   </a>
                 )}
-                <a href={`${morphoBase}${m.uniqueKey}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue-ink)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                <a href={`${morphoBase}${m.marketId}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue-ink)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
                   Morpho App ↗
                 </a>
               </div>
@@ -272,7 +272,7 @@ export default function MorphoPage() {
                 <tbody>
                   {filtered.map((mkt, i) => (
                     <tr
-                      key={mkt.uniqueKey}
+                      key={mkt.marketId}
                       onClick={() => { setSelected(i === selected ? null : i); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                       style={{ cursor: 'pointer', background: i === selected ? 'var(--blue-soft)' : undefined }}
                     >

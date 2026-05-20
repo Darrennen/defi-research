@@ -25,22 +25,22 @@ query Markets($chainId: Int!) {
   markets(
     where: { chainId_in: [$chainId] }
     first: 200
-    orderBy: TotalSupplyUsd
+    orderBy: SupplyAssetsUsd
     orderDirection: Desc
   ) {
     items {
-      uniqueKey
+      marketId
       lltv
-      collateralAsset { symbol address decimals priceUsd }
-      loanAsset { symbol address decimals priceUsd }
+      collateralAsset { symbol address price { usd } }
+      loanAsset { symbol address price { usd } }
       state {
         supplyApy
         borrowApy
         utilization
-        totalSupplyAssets
-        totalBorrowAssets
-        totalSupplyAssetsUsd
-        totalBorrowAssetsUsd
+        supplyAssets
+        borrowAssets
+        supplyAssetsUsd
+        borrowAssetsUsd
       }
     }
   }
@@ -63,26 +63,31 @@ export async function GET(req: NextRequest) {
     const items: any[] = json.data?.markets?.items ?? []
 
     const markets = items
-      .filter((m) => (parseFloat(m.state?.totalSupplyAssetsUsd) || 0) >= 1000)
+      .filter((m) => {
+        const supplyUsd = parseFloat(m.state?.supplyAssetsUsd) || 0
+        const rawApy = parseFloat(m.state?.supplyApy) || 0
+        // filter dust markets and spam/exploit markets (APY > 500 raw = >50,000%)
+        return supplyUsd >= 1000 && rawApy < 5
+      })
       .map((m) => {
         const lltv = (parseFloat(m.lltv) / 1e18) * 100
         const supplyApy = (parseFloat(m.state?.supplyApy) || 0) * 100
         const borrowApy = (parseFloat(m.state?.borrowApy) || 0) * 100
         const rawUtil = parseFloat(m.state?.utilization)
-        const totalSupplyRaw = parseFloat(m.state?.totalSupplyAssets) || 0
-        const totalBorrowRaw = parseFloat(m.state?.totalBorrowAssets) || 0
+        const supplyRaw = parseFloat(m.state?.supplyAssets) || 0
+        const borrowRaw = parseFloat(m.state?.borrowAssets) || 0
         const utilization = !isNaN(rawUtil)
           ? rawUtil * 100
-          : totalSupplyRaw > 0
-          ? (totalBorrowRaw / totalSupplyRaw) * 100
+          : supplyRaw > 0
+          ? (borrowRaw / supplyRaw) * 100
           : 0
-        const totalSupplyUsd = parseFloat(m.state?.totalSupplyAssetsUsd) || 0
-        const totalBorrowUsd = parseFloat(m.state?.totalBorrowAssetsUsd) || 0
+        const totalSupplyUsd = parseFloat(m.state?.supplyAssetsUsd) || 0
+        const totalBorrowUsd = parseFloat(m.state?.borrowAssetsUsd) || 0
         const collateralSymbol = m.collateralAsset?.symbol ?? '—'
         const loanSymbol = m.loanAsset?.symbol ?? '—'
 
         return {
-          uniqueKey: m.uniqueKey as string,
+          marketId: m.marketId as string,
           pair: `${collateralSymbol} / ${loanSymbol}`,
           collateralSymbol,
           loanSymbol,
@@ -94,8 +99,8 @@ export async function GET(req: NextRequest) {
           utilization: Math.round(utilization * 100) / 100,
           totalSupplyUsd,
           totalBorrowUsd,
-          collateralPriceUsd: parseFloat(m.collateralAsset?.priceUsd) || 0,
-          loanPriceUsd: parseFloat(m.loanAsset?.priceUsd) || 0,
+          collateralPriceUsd: parseFloat(m.collateralAsset?.price?.usd) || 0,
+          loanPriceUsd: parseFloat(m.loanAsset?.price?.usd) || 0,
         }
       })
 
