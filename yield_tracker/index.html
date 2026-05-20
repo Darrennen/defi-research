@@ -1269,9 +1269,14 @@ footer.site ul a:hover { color: var(--blue); }
   body { font-family: var(--sans); }
   .wrap-wide { max-width: 1640px; margin: 0 auto; padding: 0 32px; }
 
-  /* ---- STICKY HEADER ---- */
-  .yt-header {
+  /* ---- STICKY BAR (header + tabs move as one unit) ---- */
+  .yt-sticky-bar {
     position: sticky; top: 0; z-index: 50;
+    background: var(--paper);
+  }
+
+  /* ---- HEADER ---- */
+  .yt-header {
     background: var(--paper);
     border-bottom: 1px solid var(--rule);
     display: grid;
@@ -1338,7 +1343,6 @@ footer.site ul a:hover { color: var(--blue); }
 
   /* ---- TAB NAV ---- */
   .yt-tabs {
-    position: sticky; top: 62px; z-index: 40;
     background: var(--paper);
     border-bottom: 1px solid var(--rule);
     display: flex; gap: 0; padding: 0 32px; overflow-x: auto;
@@ -2034,14 +2038,15 @@ footer.site ul a:hover { color: var(--blue); }
   }
   @media (max-width: 720px) {
     /* --- header --- */
+    .yt-sticky-bar { position: sticky; top: 0; }
     .yt-header { padding: 10px 16px; grid-template-columns: 1fr; gap: 8px; }
     .yt-header .left .badge { display: none; }
     .yt-header .kpi-strip { grid-template-columns: repeat(3, 1fr); gap: 6px 10px; padding: 0; }
     .yt-header .ksk .v { font-size: 13px; }
     .yt-header .actions { display: none; }
 
-    /* --- tabs: not sticky (header height varies), horizontal scroll --- */
-    .yt-tabs { position: relative; top: 0; padding: 0 16px;
+    /* --- tabs: horizontal scroll on mobile --- */
+    .yt-tabs { padding: 0 16px;
       overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
     .yt-tabs::-webkit-scrollbar { display: none; }
     .yt-tabs a { white-space: nowrap; }
@@ -2127,6 +2132,7 @@ footer.site ul a:hover { color: var(--blue); }
 <!-- =========================================================================
      STICKY HEADER + TABS
      ========================================================================= -->
+<div class="yt-sticky-bar">
 <header class="yt-header">
   <div class="left">
     <a href="/" class="logo" aria-label="Paragrine Research home">
@@ -2162,6 +2168,7 @@ footer.site ul a:hover { color: var(--blue); }
   <a href="#morpho">08 Morpho</a>
   <a href="#strc">09 STRC</a>
 </nav>
+</div><!-- /.yt-sticky-bar -->
 
 <!-- =========================================================================
      00  MY LIVE POSITIONS
