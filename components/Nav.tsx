@@ -28,7 +28,7 @@ export default function Masthead() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
+    const saved = localStorage.getItem('paragrine-theme') as 'light' | 'dark' | null
     if (saved) { setTheme(saved); document.documentElement.dataset.theme = saved }
   }, [])
 
@@ -36,7 +36,7 @@ export default function Masthead() {
     const next = theme === 'light' ? 'dark' : 'light'
     setTheme(next)
     document.documentElement.dataset.theme = next
-    localStorage.setItem('theme', next)
+    localStorage.setItem('paragrine-theme', next)
   }
 
   const now = new Date()

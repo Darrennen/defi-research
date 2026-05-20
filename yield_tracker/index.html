@@ -1340,6 +1340,13 @@ footer.site ul a:hover { color: var(--blue); }
     text-decoration: none; margin-left: 8px; letter-spacing: 0.04em;
   }
   .yt-header .back:hover { color: var(--blue); }
+  .yt-theme-btn {
+    font-size: 16px; line-height: 1; padding: 4px 8px;
+    background: none; border: 1px solid var(--rule); color: var(--ink-soft);
+    cursor: pointer; border-radius: 4px; margin-left: 6px;
+    transition: color 120ms, border-color 120ms;
+  }
+  .yt-theme-btn:hover { color: var(--ink); border-color: var(--ink); }
 
   /* ---- TAB NAV ---- */
   .yt-tabs {
@@ -2140,6 +2147,7 @@ footer.site ul a:hover { color: var(--blue); }
     </a>
     <div class="title">Yield Tracker</div>
     <span class="badge live">MAINNET · LIVE</span>
+    <button class="yt-theme-btn" id="ytThemeBtn" aria-label="Toggle theme">◐</button>
   </div>
   <div class="kpi-strip">
     <div class="ksk"><div class="l">Capital (USD)</div><div class="v">4,100</div></div>
@@ -3145,25 +3153,40 @@ footer.site ul a:hover { color: var(--blue); }
     });
   });
 
-  // ---- Floating panel: theme + density + accent ----
+  // ---- Theme: load saved preference and wire all toggles ----
+  (function initTheme() {
+    const saved = localStorage.getItem('paragrine-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', saved);
+    // sync floating panel buttons
+    document.querySelectorAll('#themeSeg .o').forEach(o => {
+      o.classList.toggle('on', o.dataset.themeSet === saved);
+    });
+  })();
+
+  // header theme button
+  const ytThemeBtn = document.getElementById('ytThemeBtn');
+  if (ytThemeBtn) {
+    ytThemeBtn.addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('paragrine-theme', next);
+      document.querySelectorAll('#themeSeg .o').forEach(o => {
+        o.classList.toggle('on', o.dataset.themeSet === next);
+      });
+    });
+  }
+
+  // floating panel theme buttons
   document.querySelectorAll('#themeSeg .o').forEach(o => {
     o.addEventListener('click', () => {
       const next = o.dataset.themeSet;
       document.documentElement.setAttribute('data-theme', next);
-      const lbl = document.getElementById('themeLbl');
-      if (lbl) lbl.textContent = next === 'dark' ? 'Night' : 'Day';
       localStorage.setItem('paragrine-theme', next);
       document.querySelectorAll('#themeSeg .o').forEach(x => x.classList.remove('on'));
       o.classList.add('on');
     });
   });
-  // sync floating panel to saved theme
-  (function syncFP() {
-    const cur = document.documentElement.getAttribute('data-theme') || 'light';
-    document.querySelectorAll('#themeSeg .o').forEach(o => {
-      o.classList.toggle('on', o.dataset.themeSet === cur);
-    });
-  })();
 
   document.querySelectorAll('#densitySeg .o').forEach(o => {
     o.addEventListener('click', () => {

@@ -335,11 +335,13 @@ footer.site-footer ul a:hover { color: var(--blue); }
   .masthead-row { grid-template-columns: 1fr; gap: 0; }
   .masthead-sub { margin-top: 14px; padding-top: 12px; }
   .masthead-sub nav {
+    flex: 1; min-width: 0;
     gap: 12px; flex-wrap: nowrap;
     overflow-x: auto; -webkit-overflow-scrolling: touch;
     padding-bottom: 4px; scrollbar-width: none;
   }
   .masthead-sub nav::-webkit-scrollbar { display: none; }
+  .theme-toggle { flex-shrink: 0; }
 
   /* Hero */
   .hero { padding: 28px 0 36px; }
