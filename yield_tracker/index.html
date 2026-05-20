@@ -2037,19 +2037,44 @@ footer.site ul a:hover { color: var(--blue); }
     .rates-grid { grid-template-columns: 1fr; }
     .yt-grid { grid-template-columns: 1fr; }
     .calc-out .top-row { grid-template-columns: 1fr 1fr; }
-    .yt-header { padding: 12px 16px; }
-    .yt-header .kpi-strip { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+    /* header — single column, compact */
+    .yt-header { padding: 10px 16px; grid-template-columns: 1fr; gap: 8px; }
+    .yt-header .left .badge { display: none; }
+    .yt-header .kpi-strip { grid-template-columns: repeat(3, 1fr); gap: 6px 12px; padding: 0; }
+    .yt-header .ksk .v { font-size: 13px; }
     .yt-header .actions { display: none; }
-    .yt-tabs { padding: 0 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
+
+    /* tabs — not sticky (header height is variable), horizontal scroll */
+    .yt-tabs { position: relative; top: 0; padding: 0 16px;
+      overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
     .yt-tabs::-webkit-scrollbar { display: none; }
     .yt-tabs a { white-space: nowrap; }
-    .yt-sec { padding: 24px 16px 20px; }
+
+    /* sections */
+    .wrap-wide { padding: 0 16px; }
+    .yt-sec { padding: 20px 16px 16px; }
+    .yt-sec .sec-head { flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .yt-sec .sec-head .rhs { display: none; }
+
+    /* scrollable tables */
+    .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* toolbar */
+    .loops-toolbar input.search { min-width: 0; flex: 1; }
+    .loops-toolbar { gap: 8px; }
+
+    /* input rows */
+    .pos-input-row { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 480px) {
     .yt-header .kpi-strip { grid-template-columns: repeat(2, 1fr); }
     .pos-summary { grid-template-columns: 1fr; }
     .strc-kpi { grid-template-columns: 1fr; }
     .calc-out .top-row { grid-template-columns: 1fr; }
+    .pos-input-row { grid-template-columns: 1fr; }
+    .yt-sec { padding: 16px 14px 14px; }
+    .wrap-wide { padding: 0 14px; }
   }
 </style>
 </head>
@@ -2489,7 +2514,7 @@ footer.site ul a:hover { color: var(--blue); }
     </div>
   </div>
 
-  <table class="tloop" id="tloop">
+  <div class="tbl-wrap"><table class="tloop" id="tloop">
     <thead>
       <tr>
         <th>Pair</th>
@@ -2552,7 +2577,7 @@ footer.site ul a:hover { color: var(--blue); }
         <td>91.5%</td><td class="pos-cell">8.45%</td><td>1.84×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>64d</td><td class="pos-cell">$60</td><td>14.16%</td><td>$47</td><td class="pos-cell">+$14</td><td class="warn-cell">73.7%</td>
       </tr>
     </tbody>
-  </table>
+  </table></div>
 </section>
 
 <!-- =========================================================================
@@ -2708,7 +2733,7 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="rhs">Fixed yield · sorted by APY · min $500k liquidity · &gt;5d remaining</div>
   </div>
 
-  <table class="tpmkt" id="tpmkt">
+  <div class="tbl-wrap"><table class="tpmkt" id="tpmkt">
     <thead>
       <tr>
         <th>PT Token</th>
@@ -2823,7 +2848,7 @@ footer.site ul a:hover { color: var(--blue); }
         <td><div class="signal-cell yt-cheap">YT Cheap · 3.2% Long Yield<span class="tier t3">T3</span></div></td>
       </tr>
     </tbody>
-  </table>
+  </table></div>
 </section>
 
 <!-- =========================================================================
@@ -2921,7 +2946,7 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="rhs">Whitelisted · min $500k liquidity · supply vs borrow breakdown</div>
   </div>
 
-  <table class="tmorpho" id="tmorpho">
+  <div class="tbl-wrap"><table class="tmorpho" id="tmorpho">
     <thead>
       <tr><th>Collateral</th><th>Debt</th><th>LLTV</th><th>Supply APY</th><th>Borrow APY</th><th>Utilization</th><th>Supply liq.</th><th>Borrow liq.</th></tr>
     </thead>
@@ -2945,7 +2970,7 @@ footer.site ul a:hover { color: var(--blue); }
       <tr><td><div class="pt-tok"><span class="ic alt3">WE</span><span class="nm">weETH</span></div></td><td>USDC</td><td>86.0%</td><td class="pos-cell">3.40%</td><td class="warn-cell">4.04%</td><td><div class="util-cell"><div class="bar"><i style="width:84%"></i></div>84%</div></td><td>$3.36M</td><td>$2.83M</td></tr>
       <tr><td><div class="pt-tok"><span class="ic alt3">AV</span><span class="nm">AVLT</span></div></td><td>USDt0</td><td>91.5%</td><td class="pos-cell">7.06%</td><td class="warn-cell">8.08%</td><td><div class="util-cell"><div class="bar warn"><i style="width:88%"></i></div>88%</div></td><td>$4.29M</td><td>$3.77M</td></tr>
     </tbody>
-  </table>
+  </table></div>
 </section>
 
 <!-- =========================================================================
