@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { Inter_Tight, Source_Serif_4, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import Masthead from '@/components/Nav'
+import ProgressBar from '@/components/ProgressBar'
+import BottomNav from '@/components/BottomNav'
 
 const interTight = Inter_Tight({ subsets: ['latin'], variable: '--font-sans', display: 'swap' })
 const sourceSerif = Source_Serif_4({ subsets: ['latin'], variable: '--font-serif', style: ['normal', 'italic'], display: 'swap' })
@@ -23,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('paragrine-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();` }} />
       </head>
       <body className={`${interTight.variable} ${sourceSerif.variable} ${jetbrainsMono.variable}`}>
+        <ProgressBar />
         <div className="wrap">
           <Masthead />
         </div>
@@ -48,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <li><a href="/treasuries">Tokenized Treasuries</a></li>
                 <li><a href="/lending">DeFi Lending Risk</a></li>
                 <li><a href="/yield-tracker">Yield Tracker</a></li>
+                <li><a href="/whale-tracker">Whale Tracker</a></li>
               </ul>
             </div>
             <div>
@@ -70,6 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div>Data: DeFiLlama public APIs · Refreshed every 5 min</div>
           </div>
         </div>
+        <BottomNav />
       </body>
     </html>
   )

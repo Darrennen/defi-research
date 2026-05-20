@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { getStablecoins, formatUsd } from '@/lib/defillama'
+import IndicesStrip from '@/components/IndicesStrip'
 
 async function getIndicesData() {
   try {
@@ -32,13 +33,6 @@ async function getIndicesData() {
   } catch {
     return { stables: null, lending: null, rwa: null, aave: null, morpho: null }
   }
-}
-
-function fmt(n: number | null) {
-  if (n == null) return '—'
-  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `$${(n / 1e6).toFixed(0)}M`
-  return `$${n.toFixed(0)}`
 }
 
 const dashboards = [
@@ -105,6 +99,15 @@ const dashboards = [
     chips: ['Pendle PT', 'Morpho', 'Aave Rates'],
     status: 'live' as const,
   },
+  {
+    href: '/whale-tracker',
+    category: 'Whale Intelligence',
+    num: '08',
+    title: 'Whale Alert Tracker',
+    desc: 'Real-time on-chain whale movements from Arkham Intelligence — streamed from Slack into a live feed.',
+    chips: ['Arkham', 'Live Feed', 'Multi-chain'],
+    status: 'live' as const,
+  },
 ]
 
 const methods = [
@@ -118,11 +121,11 @@ export default async function Home() {
   const idx = await getIndicesData()
 
   const indices = [
-    { name: 'Total Stables', val: fmt(idx.stables), chg: 'USD-pegged' },
-    { name: 'Lending TVL',   val: fmt(idx.lending),  chg: 'DeFi markets' },
-    { name: 'Tokenized RWA', val: fmt(idx.rwa),       chg: 'On-chain' },
-    { name: 'Aave V3 TVL',   val: fmt(idx.aave),      chg: 'Multi-chain' },
-    { name: 'Morpho TVL',    val: fmt(idx.morpho),    chg: 'Blue + vaults' },
+    { name: 'Total Stables', raw: idx.stables, chg: 'USD-pegged' },
+    { name: 'Lending TVL',   raw: idx.lending,  chg: 'DeFi markets' },
+    { name: 'Tokenized RWA', raw: idx.rwa,       chg: 'On-chain' },
+    { name: 'Aave V3 TVL',   raw: idx.aave,      chg: 'Multi-chain' },
+    { name: 'Morpho TVL',    raw: idx.morpho,    chg: 'Blue + vaults' },
   ]
 
   return (
@@ -152,15 +155,7 @@ export default async function Home() {
       </section>
 
       {/* Indices strip */}
-      <div className="indices">
-        {indices.map((ix) => (
-          <div className="idx" key={ix.name}>
-            <div className="name">{ix.name}</div>
-            <div className="val">{ix.val}</div>
-            <div className="chg">{ix.chg}</div>
-          </div>
-        ))}
-      </div>
+      <IndicesStrip items={indices} />
 
       {/* Dashboards section */}
       <section id="dashboards" style={{ padding: '64px 0', borderBottom: '1px solid var(--rule)' }}>

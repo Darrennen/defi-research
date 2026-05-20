@@ -319,6 +319,9 @@ footer.site-footer ul a:hover { color: var(--blue); }
 /* ── Responsive: 3-col KPI override class ────────────────────────── */
 .kpi-3col { grid-template-columns: repeat(3, 1fr) !important; }
 
+/* ── Bottom nav (mobile only) ────────────────────────────────────── */
+.bottom-nav { display: none; }
+
 /* ── Responsive ──────────────────────────────────────────────────── */
 @media (max-width: 1080px) {
   .dash-grid { grid-template-columns: repeat(2, 1fr); }
@@ -327,6 +330,26 @@ footer.site-footer ul a:hover { color: var(--blue); }
   footer.site-footer { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 720px) {
+  /* Bottom nav */
+  body { padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .bottom-nav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+    height: 56px; background: var(--paper); border-top: 1px solid var(--rule);
+    z-index: 200; padding-bottom: env(safe-area-inset-bottom, 0px);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  .bottom-nav a {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; color: var(--ink-soft); text-decoration: none;
+    font-family: var(--sans); font-size: 9px; font-weight: 600;
+    letter-spacing: 0.07em; text-transform: uppercase;
+    transition: color 140ms, transform 140ms;
+  }
+  .bottom-nav a svg { width: 20px; height: 20px; transition: transform 140ms; }
+  .bottom-nav a.active { color: var(--blue); }
+  .bottom-nav a.active svg { transform: translateY(-1px); }
+  .bottom-nav a:active svg { transform: scale(0.88); transition-duration: 60ms; }
+
   /* Layout */
   .wrap { padding: 0 16px; }
   section { padding: 40px 0; }

@@ -1295,11 +1295,18 @@ footer.site ul a:hover { color: var(--blue); }
     padding-left: 14px; border-left: 1px solid var(--rule);
   }
   .yt-header .badge.live {
-    font-family: var(--mono); font-size: 10px; padding: 3px 8px;
+    font-family: var(--mono); font-size: 10px; padding: 3px 10px;
     background: var(--ink); color: var(--paper);
     letter-spacing: 0.14em;
+    display: inline-flex; align-items: center; gap: 6px;
   }
   html[data-theme="dark"] .yt-header .badge.live { background: var(--blue); color: #fff; }
+  .yt-header .badge.live::before {
+    content: ''; width: 5px; height: 5px; border-radius: 50%;
+    background: currentColor; flex-shrink: 0;
+    animation: ytlivepulse 1.8s ease-in-out infinite;
+  }
+  @keyframes ytlivepulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.7); } }
 
   .yt-header .kpi-strip {
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px;
@@ -2137,6 +2144,7 @@ footer.site ul a:hover { color: var(--blue); }
 </style>
 </head>
 <body>
+<div id="yt-progress" style="position:fixed;top:0;left:0;height:2px;width:0%;background:var(--blue);z-index:9999;pointer-events:none;transition:width 80ms linear;"></div>
 
 <!-- =========================================================================
      STICKY HEADER + TABS
@@ -3214,6 +3222,17 @@ footer.site ul a:hover { color: var(--blue); }
       t.classList.add('on');
     });
   });
+
+  // Reading progress bar
+  (function() {
+    const bar = document.getElementById('yt-progress');
+    if (!bar) return;
+    window.addEventListener('scroll', function() {
+      const el = document.documentElement;
+      const total = el.scrollHeight - el.clientHeight;
+      bar.style.width = (total > 0 ? Math.min((el.scrollTop / total) * 100, 100) : 0) + '%';
+    }, { passive: true });
+  })();
 </script>
 
 
