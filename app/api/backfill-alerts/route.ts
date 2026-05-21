@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { redis, WHALE_ALERTS_KEY, MAX_ALERTS } from '@/lib/redis'
-import { parseArkhamAlert, type WhaleAlert } from '@/app/api/slack-events/route'
+import { parseArkhamAlert, isArkhamAlert, type WhaleAlert } from '@/app/api/slack-events/route'
 
 const CHANNEL_ID = 'C097VGAQ5FB'
 const DAYS = 30
@@ -40,15 +40,12 @@ export async function POST() {
       for (const msg of messages) {
         if (msg.subtype || !msg.text || msg.text.length < 10) continue
 
-        const ts = Math.floor(parseFloat(msg.ts) * 1000)
-        const alert: WhaleAlert = {
-          id: msg.ts,
-          ts,
-          raw: msg.text,
-          ...parseArkhamAlert(msg.text),
-        }
+        const parsed = parseArkhamAlert(msg.text)
+        if (!isArkhamAlert(parsed)) continue  // skip regular chat messages
 
-        // nx: only add if not already stored (avoids overwriting live alerts)
+        const ts = Math.floor(parseFloat(msg.ts) * 1000)
+        const alert: WhaleAlert = { id: msg.ts, ts, raw: msg.text, ...parsed }
+
         await redis.zadd(WHALE_ALERTS_KEY, { nx: true }, { score: ts, member: JSON.stringify(alert) })
         stored++
       }

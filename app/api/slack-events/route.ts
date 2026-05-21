@@ -62,6 +62,11 @@ function fmtAmount(v: number): string {
 const TOKENS = 'USDC|USDT|ETH|BTC|WBTC|WETH|DAI|FRAX|sDAI|cbBTC|cbETH|rETH|weETH|rsETH|stETH|LUSD|BUSD|UNI|LINK|AAVE|GHO|crvUSD'
 const MULTIPLIERS: Record<string, number> = { K: 1e3, M: 1e6, B: 1e9 }
 
+export function isArkhamAlert(parsed: Partial<WhaleAlert>): boolean {
+  // Must have at least an amount+token or a tx hash — pure chat messages won't have either
+  return !!(parsed.amountFmt || parsed.txHash || (parsed.entity && parsed.chain))
+}
+
 export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   const clean = stripSlack(text)
   const out: Partial<WhaleAlert> = {}
@@ -140,13 +145,12 @@ export async function POST(req: NextRequest) {
 
   const ev = payload.event
   if (ev?.type === 'message' && !ev.subtype && ev.text?.length > 10) {
+    const parsed = parseArkhamAlert(ev.text)
+    // Only store if it looks like a real Arkham alert
+    if (!isArkhamAlert(parsed)) return NextResponse.json({ ok: true })
+
     const ts = Math.floor(parseFloat(ev.ts) * 1000)
-    const alert: WhaleAlert = {
-      id: ev.ts,
-      ts,
-      raw: ev.text,
-      ...parseArkhamAlert(ev.text),
-    }
+    const alert: WhaleAlert = { id: ev.ts, ts, raw: ev.text, ...parsed }
 
     await redis.zadd(WHALE_ALERTS_KEY, { score: ts, member: JSON.stringify(alert) })
 
