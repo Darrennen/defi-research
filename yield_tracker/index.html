@@ -1568,9 +1568,31 @@ footer.site ul a:hover { color: var(--blue); }
   .pos-portfolio .pp-stat .pv { font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ink); }
   .pos-portfolio .pp-stat .pv.pos { color: var(--green, #22c55e); }
   .pos-portfolio .pp-stat .pv.neg { color: var(--red); }
+  .pos-portfolio .pp-inputs {
+    display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+    padding-bottom: 12px; border-bottom: 1px solid var(--rule);
+  }
+  .pos-portfolio .pp-field { display: flex; flex-direction: column; gap: 4px; }
+  .pos-portfolio .pp-field-info { margin-left: auto; }
+  .pos-portfolio .pp-lbl {
+    font-family: var(--sans); font-size: 9px; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute);
+  }
+  .pos-portfolio .pp-field input {
+    font-family: var(--mono); font-size: 13px; padding: 6px 10px;
+    border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+    outline: none; width: 160px;
+  }
+  .pos-portfolio .pp-field input:focus { border-color: var(--blue); }
+  html[data-theme="dark"] .pos-portfolio .pp-field input { background: var(--paper-2); }
+  .pos-portfolio .pp-cur {
+    font-family: var(--mono); font-size: 13px; padding: 6px 0; color: var(--ink);
+  }
   @media (max-width: 600px) {
     .pos-portfolio .pp-stats { grid-template-columns: repeat(3, 1fr); }
     .pos-growth .g-stats { grid-template-columns: repeat(3, 1fr); }
+    .pos-portfolio .pp-field-info { margin-left: 0; }
+    .pos-portfolio .pp-field input { width: 140px; }
   }
 
   /* ---- 01 CALCULATOR ---- */
@@ -3768,32 +3790,83 @@ footer.site ul a:hover { color: var(--blue); }
     // Portfolio growth block
     const portHistory = portfolioHistory(positions);
     const portEntry = portHistory[0];
-    const portEntryEquity = portEntry?.equity ?? null;
-    const portPnl = portEntryEquity != null ? equity - portEntryEquity : null;
-    const portRetPct = portPnl != null && portEntryEquity > 0 ? (portPnl / portEntryEquity) * 100 : null;
-    const portDays = portEntry ? (Date.now() / 1000 - portEntry.ts) / 86400 : null;
-    const portApr = portRetPct != null && portDays > 0 ? (portRetPct / portDays) * 365 : null;
-    const portAvgDaily = portPnl != null && portDays > 0 ? portPnl / portDays : null;
-    const portColor = portPnl == null || portPnl >= 0 ? 'var(--blue)' : 'var(--red)';
-    const ppSignCls = portPnl == null ? '' : portPnl >= 0 ? 'pos' : 'neg';
+    // Auto-detect entry date from history; user can override both fields
+    const autoEntryTs = portEntry?.ts ?? null;
+    const autoEntryEquity = portEntry?.equity ?? null;
+    const currentEquityNow = equity;
 
     const ppBlock = document.createElement('div');
     ppBlock.id = 'pos-portfolio-block';
     ppBlock.className = 'pos-portfolio';
+
+    // Format date for <input type="date"> value
+    function tsToDateInput(ts) {
+      if (!ts) return '';
+      const d = new Date(ts * 1000);
+      return d.toISOString().slice(0, 10);
+    }
+
     ppBlock.innerHTML = `
-      <div class="pp-title">Portfolio Growth — since first deposit</div>
-      ${portHistory.length >= 2 ? sparklineSVG(portHistory, portColor, 600, 64) : '<div style="font-family:var(--mono);font-size:11px;color:var(--ink-mute);padding:8px 0;">Insufficient history data</div>'}
-      <div class="pp-stats">
-        <div class="pp-stat"><div class="pl">Entry equity</div><div class="pv">${portEntryEquity != null ? U(portEntryEquity) : '—'}</div></div>
-        <div class="pp-stat"><div class="pl">Current equity</div><div class="pv">${U(equity)}</div></div>
-        <div class="pp-stat"><div class="pl">P&amp;L</div><div class="pv ${ppSignCls}">${portPnl != null ? (portPnl >= 0 ? '+' : '') + U(portPnl) : '—'}</div></div>
-        <div class="pp-stat"><div class="pl">Return</div><div class="pv ${ppSignCls}">${portRetPct != null ? (portRetPct >= 0 ? '+' : '') + portRetPct.toFixed(2) + '%' : '—'}</div></div>
-        <div class="pp-stat"><div class="pl">APR (realized)</div><div class="pv ${ppSignCls}">${portApr != null ? (portApr >= 0 ? '+' : '') + portApr.toFixed(2) + '%' : '—'}</div></div>
-        <div class="pp-stat"><div class="pl">Days held</div><div class="pv">${portDays != null ? portDays.toFixed(1) + 'd' : '—'}</div></div>
-        <div class="pp-stat"><div class="pl">Avg daily</div><div class="pv ${ppSignCls}">${portAvgDaily != null ? (portAvgDaily >= 0 ? '+' : '') + U(portAvgDaily) : '—'}</div></div>
-        <div class="pp-stat"><div class="pl">Entry date</div><div class="pv">${portEntry ? new Date(portEntry.ts * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '—'}</div></div>
-      </div>`;
+      <div class="pp-title">Portfolio Growth</div>
+      <div class="pp-inputs">
+        <div class="pp-field">
+          <label class="pp-lbl">Entry capital (USD)</label>
+          <input id="pp-entry-capital" type="number" min="0" step="100"
+            value="${autoEntryEquity != null ? Math.round(autoEntryEquity) : ''}"
+            placeholder="e.g. 40000">
+        </div>
+        <div class="pp-field">
+          <label class="pp-lbl">Entry date</label>
+          <input id="pp-entry-date" type="date"
+            value="${tsToDateInput(autoEntryTs)}"
+            max="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <div class="pp-field pp-field-info">
+          <label class="pp-lbl">Current equity</label>
+          <div class="pp-cur">${U(currentEquityNow)}</div>
+        </div>
+      </div>
+      <div id="pp-spark-wrap">
+        ${portHistory.length >= 2 ? sparklineSVG(portHistory, 'var(--blue)', 600, 64) : ''}
+      </div>
+      <div id="pp-stats" class="pp-stats"></div>`;
+
     grid.parentNode.insertBefore(ppBlock, grid);
+
+    function updatePortfolioStats() {
+      const entryCapital = parseFloat(document.getElementById('pp-entry-capital').value);
+      const entryDateVal = document.getElementById('pp-entry-date').value;
+      const statsEl = document.getElementById('pp-stats');
+      const sparkWrap = document.getElementById('pp-spark-wrap');
+
+      if (!entryCapital || entryCapital <= 0) { statsEl.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--ink-mute)">Enter entry capital to see P&amp;L</div>'; return; }
+
+      const entryTs = entryDateVal ? new Date(entryDateVal).getTime() / 1000 : autoEntryTs;
+      const daysHeld = entryTs ? (Date.now() / 1000 - entryTs) / 86400 : null;
+      const pnl = currentEquityNow - entryCapital;
+      const retPct = (pnl / entryCapital) * 100;
+      const apr = daysHeld != null && daysHeld > 0 ? (retPct / daysHeld) * 365 : null;
+      const avgDaily = daysHeld != null && daysHeld > 0 ? pnl / daysHeld : null;
+      const signCls = pnl >= 0 ? 'pos' : 'neg';
+      const sparkColor = pnl >= 0 ? 'var(--blue)' : 'var(--red)';
+
+      // Update sparkline color
+      if (portHistory.length >= 2) {
+        sparkWrap.innerHTML = sparklineSVG(portHistory, sparkColor, 600, 64);
+      }
+
+      statsEl.innerHTML = `
+        <div class="pp-stat"><div class="pl">P&amp;L</div><div class="pv ${signCls}">${pnl >= 0 ? '+' : ''}${U(pnl)}</div></div>
+        <div class="pp-stat"><div class="pl">Return</div><div class="pv ${signCls}">${pnl >= 0 ? '+' : ''}${retPct.toFixed(2)}%</div></div>
+        <div class="pp-stat"><div class="pl">APR (realized)</div><div class="pv ${signCls}">${apr != null ? (apr >= 0 ? '+' : '') + apr.toFixed(2) + '%' : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Days held</div><div class="pv">${daysHeld != null ? daysHeld.toFixed(1) + 'd' : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Avg / day</div><div class="pv ${signCls}">${avgDaily != null ? (avgDaily >= 0 ? '+' : '') + U(avgDaily) : '—'}</div></div>
+      `;
+    }
+
+    ppBlock.querySelector('#pp-entry-capital').addEventListener('input', updatePortfolioStats);
+    ppBlock.querySelector('#pp-entry-date').addEventListener('input', updatePortfolioStats);
+    updatePortfolioStats();
 
     // Position cards
     grid.innerHTML = positions.map(p => {
