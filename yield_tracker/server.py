@@ -558,6 +558,30 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(html)
 
+        elif self.path == "/favicon.svg":
+            import os
+            public = os.path.join(os.path.dirname(os.path.dirname(__file__)), "public", "favicon.svg")
+            try:
+                data = open(public, "rb").read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception:
+                self.send_response(404); self.end_headers()
+
+        elif self.path == "/apple-touch-icon.png":
+            import os
+            public = os.path.join(os.path.dirname(os.path.dirname(__file__)), "public", "apple-touch-icon.png")
+            try:
+                data = open(public, "rb").read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception:
+                self.send_response(404); self.end_headers()
+
         else:
             self.send_response(404)
             self.end_headers()
