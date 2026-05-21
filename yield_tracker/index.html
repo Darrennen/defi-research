@@ -2140,7 +2140,7 @@ footer.site ul a:hover { color: var(--blue); }
     .rates-grid { grid-template-columns: 1fr; }
     .yt-sec { padding: 16px 14px 14px; }
     .wrap-wide { padding: 0 14px; }
-    body { padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+    body { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* ── Bottom nav (mobile only) ── */
@@ -2148,23 +2148,23 @@ footer.site ul a:hover { color: var(--blue); }
   @media (max-width: 720px) {
     .yt-bottom-nav {
       display: flex; position: fixed; bottom: 0; left: 0; right: 0;
-      height: 56px; background: var(--paper); border-top: 1px solid var(--rule);
+      height: 68px; background: var(--paper); border-top: 1px solid var(--rule);
       z-index: 200; padding-bottom: env(safe-area-inset-bottom, 0px);
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
     }
     .yt-bottom-nav::-webkit-scrollbar { display: none; }
     .yt-bottom-nav a {
-      flex: none; min-width: 68px; padding: 0 4px;
+      flex: none; min-width: 80px; padding: 0 6px;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 3px; color: var(--ink-soft); text-decoration: none;
-      font-family: var(--sans); font-size: 9px; font-weight: 600;
-      letter-spacing: 0.07em; text-transform: uppercase;
+      gap: 5px; color: var(--ink-soft); text-decoration: none;
+      font-family: var(--sans); font-size: 10px; font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase;
       transition: color 140ms, transform 140ms;
     }
-    .yt-bottom-nav a svg { width: 20px; height: 20px; transition: transform 140ms; }
+    .yt-bottom-nav a svg { width: 24px; height: 24px; transition: transform 140ms; }
     .yt-bottom-nav a.active { color: var(--blue); }
-    .yt-bottom-nav a.active svg { transform: translateY(-1px); }
+    .yt-bottom-nav a.active svg { transform: translateY(-2px); }
     .yt-bottom-nav a:active svg { transform: scale(0.88); transition-duration: 60ms; }
   }
 </style>
