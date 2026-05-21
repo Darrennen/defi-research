@@ -1565,11 +1565,14 @@ footer.site ul a:hover { color: var(--blue); }
     position: fixed; pointer-events: none; z-index: 9900;
     display: none; gap: 10px; align-items: baseline;
     background: var(--paper); border: 1px solid var(--rule);
-    padding: 5px 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
-    font-family: var(--mono); font-size: 11px; white-space: nowrap;
+    padding: 6px 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.22);
+    font-family: var(--mono); font-size: 12px; white-space: nowrap;
   }
   #spark-tip .st-date { color: var(--ink-mute); }
-  #spark-tip .st-val  { color: var(--ink); font-weight: 500; }
+  #spark-tip .st-val  { color: var(--ink); font-weight: 600; }
+  @media (max-width: 720px) {
+    #spark-tip { font-size: 13px; padding: 7px 14px; }
+  }
   .pos-portfolio .pp-stats {
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
   }
@@ -3754,10 +3757,10 @@ footer.site ul a:hover { color: var(--blue); }
       const sx = i => pad + (i / (pts.length - 1)) * (W - pad * 2);
       const sy = e => H - pad - ((e - minE) / rng) * (H - pad * 2);
 
-      overlay.addEventListener('mousemove', e => {
+      function showAt(clientX, clientY) {
         const rect = svg.getBoundingClientRect();
         if (!rect.width) return;
-        const mx = (e.clientX - rect.left) * (W / rect.width);
+        const mx = (clientX - rect.left) * (W / rect.width);
         const idx = Math.max(0, Math.min(pts.length - 1,
           Math.round((mx - pad) / (W - pad * 2) * (pts.length - 1))));
         const [ts, eq] = pts[idx];
@@ -3770,14 +3773,36 @@ footer.site ul a:hover { color: var(--blue); }
         const dateStr = new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
         tip.innerHTML = '<span class="st-date">' + dateStr + '</span><span class="st-val">' + U(eq) + '</span>';
         tip.style.display = 'flex';
-        tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 160) + 'px';
-        tip.style.top  = Math.max(e.clientY - 38, 4) + 'px';
-      });
+        // Keep tooltip inside viewport; on touch put it above the finger
+        const tipW = 160, tipH = 36;
+        const tx = Math.min(Math.max(clientX - tipW / 2, 4), window.innerWidth - tipW - 4);
+        const ty = Math.max(clientY - tipH - 12, 4);
+        tip.style.left = tx + 'px';
+        tip.style.top  = ty + 'px';
+      }
 
-      overlay.addEventListener('mouseleave', () => {
+      function hideTooltip() {
         cross.style.display = 'none';
         dot.style.display = 'none';
         tip.style.display = 'none';
+      }
+
+      overlay.addEventListener('mousemove', e => showAt(e.clientX, e.clientY));
+      overlay.addEventListener('mouseleave', hideTooltip);
+
+      overlay.addEventListener('touchstart', e => {
+        e.preventDefault();
+        showAt(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: false });
+
+      overlay.addEventListener('touchmove', e => {
+        e.preventDefault();
+        showAt(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: false });
+
+      overlay.addEventListener('touchend', () => {
+        // Keep tooltip visible briefly after lift so user can read it
+        setTimeout(hideTooltip, 1200);
       });
     });
   }
