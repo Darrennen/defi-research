@@ -20,10 +20,25 @@ query UserPositions($address: String!, $chainId: Int!) {
       healthFactor
       supplyAssets
       supplyAssetsUsd
+      state {
+        borrowPnlUsd
+        borrowRoe
+        timestamp
+      }
+      historicalState {
+        collateralUsd { x y }
+        borrowAssetsUsd { x y }
+      }
     }
   }
 }
 `
+
+function downsample<T>(arr: T[], maxPoints: number): T[] {
+  if (arr.length <= maxPoints) return arr
+  const step = arr.length / maxPoints
+  return Array.from({ length: maxPoints }, (_, i) => arr[Math.round(i * step)])
+}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -43,7 +58,7 @@ export async function GET(req: Request) {
   const positions = json.data?.userByAddress?.marketPositions ?? []
 
   const parsed = positions
-    .filter((p: any) => parseFloat(p.borrowAssetsUsd) > 1 || parseFloat(p.supplyAssetsUsd) > 1)
+    .filter((p: any) => parseFloat(p.borrowAssetsUsd) > 1 || parseFloat(p.supplyAssetsUsd) > 1 || parseFloat(p.collateralUsd) > 1)
     .map((p: any) => {
       const collUsd = parseFloat(p.collateralUsd) || 0
       const borrowUsd = parseFloat(p.borrowAssetsUsd) || 0
@@ -58,6 +73,36 @@ export async function GET(req: Request) {
       const collAmount = collPriceUsd > 0 ? collUsd / collPriceUsd : 0
       const liqPrice = collAmount > 0 ? (borrowUsd / loanPriceUsd * loanPriceUsd) / (collAmount * lltv) : 0
       const dropToLiq = collPriceUsd > 0 && liqPrice > 0 ? ((collPriceUsd - liqPrice) / collPriceUsd) * 100 : 0
+
+      // Build equity history from paired collateral/borrow snapshots
+      const rawColl: { x: number; y: number }[] = p.historicalState?.collateralUsd ?? []
+      const rawBorrow: { x: number; y: number }[] = p.historicalState?.borrowAssetsUsd ?? []
+
+      // Build a map of timestamp → equity
+      const equityMap = new Map<number, { coll: number; borrow: number }>()
+      for (const pt of rawColl) equityMap.set(pt.x, { coll: pt.y, borrow: 0 })
+      for (const pt of rawBorrow) {
+        const entry = equityMap.get(pt.x)
+        if (entry) entry.borrow = pt.y
+        else equityMap.set(pt.x, { coll: 0, borrow: pt.y })
+      }
+
+      const equityPoints = Array.from(equityMap.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([ts, v]) => ({ ts, equity: v.coll - v.borrow }))
+        .filter(pt => pt.equity > 0)
+
+      const sampled = downsample(equityPoints, 90)
+
+      // Growth stats from history
+      const firstPt = equityPoints[0]
+      const entryEquity = firstPt?.equity ?? null
+      const entryTs = firstPt?.ts ?? null
+      const currentEquity = collUsd - borrowUsd
+      const daysHeld = entryTs ? (Date.now() / 1000 - entryTs) / 86400 : null
+      const pnlUsd = entryEquity != null ? currentEquity - entryEquity : (parseFloat(p.state?.borrowPnlUsd) || null)
+      const returnPct = entryEquity != null && entryEquity > 0 ? (pnlUsd! / entryEquity) * 100 : null
+      const apr = returnPct != null && daysHeld != null && daysHeld > 0 ? (returnPct / daysHeld) * 365 : null
 
       return {
         market: p.market.uniqueKey,
@@ -77,6 +122,15 @@ export async function GET(req: Request) {
         dailyCost: Math.round(borrowUsd * borrowApy / 365 * 100) / 100,
         monthlyCost: Math.round(borrowUsd * borrowApy / 12 * 100) / 100,
         annualCost: Math.round(borrowUsd * borrowApy * 100) / 100,
+        // Growth tracking
+        entryEquity,
+        entryTs,
+        currentEquity,
+        pnlUsd,
+        returnPct: returnPct != null ? Math.round(returnPct * 100) / 100 : null,
+        apr: apr != null ? Math.round(apr * 100) / 100 : null,
+        daysHeld: daysHeld != null ? Math.round(daysHeld * 10) / 10 : null,
+        history: sampled,
       }
     })
 

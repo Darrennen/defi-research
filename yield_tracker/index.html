@@ -1523,6 +1523,56 @@ footer.site ul a:hover { color: var(--blue); }
     font-family: var(--mono); font-size: 11px; color: var(--ink-soft);
   }
 
+  /* ---- position growth ---- */
+  .pos-growth {
+    border-top: 1px solid var(--rule); padding-top: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .pos-growth .g-title {
+    font-family: var(--sans); font-size: 9px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .pos-growth .g-title .days {
+    font-family: var(--mono); font-size: 10px; color: var(--ink-soft);
+    font-weight: 400; letter-spacing: 0;
+  }
+  .pos-growth .spark { width: 100%; height: 52px; display: block; overflow: visible; }
+  .pos-growth .spark polyline { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+  .pos-growth .spark .area { fill-opacity: 0.08; stroke: none; }
+  .pos-growth .g-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .pos-growth .g-stat { display: flex; flex-direction: column; gap: 3px; }
+  .pos-growth .g-stat .gl { font-family: var(--sans); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
+  .pos-growth .g-stat .gv { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .pos-growth .g-stat .gv.pos { color: var(--green, #22c55e); }
+  .pos-growth .g-stat .gv.neg { color: var(--red); }
+  .pos-portfolio {
+    background: var(--card); border: 1px solid var(--rule); padding: 16px;
+    display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px;
+  }
+  html[data-theme="dark"] .pos-portfolio { background: var(--paper-2); }
+  .pos-portfolio .pp-title {
+    font-family: var(--sans); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute);
+  }
+  .pos-portfolio .spark { width: 100%; height: 64px; display: block; }
+  .pos-portfolio .spark polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .pos-portfolio .spark .area { fill-opacity: 0.07; stroke: none; }
+  .pos-portfolio .pp-stats {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+  }
+  .pos-portfolio .pp-stat { display: flex; flex-direction: column; gap: 3px; }
+  .pos-portfolio .pp-stat .pl { font-family: var(--sans); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute); }
+  .pos-portfolio .pp-stat .pv { font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .pos-portfolio .pp-stat .pv.pos { color: var(--green, #22c55e); }
+  .pos-portfolio .pp-stat .pv.neg { color: var(--red); }
+  @media (max-width: 600px) {
+    .pos-portfolio .pp-stats { grid-template-columns: repeat(3, 1fr); }
+    .pos-growth .g-stats { grid-template-columns: repeat(3, 1fr); }
+  }
+
   /* ---- 01 CALCULATOR ---- */
   .calc-toolbar {
     display: flex; justify-content: space-between; align-items: center;
@@ -3622,10 +3672,45 @@ footer.site ul a:hover { color: var(--blue); }
   function hfBarPct(hf) { return Math.min(Math.round((hf / 3) * 100), 100); }
   function hfClass(hf) { return hf < 1.15 ? 'bad' : hf < 1.5 ? 'warn' : ''; }
 
+  function sparklineSVG(history, color, w, h) {
+    if (!history || history.length < 2) return '';
+    const pts = history;
+    const minE = Math.min(...pts.map(p => p.equity));
+    const maxE = Math.max(...pts.map(p => p.equity));
+    const range = maxE - minE || 1;
+    const pad = 4;
+    function sx(i) { return pad + (i / (pts.length - 1)) * (w - pad * 2); }
+    function sy(e) { return h - pad - ((e - minE) / range) * (h - pad * 2); }
+    const line = pts.map((p, i) => sx(i) + ',' + sy(p.equity)).join(' ');
+    const area = `${sx(0)},${h} ` + line + ` ${sx(pts.length - 1)},${h}`;
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <polygon class="area" points="${area}" fill="${color}"/>
+      <polyline points="${line}" stroke="${color}"/>
+    </svg>`;
+  }
+
+  function portfolioHistory(positions) {
+    // Merge all positions' history by timestamp bucket (daily)
+    const map = new Map();
+    for (const p of positions) {
+      if (!p.history || !p.history.length) continue;
+      for (const pt of p.history) {
+        const day = Math.floor(pt.ts / 86400) * 86400;
+        map.set(day, (map.get(day) || 0) + pt.equity);
+      }
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]).map(([ts, equity]) => ({ ts, equity }));
+  }
+
   function renderPositions(positions) {
     const grid = document.getElementById('pos-grid');
     const summary = document.getElementById('pos-summary');
     const empty = document.getElementById('pos-empty');
+
+    // Remove old portfolio block if re-fetching
+    const oldPP = document.getElementById('pos-portfolio-block');
+    if (oldPP) oldPP.remove();
+
     if (!positions.length) {
       grid.innerHTML = '';
       summary.style.display = 'none';
@@ -3634,14 +3719,14 @@ footer.site ul a:hover { color: var(--blue); }
     }
     empty.style.display = 'none';
 
-    // Summary
+    // Summary strip
     const totalColl = positions.reduce((s, p) => s + p.collUsd, 0);
     const totalBorrow = positions.reduce((s, p) => s + p.borrowUsd, 0);
     const equity = totalColl - totalBorrow;
     const lowestHf = Math.min(...positions.map(p => p.hf).filter(h => h > 0));
     const netDaily = positions.reduce((s, p) => {
       const eq = p.collUsd - p.borrowUsd;
-      const lev = p.collUsd > 0 ? p.collUsd / eq : 1;
+      const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
       const netApy = (p.supplyApy / 100) * lev - (p.borrowApy / 100) * (lev - 1);
       return s + eq * netApy / 365;
     }, 0);
@@ -3653,14 +3738,48 @@ footer.site ul a:hover { color: var(--blue); }
     document.getElementById('ps-count').textContent = positions.length;
     summary.style.display = '';
 
-    // Cards
+    // Portfolio growth block
+    const portHistory = portfolioHistory(positions);
+    const portEntry = portHistory[0];
+    const portEntryEquity = portEntry?.equity ?? null;
+    const portPnl = portEntryEquity != null ? equity - portEntryEquity : null;
+    const portRetPct = portPnl != null && portEntryEquity > 0 ? (portPnl / portEntryEquity) * 100 : null;
+    const portDays = portEntry ? (Date.now() / 1000 - portEntry.ts) / 86400 : null;
+    const portApr = portRetPct != null && portDays > 0 ? (portRetPct / portDays) * 365 : null;
+    const portAvgDaily = portPnl != null && portDays > 0 ? portPnl / portDays : null;
+    const portColor = portPnl == null || portPnl >= 0 ? 'var(--blue)' : 'var(--red)';
+    const ppSignCls = portPnl == null ? '' : portPnl >= 0 ? 'pos' : 'neg';
+
+    const ppBlock = document.createElement('div');
+    ppBlock.id = 'pos-portfolio-block';
+    ppBlock.className = 'pos-portfolio';
+    ppBlock.innerHTML = `
+      <div class="pp-title">Portfolio Growth — since first deposit</div>
+      ${portHistory.length >= 2 ? sparklineSVG(portHistory, portColor, 600, 64) : '<div style="font-family:var(--mono);font-size:11px;color:var(--ink-mute);padding:8px 0;">Insufficient history data</div>'}
+      <div class="pp-stats">
+        <div class="pp-stat"><div class="pl">Entry equity</div><div class="pv">${portEntryEquity != null ? U(portEntryEquity) : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Current equity</div><div class="pv">${U(equity)}</div></div>
+        <div class="pp-stat"><div class="pl">P&amp;L</div><div class="pv ${ppSignCls}">${portPnl != null ? (portPnl >= 0 ? '+' : '') + U(portPnl) : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Return</div><div class="pv ${ppSignCls}">${portRetPct != null ? (portRetPct >= 0 ? '+' : '') + portRetPct.toFixed(2) + '%' : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">APR (realized)</div><div class="pv ${ppSignCls}">${portApr != null ? (portApr >= 0 ? '+' : '') + portApr.toFixed(2) + '%' : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Days held</div><div class="pv">${portDays != null ? portDays.toFixed(1) + 'd' : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Avg daily</div><div class="pv ${ppSignCls}">${portAvgDaily != null ? (portAvgDaily >= 0 ? '+' : '') + U(portAvgDaily) : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Entry date</div><div class="pv">${portEntry ? new Date(portEntry.ts * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '—'}</div></div>
+      </div>`;
+    grid.parentNode.insertBefore(ppBlock, grid);
+
+    // Position cards
     grid.innerHTML = positions.map(p => {
       const eq = p.collUsd - p.borrowUsd;
       const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
       const netApyPct = (p.supplyApy) * lev - (p.borrowApy) * (lev - 1);
-      const netDaily = eq * netApyPct / 100 / 365;
+      const netDailyEst = eq * netApyPct / 100 / 365;
       const hfPct = hfBarPct(p.hf);
       const hfCls = hfClass(p.hf);
+      const pnlCls = p.pnlUsd == null ? '' : p.pnlUsd >= 0 ? 'pos' : 'neg';
+      const sparkColor = p.pnlUsd == null || p.pnlUsd >= 0 ? 'var(--blue)' : 'var(--red)';
+      const entryDate = p.entryTs ? new Date(p.entryTs * 1000).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : null;
+
       return `
 <div class="pos-card">
   <div class="head">
@@ -3686,13 +3805,28 @@ footer.site ul a:hover { color: var(--blue); }
   </div>
   ${p.supplyApy > 0 ? `
   <div class="returns-box">
-    <div class="title">Estimated position returns</div>
+    <div class="title">Estimated forward returns</div>
     <div class="kvs">
       <div class="kv"><div class="l">Supply APY</div><div class="v blue">+${P(p.supplyApy)}</div></div>
-      <div class="kv"><div class="l">Leverage (actual)</div><div class="v">${lev.toFixed(2)}×</div></div>
+      <div class="kv"><div class="l">Leverage</div><div class="v">${lev.toFixed(2)}×</div></div>
       <div class="kv"><div class="l">Est. net APY</div><div class="v ${netApyPct >= 0 ? 'blue' : 'bad'}">${netApyPct >= 0 ? '+' : ''}${P(netApyPct)}</div></div>
-      <div class="kv"><div class="l">Est. net/day</div><div class="v ${netDaily >= 0 ? 'blue' : 'bad'}">${netDaily >= 0 ? '+' : ''}${U(netDaily)}</div></div>
-      <div class="kv"><div class="l">Net equity</div><div class="v">${U(eq)}</div></div>
+      <div class="kv"><div class="l">Est. net/day</div><div class="v ${netDailyEst >= 0 ? 'blue' : 'bad'}">${netDailyEst >= 0 ? '+' : ''}${U(netDailyEst)}</div></div>
+    </div>
+  </div>` : ''}
+  ${p.history && p.history.length >= 2 ? `
+  <div class="pos-growth">
+    <div class="g-title">
+      <span>Actual growth since entry</span>
+      <span class="days">${entryDate || ''} · ${p.daysHeld != null ? p.daysHeld.toFixed(0) + 'd held' : ''}</span>
+    </div>
+    ${sparklineSVG(p.history, sparkColor, 280, 52)}
+    <div class="g-stats">
+      <div class="g-stat"><div class="gl">Entry equity</div><div class="gv">${p.entryEquity != null ? U(p.entryEquity) : '—'}</div></div>
+      <div class="g-stat"><div class="gl">P&amp;L</div><div class="gv ${pnlCls}">${p.pnlUsd != null ? (p.pnlUsd >= 0 ? '+' : '') + U(p.pnlUsd) : '—'}</div></div>
+      <div class="g-stat"><div class="gl">Return</div><div class="gv ${pnlCls}">${p.returnPct != null ? (p.returnPct >= 0 ? '+' : '') + p.returnPct.toFixed(2) + '%' : '—'}</div></div>
+      <div class="g-stat"><div class="gl">Realized APR</div><div class="gv ${pnlCls}">${p.apr != null ? (p.apr >= 0 ? '+' : '') + p.apr.toFixed(2) + '%' : '—'}</div></div>
+      <div class="g-stat"><div class="gl">Avg/day</div><div class="gv ${pnlCls}">${p.pnlUsd != null && p.daysHeld > 0 ? (p.pnlUsd >= 0 ? '+' : '') + U(p.pnlUsd / p.daysHeld) : '—'}</div></div>
+      <div class="g-stat"><div class="gl">Current equity</div><div class="gv">${U(eq)}</div></div>
     </div>
   </div>` : ''}
 </div>`;
