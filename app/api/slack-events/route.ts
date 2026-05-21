@@ -20,17 +20,16 @@ export interface WhaleAlert {
   toLabel?: string
 }
 
-const CHAIN_EXPLORERS: Record<string, string> = {
-  ethereum: 'https://etherscan.io/tx/',
-  eth: 'https://etherscan.io/tx/',
-  arbitrum: 'https://arbiscan.io/tx/',
-  base: 'https://basescan.org/tx/',
-  polygon: 'https://polygonscan.com/tx/',
-  optimism: 'https://optimistic.etherscan.io/tx/',
-  avalanche: 'https://snowtrace.io/tx/',
-  bsc: 'https://bscscan.com/tx/',
-  solana: 'https://solscan.io/tx/',
-}
+const EXPLORER_HOSTS = [
+  'etherscan.io',
+  'arbiscan.io',
+  'basescan.org',
+  'polygonscan.com',
+  'optimistic.etherscan.io',
+  'snowtrace.io',
+  'bscscan.com',
+  'solscan.io',
+]
 
 function verifySlackSignature(body: string, timestamp: string, signature: string): boolean {
   const secret = process.env.SLACK_SIGNING_SECRET
@@ -44,15 +43,6 @@ function verifySlackSignature(body: string, timestamp: string, signature: string
   return timingSafeEqual(expected, received)
 }
 
-function stripSlack(text: string): string {
-  return text
-    .replace(/<([^|>]+)\|([^>]+)>/g, '$2')
-    .replace(/<(https?:[^>]+)>/g, '$1')
-    .replace(/<([^>]+)>/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/_([^_]+)_/g, '$1')
-}
-
 function fmtAmount(v: number): string {
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`
   if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`
@@ -62,7 +52,6 @@ function fmtAmount(v: number): string {
 
 const MIN_WHALE_USD = 50_000
 
-// Full token name → symbol map (Arkham uses full names in Value field)
 const TOKEN_NAMES: Record<string, string> = {
   'usd coin': 'USDC', 'tether': 'USDT', 'tether usd': 'USDT',
   'ethereum': 'ETH', 'wrapped ether': 'WETH', 'wrapped eth': 'WETH',
@@ -80,80 +69,89 @@ export function isArkhamAlert(parsed: Partial<WhaleAlert>): boolean {
   return false
 }
 
+// Parse Arkham bot messages that use Slack mrkdwn <url|label> link format.
+// All entity names, addresses, and tx hashes live inside those link tokens —
+// never in plain text — so we work against the raw Slack text, not stripped text.
 export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   const out: Partial<WhaleAlert> = {}
 
-  // ── Extract URLs from raw Slack text BEFORE stripping ──────────────
-  // Arkham sends: <https://platform.arkhamintelligence.com/...|View on Arkham>
-  const arkhamRaw = text.match(/<(https:\/\/platform\.arkhamintelligence\.com\/[^|>]+)/)
-  if (arkhamRaw) out.arkhamUrl = arkhamRaw[1]
-
-  const explorerDomains = Object.values(CHAIN_EXPLORERS).map(u => u.replace('https://', '').split('/')[0])
-  const explorerPattern = new RegExp(`<(https://(?:${explorerDomains.join('|').replace(/\./g, '\\.')})\/[^|>]+)`)
-  const explorerRaw = text.match(explorerPattern)
-  if (explorerRaw) out.txUrl = explorerRaw[1]
-
-  // Also extract tx hash from the Etherscan URL if present
-  if (out.txUrl) {
-    const hashFromUrl = out.txUrl.match(/\/tx\/(0x[a-fA-F0-9]{64})/)
-    if (hashFromUrl) out.txHash = hashFromUrl[1]
-  }
-
-  const clean = stripSlack(text)
-  const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
-
-  // ── Line 1: "{Name} Whale Alert" → entity ──────────────────────────
-  const titleLine = lines[0] ?? ''
-  const titleMatch = titleLine.match(/^(.+?)\s+(?:Whale\s+)?Alert$/i)
+  // ── Title: first <url|{Name} Whale Alert> token ───────────────────
+  const titleMatch = text.match(/<[^|>]+\|([^>]+?)\s+(?:Whale\s+)?Alert>/)
   if (titleMatch) out.entity = titleMatch[1].trim()
 
-  // ── From: [CUSTOM] Label (0xShort) ────────────────────────────────
-  const fromLine = lines.find(l => /^From:/i.test(l))
-  if (fromLine) {
-    const m = fromLine.match(/^From:\s+(?:\[.*?\]\s*)?(.+?)(?:\s*\([^)]*\))?$/i)
-    if (m) {
-      out.fromLabel = m[1].trim()
-      // Use From label as entity (more specific than alert title)
-      if (out.fromLabel && !/^unknown$/i.test(out.fromLabel)) {
-        out.entity = out.fromLabel
-      }
+  // ── From line ─────────────────────────────────────────────────────
+  const fromLineRaw = text.match(/From:[^\n]*/i)?.[0] ?? ''
+  // Named entity link: <intel.arkm.com/explorer/entity/...|Name>
+  const fromEntityMatch = fromLineRaw.match(
+    /<https?:\/\/intel\.arkm\.com\/explorer\/entity\/[^|>]+\|([^>]+)>/
+  )
+  if (fromEntityMatch && !/^unknown$/i.test(fromEntityMatch[1])) {
+    out.entity = fromEntityMatch[1].trim()
+  }
+  // Address link: <intel.arkm.com/explorer/address/0xFULL|Label (0xShort)>
+  const fromAddrMatch = fromLineRaw.match(
+    /<https?:\/\/intel\.arkm\.com\/explorer\/address\/(0x[a-fA-F0-9]+)\|([^>]+)>/
+  )
+  if (fromAddrMatch) {
+    out.address = fromAddrMatch[1]
+    const label = fromAddrMatch[2].replace(/\s*\(0x[a-fA-F0-9]+\)\s*$/, '').trim()
+    out.fromLabel = label
+    // Prefer the from-label as entity when it's meaningful
+    if (label && !/^unknown$/i.test(label)) out.entity = label
+  }
+
+  // ── To line ───────────────────────────────────────────────────────
+  const toLineRaw = text.match(/To:[^\n]*/i)?.[0] ?? ''
+  const toAddrMatch = toLineRaw.match(
+    /<https?:\/\/intel\.arkm\.com\/explorer\/address\/[^|>]+\|([^>]+)>/
+  )
+  if (toAddrMatch) {
+    out.toLabel = toAddrMatch[1].replace(/\s*\(0x[a-fA-F0-9]+\)\s*$/, '').trim()
+  }
+  // Also accept entity links in To line
+  const toEntityMatch = toLineRaw.match(
+    /<https?:\/\/intel\.arkm\.com\/explorer\/entity\/[^|>]+\|([^>]+)>/
+  )
+  if (toEntityMatch && !out.toLabel) {
+    out.toLabel = toEntityMatch[1].trim()
+  }
+
+  // ── Value: N TokenName ($N) ───────────────────────────────────────
+  const valueMatch = text.match(/Value:\s+[\d,\.]+\s+(.+?)\s+\(\$([0-9,]+(?:\.[0-9]+)?)\)/)
+  if (valueMatch) {
+    out.amount = parseFloat(valueMatch[2].replace(/,/g, ''))
+    out.amountFmt = fmtAmount(out.amount)
+    const name = valueMatch[1].trim().toLowerCase()
+    out.token = TOKEN_NAMES[name] ?? valueMatch[1].trim().toUpperCase()
+  }
+
+  // ── Network ───────────────────────────────────────────────────────
+  const networkMatch = text.match(/Network:\s+([^\n<]+)/i)
+  if (networkMatch) out.chain = networkMatch[1].trim()
+
+  // ── Arkham tx URL: <intel.arkm.com/explorer/tx/0xHASH|...> ───────
+  const arkhamTxMatch = text.match(
+    /<(https?:\/\/intel\.arkm\.com\/explorer\/tx\/(0x[a-fA-F0-9]{64}))[^>]*>/
+  )
+  if (arkhamTxMatch) {
+    out.arkhamUrl = arkhamTxMatch[1]
+    out.txHash = arkhamTxMatch[2]
+  }
+
+  // ── Explorer tx URL (Etherscan, Arbiscan, etc.) ───────────────────
+  const explorerPattern = new RegExp(
+    `<(https?://(?:${EXPLORER_HOSTS.map(h => h.replace(/\./g, '\\.')).join('|')})/tx/[^|> ]+)`
+  )
+  const explorerMatch = text.match(explorerPattern)
+  if (explorerMatch) {
+    out.txUrl = explorerMatch[1]
+    if (!out.txHash) {
+      const hashFromUrl = out.txUrl.match(/\/tx\/(0x[a-fA-F0-9]{64})/)
+      if (hashFromUrl) out.txHash = hashFromUrl[1]
     }
   }
 
-  // ── To: [CUSTOM] Label (0xShort) ──────────────────────────────────
-  const toLine = lines.find(l => /^To:/i.test(l))
-  if (toLine) {
-    const m = toLine.match(/^To:\s+(?:\[.*?\]\s*)?(.+?)(?:\s*\([^)]*\))?$/i)
-    if (m) out.toLabel = m[1].trim()
-  }
-
-  // ── Value: 200,000.000000 USD Coin ($200,000.00) ───────────────────
-  const valueLine = lines.find(l => /^Value:/i.test(l))
-  if (valueLine) {
-    // Dollar amount from parenthetical ($200,000.00)
-    const usdMatch = valueLine.match(/\(\$([0-9,]+(?:\.[0-9]+)?)\)/)
-    if (usdMatch) {
-      out.amount = parseFloat(usdMatch[1].replace(/,/g, ''))
-      out.amountFmt = fmtAmount(out.amount)
-    }
-    // Token name: text between number and opening paren
-    const tokenMatch = valueLine.match(/Value:\s+[\d,\.]+\s+(.+?)\s+\(/i)
-    if (tokenMatch) {
-      const name = tokenMatch[1].trim().toLowerCase()
-      out.token = TOKEN_NAMES[name] ?? tokenMatch[1].trim().toUpperCase()
-    }
-  }
-
-  // ── Network: Ethereum ─────────────────────────────────────────────
-  const networkLine = lines.find(l => /^Network:/i.test(l))
-  if (networkLine) {
-    const m = networkLine.match(/^Network:\s+(.+)$/i)
-    if (m) out.chain = m[1].trim()
-  }
-
-  // ── Direction: infer from alert title or context ───────────────────
   out.direction = 'transferred'
-
   return out
 }
 
@@ -174,7 +172,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ev = payload.event
-  if (ev?.type === 'message' && !ev.subtype && ev.text?.length > 10) {
+  if (ev?.type === 'message' && ev.subtype !== 'message_deleted' && ev.subtype !== 'message_changed' && ev.text?.length > 10) {
     const parsed = parseArkhamAlert(ev.text)
     // Only store if it looks like a real Arkham alert
     if (!isArkhamAlert(parsed)) return NextResponse.json({ ok: true })

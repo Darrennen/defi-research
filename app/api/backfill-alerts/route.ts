@@ -34,11 +34,12 @@ export async function POST() {
         return NextResponse.json({ error: data.error ?? 'Slack API error', detail: data }, { status: 400 })
       }
 
-      const messages: Array<{ ts: string; text: string; subtype?: string }> = data.messages ?? []
+      const messages: Array<{ ts: string; text?: string; subtype?: string }> = data.messages ?? []
       fetched += messages.length
 
       for (const msg of messages) {
-        if (msg.subtype || !msg.text || msg.text.length < 10) continue
+        if (!msg.text || msg.text.length < 10) continue
+        if (msg.subtype && msg.subtype !== 'bot_message') continue
 
         const parsed = parseArkhamAlert(msg.text)
         if (!isArkhamAlert(parsed)) continue  // skip regular chat messages
