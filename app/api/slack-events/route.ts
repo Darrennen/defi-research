@@ -85,7 +85,7 @@ export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   const fromEntityMatch = fromLineRaw.match(
     /<https?:\/\/intel\.arkm\.com\/explorer\/entity\/[^|>]+\|([^>]+)>/
   )
-  if (fromEntityMatch && !/^unknown$/i.test(fromEntityMatch[1])) {
+  if (fromEntityMatch && !/^unknown$/i.test(fromEntityMatch[1]) && !out.entity) {
     out.entity = fromEntityMatch[1].trim()
   }
   // Address link: <intel.arkm.com/explorer/address/0xFULL|Label (0xShort)>
@@ -96,8 +96,8 @@ export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
     out.address = fromAddrMatch[1]
     const label = fromAddrMatch[2].replace(/\s*\(0x[a-fA-F0-9]+\)\s*$/, '').trim()
     out.fromLabel = label
-    // Prefer the from-label as entity when it's meaningful
-    if (label && !/^unknown$/i.test(label)) out.entity = label
+    // Only use from-label as entity if the title gave us nothing
+    if (label && !/^unknown$/i.test(label) && !out.entity) out.entity = label
   }
 
   // ── To line ───────────────────────────────────────────────────────
