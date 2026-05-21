@@ -60,82 +60,99 @@ function fmtAmount(v: number): string {
   return `$${v.toFixed(0)}`
 }
 
-const TOKENS = 'USDC|USDT|ETH|BTC|WBTC|WETH|DAI|FRAX|sDAI|cbBTC|cbETH|rETH|weETH|rsETH|stETH|LUSD|BUSD|UNI|LINK|AAVE|GHO|crvUSD'
-const MULTIPLIERS: Record<string, number> = { K: 1e3, M: 1e6, B: 1e9 }
+const MIN_WHALE_USD = 50_000
 
-const MIN_WHALE_USD = 50_000  // ignore anything under $50K
+// Full token name → symbol map (Arkham uses full names in Value field)
+const TOKEN_NAMES: Record<string, string> = {
+  'usd coin': 'USDC', 'tether': 'USDT', 'tether usd': 'USDT',
+  'ethereum': 'ETH', 'wrapped ether': 'WETH', 'wrapped eth': 'WETH',
+  'bitcoin': 'BTC', 'wrapped bitcoin': 'WBTC',
+  'dai': 'DAI', 'staked ether': 'stETH', 'lido staked ether': 'stETH',
+  'uniswap': 'UNI', 'chainlink': 'LINK', 'aave': 'AAVE',
+  'coinbase wrapped staked eth': 'cbETH', 'coinbase wrapped btc': 'cbBTC',
+  'rocket pool eth': 'rETH', 'frax': 'FRAX', 'curve usd': 'crvUSD',
+  'gho': 'GHO', 'lusd': 'LUSD', 'susde': 'sUSDe', 'usde': 'USDe',
+}
 
 export function isArkhamAlert(parsed: Partial<WhaleAlert>): boolean {
-  // Must have a meaningful amount (>= $50K) or a tx hash with a chain
   if (parsed.amount && parsed.amount >= MIN_WHALE_USD) return true
   if (parsed.txHash && parsed.chain) return true
   return false
 }
 
 export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
-  const clean = stripSlack(text)
   const out: Partial<WhaleAlert> = {}
 
-  // Amount: "$4.2M USDC" or "4,200,000 USDC" — require $ sign OR multiplier OR 5+ digit number to avoid matching "4 ETH" noise
-  const amtRe = new RegExp(
-    `(?:\\$([\\d,]+(?:\\.\\d+)?)\\s*([KMBkmb])?|([\\d,]+(?:\\.\\d+)?)\\s*([KMBkmb])(?=\\s)|([\\d]{5,}(?:,[\\d]{3})*(?:\\.\\d+)?)\\s*([KMBkmb])?)\\s+(${TOKENS})`,
-    'i'
-  )
-  const amtMatch = clean.match(amtRe)
-  if (amtMatch) {
-    // groups: (1,$num)(2,mult) | (3,num)(4,mult) | (5,num)(6,mult) then (7,token)
-    const rawNum = amtMatch[1] ?? amtMatch[3] ?? amtMatch[5] ?? '0'
-    const rawMult = amtMatch[2] ?? amtMatch[4] ?? amtMatch[6] ?? ''
-    const num = parseFloat(rawNum.replace(/,/g, ''))
-    const mult = MULTIPLIERS[rawMult.toUpperCase()] ?? 1
-    out.amount = num * mult
-    out.token = amtMatch[7].toUpperCase()
-    out.amountFmt = fmtAmount(out.amount)
+  // ── Extract URLs from raw Slack text BEFORE stripping ──────────────
+  // Arkham sends: <https://platform.arkhamintelligence.com/...|View on Arkham>
+  const arkhamRaw = text.match(/<(https:\/\/platform\.arkhamintelligence\.com\/[^|>]+)/)
+  if (arkhamRaw) out.arkhamUrl = arkhamRaw[1]
+
+  const explorerDomains = Object.values(CHAIN_EXPLORERS).map(u => u.replace('https://', '').split('/')[0])
+  const explorerPattern = new RegExp(`<(https://(?:${explorerDomains.join('|').replace(/\./g, '\\.')})\/[^|>]+)`)
+  const explorerRaw = text.match(explorerPattern)
+  if (explorerRaw) out.txUrl = explorerRaw[1]
+
+  // Also extract tx hash from the Etherscan URL if present
+  if (out.txUrl) {
+    const hashFromUrl = out.txUrl.match(/\/tx\/(0x[a-fA-F0-9]{64})/)
+    if (hashFromUrl) out.txHash = hashFromUrl[1]
   }
 
-  // Chain
-  const chainRe = /\b(Ethereum|Arbitrum|Base|Polygon|Optimism|Avalanche|BSC|Solana|Tron|Bitcoin)\b/i
-  const chainMatch = clean.match(chainRe)
-  if (chainMatch) out.chain = chainMatch[1]
+  const clean = stripSlack(text)
+  const lines = clean.split('\n').map(l => l.trim()).filter(Boolean)
 
-  // Tx hash (64-char hex) — txUrl is always constructed from our whitelist, never from message text
-  const txMatch = clean.match(/0x[a-fA-F0-9]{64}/)
-  if (txMatch) {
-    out.txHash = txMatch[0]
-    const key = (out.chain ?? 'ethereum').toLowerCase()
-    const base = CHAIN_EXPLORERS[key] ?? CHAIN_EXPLORERS.ethereum
-    const url = base + txMatch[0]
-    // Final guard: only store URLs that start with a known explorer domain
-    const allowed = Object.values(CHAIN_EXPLORERS)
-    if (allowed.some(prefix => url.startsWith(prefix))) {
-      out.txUrl = url
+  // ── Line 1: "{Name} Whale Alert" → entity ──────────────────────────
+  const titleLine = lines[0] ?? ''
+  const titleMatch = titleLine.match(/^(.+?)\s+(?:Whale\s+)?Alert$/i)
+  if (titleMatch) out.entity = titleMatch[1].trim()
+
+  // ── From: [CUSTOM] Label (0xShort) ────────────────────────────────
+  const fromLine = lines.find(l => /^From:/i.test(l))
+  if (fromLine) {
+    const m = fromLine.match(/^From:\s+(?:\[.*?\]\s*)?(.+?)(?:\s*\([^)]*\))?$/i)
+    if (m) {
+      out.fromLabel = m[1].trim()
+      // Use From label as entity (more specific than alert title)
+      if (out.fromLabel && !/^unknown$/i.test(out.fromLabel)) {
+        out.entity = out.fromLabel
+      }
     }
-    out.arkhamUrl = `https://platform.arkhamintelligence.com/explorer/tx/${txMatch[0]}`
   }
 
-  // Wallet address (40-char hex, skip tx hashes)
-  const addrMatches = clean.match(/0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/g)
-  if (addrMatches) out.address = addrMatches[0]
-
-  // Direction
-  if (/\b(sent|transferred|moved|outflow)\b/i.test(clean)) out.direction = 'transferred'
-  if (/\b(deposited|received|inflow)\b/i.test(clean)) out.direction = 'received'
-  if (/\b(withdrew|withdrawal|withdrawn)\b/i.test(clean)) out.direction = 'withdrew'
-
-  // Entity — text before verb, excluding known non-entity phrases
-  const ENTITY_BLOCKLIST = /^(total capital|total value|large transfer|alert|transaction|transfer|unknown|wallet|address|funds|assets|tokens)/i
-  const entityRe = /(?:^|[\n])\s*(?:[🐋⚠️🔔💰🚨⬆️⬇️]+\s*)?(?:Alert[:\s]+)?([A-Z][A-Za-z0-9 \-\.&']+?)(?:\s+(?:moved|sent|transferred|deposited|withdrew|received|flagged))/m
-  const entityMatch = clean.match(entityRe)
-  if (entityMatch) {
-    const candidate = entityMatch[1].trim()
-    if (!ENTITY_BLOCKLIST.test(candidate)) out.entity = candidate
+  // ── To: [CUSTOM] Label (0xShort) ──────────────────────────────────
+  const toLine = lines.find(l => /^To:/i.test(l))
+  if (toLine) {
+    const m = toLine.match(/^To:\s+(?:\[.*?\]\s*)?(.+?)(?:\s*\([^)]*\))?$/i)
+    if (m) out.toLabel = m[1].trim()
   }
 
-  // From/To labels
-  const fromMatch = clean.match(/From[:\s]+([^\n]+)/i)
-  const toMatch = clean.match(/To[:\s]+([^\n]+)/i)
-  if (fromMatch) out.fromLabel = fromMatch[1].trim()
-  if (toMatch) out.toLabel = toMatch[1].trim()
+  // ── Value: 200,000.000000 USD Coin ($200,000.00) ───────────────────
+  const valueLine = lines.find(l => /^Value:/i.test(l))
+  if (valueLine) {
+    // Dollar amount from parenthetical ($200,000.00)
+    const usdMatch = valueLine.match(/\(\$([0-9,]+(?:\.[0-9]+)?)\)/)
+    if (usdMatch) {
+      out.amount = parseFloat(usdMatch[1].replace(/,/g, ''))
+      out.amountFmt = fmtAmount(out.amount)
+    }
+    // Token name: text between number and opening paren
+    const tokenMatch = valueLine.match(/Value:\s+[\d,\.]+\s+(.+?)\s+\(/i)
+    if (tokenMatch) {
+      const name = tokenMatch[1].trim().toLowerCase()
+      out.token = TOKEN_NAMES[name] ?? tokenMatch[1].trim().toUpperCase()
+    }
+  }
+
+  // ── Network: Ethereum ─────────────────────────────────────────────
+  const networkLine = lines.find(l => /^Network:/i.test(l))
+  if (networkLine) {
+    const m = networkLine.match(/^Network:\s+(.+)$/i)
+    if (m) out.chain = m[1].trim()
+  }
+
+  // ── Direction: infer from alert title or context ───────────────────
+  out.direction = 'transferred'
 
   return out
 }
