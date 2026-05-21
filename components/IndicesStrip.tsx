@@ -9,7 +9,7 @@ function fmtVal(n: number): string {
 
 function CountUp({ target }: { target: number | null }) {
   const [display, setDisplay] = useState(target == null ? '—' : '$0')
-  const raf = useRef<number>()
+  const raf = useRef<number>(0)
   useEffect(() => {
     if (target == null) { setDisplay('—'); return }
     const start = performance.now()
