@@ -122,10 +122,14 @@ export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   if (/\b(deposited|received|inflow)\b/i.test(clean)) out.direction = 'received'
   if (/\b(withdrew|withdrawal|withdrawn)\b/i.test(clean)) out.direction = 'withdrew'
 
-  // Entity — text before verb
+  // Entity — text before verb, excluding known non-entity phrases
+  const ENTITY_BLOCKLIST = /^(total capital|total value|large transfer|alert|transaction|transfer|unknown|wallet|address|funds|assets|tokens)/i
   const entityRe = /(?:^|[\n])\s*(?:[🐋⚠️🔔💰🚨⬆️⬇️]+\s*)?(?:Alert[:\s]+)?([A-Z][A-Za-z0-9 \-\.&']+?)(?:\s+(?:moved|sent|transferred|deposited|withdrew|received|flagged))/m
   const entityMatch = clean.match(entityRe)
-  if (entityMatch) out.entity = entityMatch[1].trim()
+  if (entityMatch) {
+    const candidate = entityMatch[1].trim()
+    if (!ENTITY_BLOCKLIST.test(candidate)) out.entity = candidate
+  }
 
   // From/To labels
   const fromMatch = clean.match(/From[:\s]+([^\n]+)/i)
