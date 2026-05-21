@@ -74,22 +74,27 @@ export async function GET(req: Request) {
       const liqPrice = collAmount > 0 ? (borrowUsd / loanPriceUsd * loanPriceUsd) / (collAmount * lltv) : 0
       const dropToLiq = collPriceUsd > 0 && liqPrice > 0 ? ((collPriceUsd - liqPrice) / collPriceUsd) * 100 : 0
 
-      // Build equity history from paired collateral/borrow snapshots
+      // Align collateral and borrow time-series via step-interpolation.
+      // The two series have different timestamps; naive timestamp-matching creates
+      // many points with borrow=0 (collateral deposited before borrow tx),
+      // which falsely inflates entry equity.
       const rawColl: { x: number; y: number }[] = p.historicalState?.collateralUsd ?? []
       const rawBorrow: { x: number; y: number }[] = p.historicalState?.borrowAssetsUsd ?? []
 
-      // Build a map of timestamp → equity
-      const equityMap = new Map<number, { coll: number; borrow: number }>()
-      for (const pt of rawColl) equityMap.set(pt.x, { coll: pt.y, borrow: 0 })
-      for (const pt of rawBorrow) {
-        const entry = equityMap.get(pt.x)
-        if (entry) entry.borrow = pt.y
-        else equityMap.set(pt.x, { coll: 0, borrow: pt.y })
-      }
+      const allTs = Array.from(new Set([...rawColl.map(p => p.x), ...rawBorrow.map(p => p.x)])).sort((a, b) => a - b)
+      const collMap = new Map(rawColl.map(p => [p.x, p.y]))
+      const borrowMap = new Map(rawBorrow.map(p => [p.x, p.y]))
+      let lastColl = 0, lastBorrow = 0
+      const aligned = allTs.map(ts => {
+        if (collMap.has(ts)) lastColl = collMap.get(ts)!
+        if (borrowMap.has(ts)) lastBorrow = borrowMap.get(ts)!
+        return { ts, coll: lastColl, borrow: lastBorrow }
+      })
 
-      const equityPoints = Array.from(equityMap.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([ts, v]) => ({ ts, equity: v.coll - v.borrow }))
+      // Only keep points where borrow > 0 (position fully opened)
+      const equityPoints = aligned
+        .filter(v => v.borrow > 0 && v.coll > 0)
+        .map(v => ({ ts: v.ts, equity: v.coll - v.borrow }))
         .filter(pt => pt.equity > 0)
 
       const sampled = downsample(equityPoints, 90)

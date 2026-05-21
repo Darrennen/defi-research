@@ -3690,16 +3690,43 @@ footer.site ul a:hover { color: var(--blue); }
   }
 
   function portfolioHistory(positions) {
-    // Merge all positions' history by timestamp bucket (daily)
-    const map = new Map();
-    for (const p of positions) {
-      if (!p.history || !p.history.length) continue;
+    // Only aggregate from the date the LAST position was opened, so every
+    // timestamp bucket has all positions contributing. Summing before a position
+    // existed inflates early equity and produces a false "loss" narrative.
+    const posWithHistory = positions.filter(p => p.history && p.history.length >= 2);
+    if (!posWithHistory.length) return [];
+
+    // Earliest valid timestamp per position, then take the latest one (all open)
+    const latestEntry = Math.max(...posWithHistory.map(p => p.history[0].ts));
+
+    // For each position build a step-interpolated lookup: ts → equity
+    function makeStepLookup(history) {
+      return function(ts) {
+        let last = null;
+        for (const pt of history) {
+          if (pt.ts > ts) break;
+          last = pt.equity;
+        }
+        return last;
+      };
+    }
+
+    // Collect all timestamps >= latestEntry across all positions
+    const allTs = new Set();
+    for (const p of posWithHistory) {
       for (const pt of p.history) {
-        const day = Math.floor(pt.ts / 86400) * 86400;
-        map.set(day, (map.get(day) || 0) + pt.equity);
+        if (pt.ts >= latestEntry) allTs.add(Math.floor(pt.ts / 86400) * 86400);
       }
     }
-    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]).map(([ts, equity]) => ({ ts, equity }));
+
+    const lookups = posWithHistory.map(p => makeStepLookup(p.history));
+    return Array.from(allTs).sort((a, b) => a - b).map(ts => {
+      const total = lookups.reduce((sum, lookup) => {
+        const eq = lookup(ts);
+        return eq != null ? sum + eq : sum;
+      }, 0);
+      return { ts, equity: total };
+    }).filter(pt => pt.equity > 0);
   }
 
   function renderPositions(positions) {
