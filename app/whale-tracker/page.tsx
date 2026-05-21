@@ -5,6 +5,22 @@ import type { WhaleAlert } from '@/app/api/slack-events/route'
 
 const CHAINS = ['All', 'Ethereum', 'Arbitrum', 'Base', 'Polygon', 'Optimism', 'Solana', 'BSC']
 
+const CEX_LABELS = [
+  'binance', 'coinbase', 'kraken', 'okx', 'okex', 'bybit', 'kucoin', 'huobi', 'htx',
+  'gate.io', 'gateio', 'bitfinex', 'gemini', 'bitget', 'mexc', 'crypto.com', 'upbit',
+  'bitstamp', 'bithumb', 'poloniex', 'bittrex', 'ftx', 'deribit', 'robinhood',
+]
+
+function isCex(label?: string): boolean {
+  if (!label) return false
+  const l = label.toLowerCase()
+  return CEX_LABELS.some(cex => l.includes(cex))
+}
+
+function alertInvolvesCex(alert: WhaleAlert): boolean {
+  return isCex(alert.entity) || isCex(alert.toLabel) || isCex(alert.fromLabel)
+}
+
 function timeAgo(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000)
   if (diff < 60) return `${diff}s ago`
@@ -26,6 +42,7 @@ export default function WhaleTrackerPage() {
   const [search, setSearch] = useState('')
   const [backfilling, setBackfilling] = useState(false)
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
+  const [hideCex, setHideCex] = useState(true)
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -83,6 +100,7 @@ export default function WhaleTrackerPage() {
   const topEntity = Object.entries(entityCounts).sort((a, b) => b[1] - a[1])[0]
 
   const filtered = alerts.filter(a => {
+    if (hideCex && alertInvolvesCex(a)) return false
     if (chain !== 'All' && a.chain !== chain) return false
     if (search) {
       const q = search.toLowerCase()
@@ -167,6 +185,13 @@ export default function WhaleTrackerPage() {
             {c}
           </button>
         ))}
+        <button
+          className={`ch${hideCex ? ' on' : ''}`}
+          onClick={() => setHideCex(v => !v)}
+          style={{ borderColor: hideCex ? 'var(--amber)' : undefined, color: hideCex ? 'var(--amber)' : undefined, background: hideCex ? 'rgba(178,116,13,0.12)' : undefined }}
+        >
+          Hide CEX
+        </button>
         <input
           type="text"
           placeholder="Search entity, token, address…"
