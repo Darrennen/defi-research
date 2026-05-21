@@ -31,7 +31,7 @@ export async function POST() {
       const data = await res.json()
 
       if (!data.ok) {
-        return NextResponse.json({ error: data.error ?? 'Slack API error' }, { status: 400 })
+        return NextResponse.json({ error: data.error ?? 'Slack API error', detail: data }, { status: 400 })
       }
 
       const messages: Array<{ ts: string; text: string; subtype?: string }> = data.messages ?? []
@@ -59,7 +59,7 @@ export async function POST() {
       await redis.zremrangebyrank(WHALE_ALERTS_KEY, 0, count - MAX_ALERTS - 1)
     }
 
-    return NextResponse.json({ ok: true, fetched, stored })
+    return NextResponse.json({ ok: true, fetched, stored, filtered: fetched - stored })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
