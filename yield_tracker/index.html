@@ -1560,6 +1560,16 @@ footer.site ul a:hover { color: var(--blue); }
   .pos-portfolio .spark { width: 100%; height: 64px; display: block; }
   .pos-portfolio .spark polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
   .pos-portfolio .spark .area { fill-opacity: 0.07; stroke: none; }
+  /* Spark tooltip */
+  #spark-tip {
+    position: fixed; pointer-events: none; z-index: 9900;
+    display: none; gap: 10px; align-items: baseline;
+    background: var(--paper); border: 1px solid var(--rule);
+    padding: 5px 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    font-family: var(--mono); font-size: 11px; white-space: nowrap;
+  }
+  #spark-tip .st-date { color: var(--ink-mute); }
+  #spark-tip .st-val  { color: var(--ink); font-weight: 500; }
   .pos-portfolio .pp-stats {
     display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
   }
@@ -3703,12 +3713,73 @@ footer.site ul a:hover { color: var(--blue); }
     const pad = 4;
     function sx(i) { return pad + (i / (pts.length - 1)) * (w - pad * 2); }
     function sy(e) { return h - pad - ((e - minE) / range) * (h - pad * 2); }
-    const line = pts.map((p, i) => sx(i) + ',' + sy(p.equity)).join(' ');
-    const area = `${sx(0)},${h} ` + line + ` ${sx(pts.length - 1)},${h}`;
-    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    const line = pts.map((p, i) => sx(i).toFixed(2) + ',' + sy(p.equity).toFixed(2)).join(' ');
+    const area = `${sx(0).toFixed(2)},${h} ` + line + ` ${sx(pts.length - 1).toFixed(2)},${h}`;
+    const encoded = encodeURIComponent(JSON.stringify(pts.map(p => [p.ts, +p.equity.toFixed(2)])));
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+      data-pts="${encoded}" data-w="${w}" data-h="${h}" data-color="${color}">
       <polygon class="area" points="${area}" fill="${color}"/>
-      <polyline points="${line}" stroke="${color}"/>
+      <polyline class="spark-line" points="${line}" stroke="${color}"/>
+      <line class="spark-cross" x1="0" y1="0" x2="0" y2="${h}" stroke="${color}"
+        stroke-width="1" stroke-dasharray="3 2" opacity="0.6" style="display:none"/>
+      <circle class="spark-dot" cx="0" cy="0" r="3.5" fill="${color}" style="display:none"/>
+      <rect class="spark-overlay" x="0" y="0" width="${w}" height="${h}"
+        fill="transparent" style="cursor:crosshair"/>
     </svg>`;
+  }
+
+  function initSparklines() {
+    let tip = document.getElementById('spark-tip');
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.id = 'spark-tip';
+      document.body.appendChild(tip);
+    }
+
+    document.querySelectorAll('svg.spark[data-pts]:not([data-inited])').forEach(svg => {
+      svg.setAttribute('data-inited', '1');
+      const overlay = svg.querySelector('.spark-overlay');
+      const cross   = svg.querySelector('.spark-cross');
+      const dot     = svg.querySelector('.spark-dot');
+      const pts     = JSON.parse(decodeURIComponent(svg.dataset.pts));
+      const W       = parseFloat(svg.dataset.w);
+      const H       = parseFloat(svg.dataset.h);
+      const color   = svg.dataset.color;
+      const pad     = 4;
+      const minE    = Math.min(...pts.map(p => p[1]));
+      const maxE    = Math.max(...pts.map(p => p[1]));
+      const rng     = maxE - minE || 1;
+      const sx = i => pad + (i / (pts.length - 1)) * (W - pad * 2);
+      const sy = e => H - pad - ((e - minE) / rng) * (H - pad * 2);
+
+      overlay.addEventListener('mousemove', e => {
+        const rect = svg.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) * (W / rect.width);
+        const idx = Math.max(0, Math.min(pts.length - 1,
+          Math.round((mx - pad) / (W - pad * 2) * (pts.length - 1))));
+        const [ts, eq] = pts[idx];
+        const x = sx(idx), y = sy(eq);
+
+        cross.setAttribute('x1', x); cross.setAttribute('x2', x);
+        dot.setAttribute('cx', x);   dot.setAttribute('cy', y);
+        cross.style.display = ''; dot.style.display = '';
+        dot.setAttribute('fill', color);
+
+        const dateStr = new Date(ts * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        tip.innerHTML = `<span class="st-date">${dateStr}</span><span class="st-val">${U(eq)}</span>`;
+        tip.style.display = 'flex';
+        const tx = Math.min(e.clientX + 14, window.innerWidth - 160);
+        const ty = Math.max(e.clientY - 38, 4);
+        tip.style.left = tx + 'px';
+        tip.style.top  = ty + 'px';
+      });
+
+      overlay.addEventListener('mouseleave', () => {
+        cross.style.display = 'none';
+        dot.style.display = 'none';
+        tip.style.display = 'none';
+      });
+    });
   }
 
   function portfolioHistory(positions) {
@@ -3863,6 +3934,7 @@ footer.site ul a:hover { color: var(--blue); }
       // Update sparkline color
       if (portHistory.length >= 2) {
         sparkWrap.innerHTML = sparklineSVG(portHistory, sparkColor, 600, 64);
+        initSparklines();
       }
 
       statsEl.innerHTML = `
@@ -3879,6 +3951,7 @@ footer.site ul a:hover { color: var(--blue); }
     updatePortfolioStats();
 
     // Position cards
+    // (initSparklines called after innerHTML set below)
     grid.innerHTML = positions.map(p => {
       const eq = p.collUsd - p.borrowUsd;
       const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
@@ -3941,6 +4014,7 @@ footer.site ul a:hover { color: var(--blue); }
   </div>` : ''}
 </div>`;
     }).join('');
+    initSparklines();
   }
 
   async function fetchPositions() {
