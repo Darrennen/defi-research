@@ -1538,7 +1538,7 @@ footer.site ul a:hover { color: var(--blue); }
   .calc-toolbar .seg .o:last-child { border-right: 0; }
   .calc-toolbar .seg .o.on { background: var(--ink); color: var(--paper); }
 
-  .calc-grid { display: grid; grid-template-columns: 380px 1fr; gap: 18px; }
+  .calc-grid { display: grid; grid-template-columns: 320px 1fr; gap: 18px; }
   .calc-inputs {
     background: var(--card); border: 1px solid var(--rule); padding: 18px;
     display: flex; flex-direction: column; gap: 14px;
@@ -1555,7 +1555,7 @@ footer.site ul a:hover { color: var(--blue); }
   .calc-inputs .top .r {
     font-family: var(--mono); font-size: 10px; color: var(--ink-mute);
   }
-  .calc-inputs .pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .calc-inputs .pair-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .calc-inputs .field { display: flex; flex-direction: column; gap: 6px; }
   .calc-inputs .field .lbl {
     font-family: var(--sans); font-size: 10px; font-weight: 600;
@@ -1564,9 +1564,9 @@ footer.site ul a:hover { color: var(--blue); }
   }
   .calc-inputs .field .lbl .u { color: var(--ink-soft); }
   .calc-inputs .field input, .calc-inputs .field select {
-    font-family: var(--mono); font-size: 14px;
-    padding: 8px 12px; border: 1px solid var(--rule); background: var(--paper);
-    color: var(--ink); outline: none;
+    font-family: var(--mono); font-size: 13px;
+    padding: 7px 10px; border: 1px solid var(--rule); background: var(--paper);
+    color: var(--ink); outline: none; width: 100%; box-sizing: border-box;
   }
   html[data-theme="dark"] .calc-inputs .field input,
   html[data-theme="dark"] .calc-inputs .field select { background: var(--paper); }
