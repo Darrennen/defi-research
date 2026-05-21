@@ -62,26 +62,33 @@ function fmtAmount(v: number): string {
 const TOKENS = 'USDC|USDT|ETH|BTC|WBTC|WETH|DAI|FRAX|sDAI|cbBTC|cbETH|rETH|weETH|rsETH|stETH|LUSD|BUSD|UNI|LINK|AAVE|GHO|crvUSD'
 const MULTIPLIERS: Record<string, number> = { K: 1e3, M: 1e6, B: 1e9 }
 
+const MIN_WHALE_USD = 50_000  // ignore anything under $50K
+
 export function isArkhamAlert(parsed: Partial<WhaleAlert>): boolean {
-  // Must have at least an amount+token or a tx hash — pure chat messages won't have either
-  return !!(parsed.amountFmt || parsed.txHash || (parsed.entity && parsed.chain))
+  // Must have a meaningful amount (>= $50K) or a tx hash with a chain
+  if (parsed.amount && parsed.amount >= MIN_WHALE_USD) return true
+  if (parsed.txHash && parsed.chain) return true
+  return false
 }
 
 export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   const clean = stripSlack(text)
   const out: Partial<WhaleAlert> = {}
 
-  // Amount: "$4.2M USDC" or "4,200,000 USDC" or "4200000.5 USDC"
+  // Amount: "$4.2M USDC" or "4,200,000 USDC" — require $ sign OR multiplier OR 5+ digit number to avoid matching "4 ETH" noise
   const amtRe = new RegExp(
-    `\\$?([\\d,]+(?:\\.\\d+)?)\\s*([KMBkmb])?\\s+(${TOKENS})`,
+    `(?:\\$([\\d,]+(?:\\.\\d+)?)\\s*([KMBkmb])?|([\\d,]+(?:\\.\\d+)?)\\s*([KMBkmb])(?=\\s)|([\\d]{5,}(?:,[\\d]{3})*(?:\\.\\d+)?)\\s*([KMBkmb])?)\\s+(${TOKENS})`,
     'i'
   )
   const amtMatch = clean.match(amtRe)
   if (amtMatch) {
-    const num = parseFloat(amtMatch[1].replace(/,/g, ''))
-    const mult = MULTIPLIERS[(amtMatch[2] ?? '').toUpperCase()] ?? 1
+    // groups: (1,$num)(2,mult) | (3,num)(4,mult) | (5,num)(6,mult) then (7,token)
+    const rawNum = amtMatch[1] ?? amtMatch[3] ?? amtMatch[5] ?? '0'
+    const rawMult = amtMatch[2] ?? amtMatch[4] ?? amtMatch[6] ?? ''
+    const num = parseFloat(rawNum.replace(/,/g, ''))
+    const mult = MULTIPLIERS[rawMult.toUpperCase()] ?? 1
     out.amount = num * mult
-    out.token = amtMatch[3].toUpperCase()
+    out.token = amtMatch[7].toUpperCase()
     out.amountFmt = fmtAmount(out.amount)
   }
 
