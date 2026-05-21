@@ -2183,6 +2183,7 @@ footer.site ul a:hover { color: var(--blue); }
   <a href="#yt-opps">07 YT Opps</a>
   <a href="#morpho">08 Morpho</a>
   <a href="#strc">09 STRC</a>
+  <a href="#lp-opps">10 LP Opps</a>
 </nav>
 </div><!-- /.yt-sticky-bar -->
 
@@ -2656,12 +2657,26 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="rhs">Fixed yield · sorted by APY · min $500k liquidity · &gt;5d remaining</div>
   </div>
 
+  <div class="filter-bar" id="pendle-filter">
+    <span class="lbl">Filter:</span>
+    <div class="group" id="pendle-chips">
+      <span class="chip on" data-signal="all">All</span>
+      <span class="chip" data-signal="buy_yt">YT Cheap</span>
+      <span class="chip" data-signal="buy_pt">PT Cheap</span>
+      <span class="chip" data-signal="neutral">Neutral</span>
+    </div>
+    <div class="grow"></div>
+    <input class="search" type="text" placeholder="Filter by name…" id="pendle-search">
+  </div>
+
   <div class="tbl-wrap"><table class="tpmkt" id="tpmkt">
     <thead>
       <tr>
         <th>PT Token</th>
         <th>Fixed APY</th>
         <th>Underlying APY</th>
+        <th>PENDLE+</th>
+        <th>LP APY</th>
         <th>Maturity</th>
         <th>PT price</th>
         <th>Discount</th>
@@ -2872,13 +2887,13 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="rhs">Long Yield APY = Underlying APY − Implied APY · positive = YT underpriced · negative = high fixed-rate PT</div>
   </div>
 
-  <div class="yt-summary">
+  <div class="yt-summary" id="yt-summary">
     <span class="ct">3 YT Cheap</span> <span class="alt">(underlying &gt; implied, buy YT for leveraged yield)</span> ·
     <span class="ct">17 PT Cheap</span> <span class="alt">(fixed rate &gt; underlying, lock in premium)</span> ·
     <span class="alt">17 Neutral</span> · Best alt rate: 3.30% (Aave)
   </div>
 
-  <div class="yt-grid">
+  <div class="yt-grid" id="yt-grid">
     <div class="yt-card">
       <div class="hd"><span class="nm">PT-superUSDC-26NOV2026</span><span class="tier t3">T3</span></div>
       <div class="signal-pill yt-cheap">YT Cheap · +8.3% Long Yield</div>
@@ -3103,6 +3118,36 @@ footer.site ul a:hover { color: var(--blue); }
 </section>
 
 <!-- =========================================================================
+     10  LP OPPORTUNITIES
+     ========================================================================= -->
+<section class="yt-sec" id="lp-opps">
+  <div class="sec-head">
+    <div class="lhs">
+      <span class="num">10</span>
+      <span class="h-up">LP Opportunities</span>
+    </div>
+    <div class="rhs">Total LP APY = Underlying + PENDLE rewards + Swap fees + LP rewards · sorted by total yield</div>
+  </div>
+
+  <div class="tbl-wrap"><table class="tpmkt" id="tlp">
+    <thead>
+      <tr>
+        <th>PT Market</th>
+        <th>Maturity</th>
+        <th>Underlying APY</th>
+        <th>PENDLE+</th>
+        <th>Swap Fees</th>
+        <th>LP Rewards</th>
+        <th>Total LP APY</th>
+        <th>Liquidity</th>
+        <th>Tier</th>
+      </tr>
+    </thead>
+    <tbody><!-- live --></tbody>
+  </table></div>
+</section>
+
+<!-- =========================================================================
      FOOTER METADATA
      ========================================================================= -->
 <div class="yt-foot">
@@ -3271,7 +3316,7 @@ footer.site ul a:hover { color: var(--blue); }
     } catch(e) { console.error('yield-data fetch failed', e); return; }
     if (!data) return;
 
-    const { pendle = [], loops = [], morpho_lending = [], aave = [], ethena = {}, gas = {}, peg = {} } = data;
+    const { pendle = [], loops = [], lp_opps = [], morpho_lending = [], aave = [], ethena = {}, gas = {}, peg = {} } = data;
 
     /* ---- Header KPIs ---- */
     const gasEl = document.getElementById('kpi-gas');
@@ -3314,16 +3359,32 @@ footer.site ul a:hover { color: var(--blue); }
       }).join('');
     }
 
-    /* ---- Pendle table ---- */
-    const pendleTbody = document.querySelector('#tpmkt tbody');
-    if (pendleTbody && pendle.length) {
-      pendleTbody.innerHTML = pendle.map(p => {
-        const lyaCls = (p.long_yield_apy ?? 0) >= 0 ? 'pos-cell' : 'warn-cell';
-        const ytLev = p.yt_leverage != null ? N(p.yt_leverage, 1) + '×' : '—';
+    /* ---- Pendle table (renderer also used by filter) ---- */
+    let _pendleData = pendle;
+    let _pendleSignalFilter = 'all';
+    let _pendleSearch = '';
+
+    function renderPendleRows() {
+      const pendleTbody = document.querySelector('#tpmkt tbody');
+      if (!pendleTbody) return;
+      const rows = _pendleData.filter(p => {
+        if (_pendleSignalFilter !== 'all' && p.signal !== _pendleSignalFilter) return false;
+        if (_pendleSearch && !(p.name || '').toLowerCase().includes(_pendleSearch)) return false;
+        return true;
+      });
+      pendleTbody.innerHTML = rows.map(p => {
+        const lyaCls    = (p.long_yield_apy ?? 0) >= 0 ? 'pos-cell' : 'warn-cell';
+        const ytLev     = p.yt_leverage != null ? N(p.yt_leverage, 1) + '×' : '—';
+        const alphaCls  = (p.alpha ?? 0) >= 0 ? 'pos-cell' : 'neg-cell';
+        const alphaStr  = p.alpha != null ? (p.alpha >= 0 ? '+' : '') + P(p.alpha) : '—';
+        const pendlePct = p.pendle_apy > 0 ? `<span style="color:var(--blue)">+${P(p.pendle_apy)}</span>` : '—';
+        const lpApyCls  = p.lp_total_apy > 0 ? 'pos-cell' : '';
         return `<tr>
   <td><div class="pt-tok"><span class="ic ${p.risk_tier===1?'alt2':p.risk_tier===2?'alt':'alt3'}">${initials(p.name)}</span><div class="lhs"><span class="nm">${p.name}</span><span class="ds">${p.expiry || ''}</span></div></div></td>
   <td class="pos-cell">${P(p.pt_apy)}</td>
   <td>${P(p.underlying_apy)}</td>
+  <td>${pendlePct}</td>
+  <td class="${lpApyCls}">${p.lp_total_apy > 0 ? P(p.lp_total_apy) : '—'}</td>
   <td><div class="maturity-cell"><span class="d">${p.days_left != null ? p.days_left + 'd remaining' : '—'}</span><span class="e">expires ${p.expiry || ''}</span></div></td>
   <td>${p.pt_price != null ? '$' + p.pt_price.toFixed(4) : '—'}</td>
   <td>${P(p.pt_discount)}</td>
@@ -3331,10 +3392,27 @@ footer.site ul a:hover { color: var(--blue); }
   <td>${U(p.volume_24h)}</td>
   <td class="${lyaCls}">${(p.long_yield_apy ?? 0) >= 0 ? '' : '−'}${P(Math.abs(p.long_yield_apy ?? 0))}</td>
   <td>${ytLev}</td>
-  <td class="pos-cell">+${P(p.alpha)}</td>
+  <td class="${alphaCls}">${alphaStr}</td>
   <td>${signalHtml(p)}</td>
 </tr>`;
       }).join('');
+    }
+
+    if (pendle.length) {
+      renderPendleRows();
+      document.querySelectorAll('#pendle-chips .chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('#pendle-chips .chip').forEach(c => c.classList.remove('on'));
+          chip.classList.add('on');
+          _pendleSignalFilter = chip.dataset.signal || 'all';
+          renderPendleRows();
+        });
+      });
+      const psearch = document.getElementById('pendle-search');
+      if (psearch) psearch.addEventListener('input', e => {
+        _pendleSearch = e.target.value.toLowerCase().trim();
+        renderPendleRows();
+      });
     }
 
     /* ---- Morpho table ---- */
@@ -3420,6 +3498,61 @@ footer.site ul a:hover { color: var(--blue); }
   <div>Net profit<span class="v ink">$${lp.net_profit.toFixed(0)}</span></div>
 </div>
 <button type="button">Load in Builder</button>`;
+    }
+
+    /* ---- YT Opps ---- */
+    const ytGrid = document.getElementById('yt-grid');
+    const ytSummary = document.getElementById('yt-summary');
+    if (ytGrid && pendle.length) {
+      const best_alt = pendle[0]?.best_alt_apy ?? 0;
+      const yt_cheap = pendle.filter(p => p.signal === 'buy_yt');
+      const pt_cheap = pendle.filter(p => p.signal === 'buy_pt');
+      const neutral  = pendle.filter(p => p.signal === 'neutral');
+      if (ytSummary) {
+        ytSummary.innerHTML = `<span class="ct">${yt_cheap.length} YT Cheap</span> <span class="alt">(underlying &gt; implied, buy YT for leveraged yield)</span> ·
+<span class="ct">${pt_cheap.length} PT Cheap</span> <span class="alt">(fixed rate &gt; underlying, lock in premium)</span> ·
+<span class="alt">${neutral.length} Neutral</span> · Best alt rate: ${P(best_alt)} (Aave)`;
+      }
+      const cards = [...yt_cheap, ...pt_cheap.slice(0,6), ...neutral.slice(0,4)];
+      ytGrid.innerHTML = cards.map(p => {
+        const pillCls  = p.signal === 'buy_yt' ? 'yt-cheap' : p.signal === 'buy_pt' ? 'cheap' : 'neutral';
+        const pillTxt  = p.signal === 'buy_yt'
+          ? `YT Cheap · +${P(Math.abs(p.long_yield_apy),1)} Long Yield`
+          : p.signal === 'buy_pt'
+          ? `PT Cheap · +${P(Math.abs(p.long_yield_apy),1)} Fixed Premium`
+          : 'Neutral';
+        const beText = p.days_left ? `Avg ≥ ${P(p.pt_apy)} for ${p.days_left}d to profit` : '—';
+        return `<div class="yt-card">
+  <div class="hd"><span class="nm">${p.name}</span><span class="tier ${tc(p.risk_tier)}">T${p.risk_tier}</span></div>
+  <div class="signal-pill ${pillCls}">${pillTxt}</div>
+  <div class="grid2">
+    <div><div class="lab">Fixed APY</div><div class="val green">${P(p.pt_apy)}</div></div>
+    <div><div class="lab">Underlying APY</div><div class="val">${P(p.underlying_apy)}</div></div>
+    <div><div class="lab">Long Yield APY</div><div class="val ${(p.long_yield_apy??0)>=0?'blue':''}">${(p.long_yield_apy??0)>=0?'+':''}${P(p.long_yield_apy??0)}</div></div>
+    <div><div class="lab">YT Leverage</div><div class="val">${p.yt_leverage != null ? N(p.yt_leverage,1)+'×' : '—'}</div></div>
+    <div><div class="lab">Alpha vs DeFi</div><div class="val green">${p.alpha != null ? '+'+P(p.alpha) : '—'}</div></div>
+    <div><div class="lab">PENDLE+</div><div class="val">${p.pendle_apy > 0 ? P(p.pendle_apy) : '—'}</div></div>
+  </div>
+  <div class="be"><div class="h">YT Breakeven</div>${beText}</div>
+  <div class="meta"><span>${p.days_left != null ? p.days_left+'d · '+p.expiry : p.expiry}</span><span>${U(p.liquidity_usd)}</span></div>
+</div>`;
+      }).join('');
+    }
+
+    /* ---- LP Opps table ---- */
+    const lpTbody = document.querySelector('#tlp tbody');
+    if (lpTbody && lp_opps.length) {
+      lpTbody.innerHTML = lp_opps.map(l => `<tr>
+  <td><div class="pt-tok"><span class="ic alt3">${initials(l.name)}</span><div class="lhs"><span class="nm">${l.name}</span><span class="ds">${l.expiry || ''}</span></div></div></td>
+  <td><div class="maturity-cell"><span class="d">${l.days_left != null ? l.days_left+'d' : '—'}</span><span class="e">${l.expiry || ''}</span></div></td>
+  <td>${P(l.underlying_apy)}</td>
+  <td>${l.pendle_apy > 0 ? '<span style="color:var(--blue)">+'+P(l.pendle_apy)+'</span>' : '—'}</td>
+  <td>${l.swap_fee_apy > 0 ? P(l.swap_fee_apy) : '—'}</td>
+  <td>${l.lp_reward_apy > 0 ? P(l.lp_reward_apy) : '—'}</td>
+  <td class="pos-cell">${P(l.lp_total_apy)}</td>
+  <td>${U(l.liquidity_usd)}</td>
+  <td><span class="tier ${tc(l.risk_tier)}">T${l.risk_tier}</span></td>
+</tr>`).join('');
     }
 
     /* ---- Update Refresh button ---- */

@@ -50,21 +50,35 @@ async function fetchPendle() {
     const longYieldApy = r2(underlyingApy - ptApy)
     const ytLeverage   = ptDiscPct > 0.05 ? r1(100 / ptDiscPct) : null
     const signal       = longYieldApy > 2 ? 'buy_yt' : longYieldApy < -2 ? 'buy_pt' : 'neutral'
+    const pendleApy    = r2((m.pendleApy    ?? 0) * 100)
+    const swapFeeApy   = r2((m.swapFeeApy   ?? 0) * 100)
+    const lpRewardApy  = r2((m.lpRewardApy  ?? 0) * 100)
+    const lpTotalApy   = r2(((m.underlyingApy ?? 0) + (m.pendleApy ?? 0) + (m.swapFeeApy ?? 0) + (m.lpRewardApy ?? 0)) * 100)
     out.push({
-      name:            pt.symbol ?? m.symbol ?? '?',
-      address:         m.address ?? '',
-      pt_address:      pt.address ?? '',
-      pt_apy:          ptApy,
-      underlying_apy:  underlyingApy,
-      long_yield_apy:  longYieldApy,
-      yt_leverage:     ytLeverage,
+      name:                    pt.symbol ?? m.symbol ?? '?',
+      address:                 m.address ?? '',
+      pt_address:              pt.address ?? '',
+      pt_apy:                  ptApy,
+      underlying_apy:          underlyingApy,
+      long_yield_apy:          longYieldApy,
+      yt_leverage:             ytLeverage,
       signal,
-      pt_price:        pt.price?.usd ? r2(pt.price.usd) : null,
-      pt_discount:     ptDiscPct,
-      volume_24h:      Math.round(m.tradingVolume?.usd ?? 0),
-      expiry:          (m.expiry ?? '').slice(0, 10),
-      days_left:       days,
-      liquidity_usd:   Math.round(liq),
+      pt_price:                pt.price?.usd ? r2(pt.price.usd) : null,
+      pt_discount:             ptDiscPct,
+      volume_24h:              Math.round(m.tradingVolume?.usd ?? 0),
+      expiry:                  (m.expiry ?? '').slice(0, 10),
+      days_left:               days,
+      liquidity_usd:           Math.round(liq),
+      pendle_apy:              pendleApy,
+      swap_fee_apy:            swapFeeApy,
+      lp_reward_apy:           lpRewardApy,
+      lp_total_apy:            lpTotalApy,
+      underlying_interest_apy: r2((m.underlyingInterestApy ?? 0) * 100),
+      underlying_reward_apy:   r2((m.underlyingRewardApy   ?? 0) * 100),
+      yt_floating_apy:         r2((m.ytFloatingApy         ?? 0) * 100),
+      category_ids:            m.categoryIds ?? [],
+      protocol:                m.protocol ?? '',
+      zappable:                !!m.zappable,
     })
   }
   return out.sort((a, b) => b.pt_apy - a.pt_apy)
@@ -328,6 +342,28 @@ function buildLoops(pendle: any[], morphoPt: any[], gas: any) {
   })
 }
 
+// ── LP Opportunities ──────────────────────────────────────────────────
+
+function buildLpOpps(pendle: any[]) {
+  return pendle
+    .filter((p: any) => p.lp_total_apy > 0)
+    .map((p: any) => ({
+      name:           p.name,
+      address:        p.address,
+      expiry:         p.expiry,
+      days_left:      p.days_left,
+      liquidity_usd:  p.liquidity_usd,
+      risk_tier:      p.risk_tier,
+      underlying_apy: p.underlying_apy,
+      pendle_apy:     p.pendle_apy,
+      swap_fee_apy:   p.swap_fee_apy,
+      lp_reward_apy:  p.lp_reward_apy,
+      lp_total_apy:   p.lp_total_apy,
+      pt_apy:         p.pt_apy,
+    }))
+    .sort((a: any, b: any) => b.lp_total_apy - a.lp_total_apy)
+}
+
 // ── Handler ───────────────────────────────────────────────────────────
 
 export async function GET() {
@@ -350,10 +386,12 @@ export async function GET() {
 
     const enriched = enrichPendle(pendle, aave as any[])
     const loops    = buildLoops(enriched, (morpho as any).ptList, gas)
+    const lp_opps  = buildLpOpps(enriched)
 
     const data = {
       pendle: enriched,
       loops,
+      lp_opps,
       morpho_lending:  (morpho as any).lendingList,
       aave,
       ethena,

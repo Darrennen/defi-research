@@ -136,20 +136,56 @@ def fetch_pendle():
         gross    = CAPITAL * implied_apy * (days_left / 365) if days_left else 0
         pt       = m.get("pt") or {}
         pt_price = (pt.get("price") or {}).get("usd")
+
+        underlying_apy   = m.get("underlyingApy") or 0
+        pendle_apy_raw   = m.get("pendleApy") or 0
+        swap_fee_apy_raw = m.get("swapFeeApy") or 0
+        lp_reward_raw    = m.get("lpRewardApy") or 0
+        lp_total         = underlying_apy + pendle_apy_raw + swap_fee_apy_raw + lp_reward_raw
+
+        long_yield_apy   = round((underlying_apy - implied_apy) * 100, 2)
+
+        yt_leverage = None
+        pt_disc = (m.get("ptDiscount") or 0) * 100
+        if pt_disc > 0.05:
+            yt_leverage = round(100 / pt_disc, 1)
+
+        if long_yield_apy > 2:
+            signal = "buy_yt"
+        elif long_yield_apy < -2:
+            signal = "buy_pt"
+        else:
+            signal = "neutral"
+
         results.append({
-            "name":           pt.get("symbol") or m.get("symbol") or "?",
-            "address":        m.get("address", ""),
-            "pt_address":     pt.get("address", ""),
-            "pt_apy":         round(implied_apy * 100, 2),
-            "underlying_apy": round((m.get("underlyingApy") or 0) * 100, 2),
-            "pt_price":       round(pt_price, 4) if pt_price else None,
-            "pt_discount":    round((m.get("ptDiscount") or 0) * 100, 2),
-            "volume_24h":     round((m.get("tradingVolume") or {}).get("usd") or 0),
-            "expiry":         expiry_str[:10],
-            "days_left":      days_left,
-            "liquidity_usd":  round(liq_usd),
-            "gross_profit":   round(gross, 2),
-            "net_profit":     round(gross - GAS_SIMPLE, 2),
+            "name":                    pt.get("symbol") or m.get("symbol") or "?",
+            "address":                 m.get("address", ""),
+            "pt_address":              pt.get("address", ""),
+            "pt_apy":                  round(implied_apy * 100, 2),
+            "underlying_apy":          round(underlying_apy * 100, 2),
+            "pt_price":                round(pt_price, 4) if pt_price else None,
+            "pt_discount":             round(pt_disc, 2),
+            "volume_24h":              round((m.get("tradingVolume") or {}).get("usd") or 0),
+            "expiry":                  expiry_str[:10],
+            "days_left":               days_left,
+            "liquidity_usd":           round(liq_usd),
+            "gross_profit":            round(gross, 2),
+            "net_profit":              round(gross - GAS_SIMPLE, 2),
+            "long_yield_apy":          long_yield_apy,
+            "yt_leverage":             yt_leverage,
+            "signal":                  signal,
+            "pendle_apy":              round(pendle_apy_raw * 100, 2),
+            "swap_fee_apy":            round(swap_fee_apy_raw * 100, 2),
+            "lp_reward_apy":           round(lp_reward_raw * 100, 2),
+            "lp_total_apy":            round(lp_total * 100, 2),
+            "underlying_interest_apy": round((m.get("underlyingInterestApy") or 0) * 100, 2),
+            "underlying_reward_apy":   round((m.get("underlyingRewardApy") or 0) * 100, 2),
+            "yt_floating_apy":         round((m.get("ytFloatingApy") or 0) * 100, 2),
+            "category_ids":            m.get("categoryIds") or [],
+            "protocol":                m.get("protocol") or "",
+            "zappable":                bool(m.get("zappable")),
+            "alpha":                   None,
+            "risk_tier":               None,
         })
     return sorted(results, key=lambda x: x["pt_apy"], reverse=True)
 
@@ -313,9 +349,20 @@ def build_loops(pendle, morpho_pt, gas):
             else:
                 breakeven_capital = None
 
+        simple_pt_profit = None
+        if pm and pm.get("days_left"):
+            simple_pt_profit = round(CAPITAL * (pm["pt_apy"] / 100) * pm["days_left"] / 365, 2)
+
+        loop_extra = None
+        if loop is not None and simple_pt_profit is not None:
+            loop_extra = round(loop["net_profit"] - simple_pt_profit, 2)
+
         loops.append({
             **mm,
             "pendle_pt_apy":      pm["pt_apy"] if pm else None,
+            "pendle_underlying":  pm["underlying_apy"] if pm else None,
+            "pendle_alpha":       pm.get("alpha") if pm else None,
+            "risk_tier":          pm.get("risk_tier") or 3 if pm else 3,
             "days_left":          pm["days_left"] if pm else None,
             "pendle_liq":         pm["liquidity_usd"] if pm else None,
             "loop":               loop,
@@ -323,6 +370,8 @@ def build_loops(pendle, morpho_pt, gas):
             "liquidation_price":  liq_price,
             "breakeven_borrow":   breakeven_borrow,
             "breakeven_capital":  breakeven_capital,
+            "simple_pt_profit":   simple_pt_profit,
+            "loop_extra":         loop_extra,
             "trend":              get_trend(mm["market_id"]),
         })
 
@@ -334,6 +383,39 @@ def build_loops(pendle, morpho_pt, gas):
         return (2, -o["liquidity_usd"])
 
     return sorted(loops, key=sort_key)
+
+# ── LP Opportunities ──────────────────────────────────────────────────────────
+
+def build_lp_opps(pendle):
+    return sorted(
+        [p for p in pendle if p.get("lp_total_apy", 0) > 0],
+        key=lambda x: -x["lp_total_apy"]
+    )
+
+# ── Enrich Pendle with alpha + risk_tier ──────────────────────────────────────
+
+TIER1 = {"SUSDE","STETH","WSTETH","WEETH","USDE","SUSDS","USDG","SUSDZ","SNUSD","RSUSD"}
+TIER2 = {"RSETH","EZETH","CBETH","RETH","PUFETH","EETH","APXUSD","APYUSD"}
+
+def enrich_pendle(pendle, aave):
+    usd_syms = {"USDC","USDT","DAI"}
+    eth_syms = {"WETH","WSTETH","WEETH"}
+    usd_best = max((a["supply_apy"] for a in aave if a["symbol"] in usd_syms), default=0)
+    eth_best = max((a["supply_apy"] for a in aave if a["symbol"] in eth_syms), default=0)
+    for p in pendle:
+        upper   = (p["name"] or "").upper()
+        is_eth  = ("ETH" in upper or "BTC" in upper) and "USD" not in upper
+        best_alt = eth_best if is_eth else usd_best
+        base     = upper.replace("PT-", "").split("-")[0]
+        if any(t in base for t in TIER1):
+            p["risk_tier"] = 1
+        elif any(t in base for t in TIER2):
+            p["risk_tier"] = 2
+        else:
+            p["risk_tier"] = 3
+        p["alpha"]        = round(p["pt_apy"] - best_alt, 2)
+        p["best_alt_apy"] = round(best_alt, 2)
+    return pendle
 
 # ── Fetch all ─────────────────────────────────────────────────────────────────
 
@@ -399,12 +481,15 @@ def fetch_all():
     aave   = safe(fetch_aave_rates,   [], "aave")
     ethena = safe(fetch_ethena_yield, {}, "ethena")
 
+    pendle  = enrich_pendle(pendle, aave)
+    lp_opps = build_lp_opps(pendle)
     update_history(morpho_pt)
     loops = build_loops(pendle, morpho_pt, gas)
 
     return {
         "pendle":          pendle,
         "loops":           loops,
+        "lp_opps":         lp_opps,
         "morpho_lending":  morpho_lending,
         "aave":            aave,
         "ethena":          ethena,
