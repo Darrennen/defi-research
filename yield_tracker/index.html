@@ -3794,9 +3794,12 @@ footer.site ul a:hover { color: var(--blue); }
     // much more reliable than the merged portfolio timeseries
     const posWithEntry = positions.filter(p => p.entryEquity != null);
     const autoEntryEquity = posWithEntry.length ? posWithEntry.reduce((s, p) => s + p.entryEquity, 0) : null;
-    // Use the earliest per-position entry timestamp
-    const autoEntryTs = posWithEntry.length
-      ? Math.min(...posWithEntry.map(p => p.entryTs).filter(Boolean))
+    // Use the earliest valid per-position entry timestamp (guard against null / Infinity)
+    const validEntryTs = posWithEntry.map(p => p.entryTs).filter(ts => ts != null && isFinite(ts) && ts > 0);
+    const autoEntryTs = validEntryTs.length ? Math.min(...validEntryTs) : null;
+    // Also derive daysHeld directly from positions as fallback
+    const autoDaysHeld = posWithEntry.length && posWithEntry.some(p => p.daysHeld)
+      ? Math.max(...posWithEntry.map(p => p.daysHeld || 0))
       : null;
     const currentEquityNow = equity;
 
@@ -3804,11 +3807,12 @@ footer.site ul a:hover { color: var(--blue); }
     ppBlock.id = 'pos-portfolio-block';
     ppBlock.className = 'pos-portfolio';
 
-    // Format date for <input type="date"> value
+    // Format date for <input type="date"> value — safe against Infinity / Invalid Date
     function tsToDateInput(ts) {
-      if (!ts) return '';
-      const d = new Date(ts * 1000);
-      return d.toISOString().slice(0, 10);
+      if (ts == null || !isFinite(ts) || ts <= 0) return '';
+      try {
+        return new Date(ts * 1000).toISOString().slice(0, 10);
+      } catch(e) { return ''; }
     }
 
     ppBlock.innerHTML = `
@@ -3847,7 +3851,8 @@ footer.site ul a:hover { color: var(--blue); }
       if (!entryCapital || entryCapital <= 0) { statsEl.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--ink-mute)">Enter entry capital to see P&amp;L</div>'; return; }
 
       const entryTs = entryDateVal ? new Date(entryDateVal).getTime() / 1000 : autoEntryTs;
-      const daysHeld = entryTs ? (Date.now() / 1000 - entryTs) / 86400 : null;
+      const daysFromTs = (entryTs && isFinite(entryTs) && entryTs > 0) ? (Date.now() / 1000 - entryTs) / 86400 : null;
+      const daysHeld = daysFromTs ?? autoDaysHeld;
       const pnl = currentEquityNow - entryCapital;
       const retPct = (pnl / entryCapital) * 100;
       const apr = daysHeld != null && daysHeld > 0 ? (retPct / daysHeld) * 365 : null;
