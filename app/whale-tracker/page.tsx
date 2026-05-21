@@ -24,10 +24,12 @@ export default function WhaleTrackerPage() {
   const [error, setError] = useState<string | null>(null)
   const [chain, setChain] = useState('All')
   const [search, setSearch] = useState('')
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const res = await fetch('/api/whale-alerts?limit=100')
+      const res = await fetch('/api/whale-alerts?limit=200')
       const data = await res.json()
       if (data.alerts) {
         setAlerts(data.alerts)
@@ -46,6 +48,25 @@ export default function WhaleTrackerPage() {
     const id = setInterval(fetchAlerts, 30_000)
     return () => clearInterval(id)
   }, [fetchAlerts])
+
+  const runBackfill = async () => {
+    setBackfilling(true)
+    setBackfillMsg(null)
+    try {
+      const res = await fetch('/api/backfill-alerts', { method: 'POST' })
+      const data = await res.json()
+      if (data.ok) {
+        setBackfillMsg(`Loaded ${data.stored} alerts from the last 30 days`)
+        fetchAlerts()
+      } else {
+        setBackfillMsg(`Error: ${data.error}`)
+      }
+    } catch {
+      setBackfillMsg('Failed to reach backfill endpoint')
+    } finally {
+      setBackfilling(false)
+    }
+  }
 
   const todayStart = new Date().setHours(0, 0, 0, 0)
   const todayAlerts = alerts.filter(a => a.ts >= todayStart)
@@ -88,6 +109,21 @@ export default function WhaleTrackerPage() {
         <p className="dek">
           Real-time on-chain whale movements from Arkham Intelligence — streamed from Slack into a live feed. Refreshes every 30 seconds.
         </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 20, flexWrap: 'wrap' }}>
+          <button
+            className="btn ghost"
+            onClick={runBackfill}
+            disabled={backfilling}
+            style={{ fontSize: 12, padding: '10px 18px', opacity: backfilling ? 0.6 : 1 }}
+          >
+            {backfilling ? 'Loading…' : 'Load 30-day History'} <span className="arr">↓</span>
+          </button>
+          {backfillMsg && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: backfillMsg.startsWith('Error') ? 'var(--red)' : 'var(--green)' }}>
+              {backfillMsg}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Stats row */}

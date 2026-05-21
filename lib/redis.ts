@@ -6,4 +6,4 @@ export const redis = new Redis({
 })
 
 export const WHALE_ALERTS_KEY = 'whale:alerts'
-export const MAX_ALERTS = 500
+export const MAX_ALERTS = 5000

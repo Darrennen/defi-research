@@ -62,7 +62,7 @@ function fmtAmount(v: number): string {
 const TOKENS = 'USDC|USDT|ETH|BTC|WBTC|WETH|DAI|FRAX|sDAI|cbBTC|cbETH|rETH|weETH|rsETH|stETH|LUSD|BUSD|UNI|LINK|AAVE|GHO|crvUSD'
 const MULTIPLIERS: Record<string, number> = { K: 1e3, M: 1e6, B: 1e9 }
 
-function parseArkhamAlert(text: string): Partial<WhaleAlert> {
+export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   const clean = stripSlack(text)
   const out: Partial<WhaleAlert> = {}
 
