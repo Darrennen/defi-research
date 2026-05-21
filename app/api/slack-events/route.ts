@@ -85,12 +85,18 @@ function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   const chainMatch = clean.match(chainRe)
   if (chainMatch) out.chain = chainMatch[1]
 
-  // Tx hash (64-char hex)
+  // Tx hash (64-char hex) — txUrl is always constructed from our whitelist, never from message text
   const txMatch = clean.match(/0x[a-fA-F0-9]{64}/)
   if (txMatch) {
     out.txHash = txMatch[0]
     const key = (out.chain ?? 'ethereum').toLowerCase()
-    out.txUrl = (CHAIN_EXPLORERS[key] ?? CHAIN_EXPLORERS.ethereum) + txMatch[0]
+    const base = CHAIN_EXPLORERS[key] ?? CHAIN_EXPLORERS.ethereum
+    const url = base + txMatch[0]
+    // Final guard: only store URLs that start with a known explorer domain
+    const allowed = Object.values(CHAIN_EXPLORERS)
+    if (allowed.some(prefix => url.startsWith(prefix))) {
+      out.txUrl = url
+    }
   }
 
   // Wallet address (40-char hex, skip tx hashes)
