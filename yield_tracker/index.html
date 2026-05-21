@@ -2228,127 +2228,27 @@ footer.site ul a:hover { color: var(--blue); }
   </div>
 
   <div class="pos-input-row">
-    <input type="text" placeholder="0x9916F01230dfFfF9D2A333a980c745a2a2452…" value="0x9916F01230dfFfF9D2A333a980c745a2a2452a91">
-    <select>
-      <option>Ethereum</option>
-      <option>Arbitrum</option>
-      <option>Base</option>
+    <input id="pos-addr" type="text" placeholder="0x… wallet address" value="">
+    <select id="pos-chain">
+      <option value="1">Ethereum</option>
+      <option value="42161">Arbitrum</option>
+      <option value="8453">Base</option>
     </select>
-    <button type="button">Fetch</button>
+    <button id="pos-fetch-btn" type="button">Fetch</button>
+  </div>
+  <div id="pos-error" style="display:none;font-family:var(--mono);font-size:12px;color:var(--red);padding:6px 0;"></div>
+
+  <div id="pos-summary" class="pos-summary" style="display:none">
+    <div class="b"><div class="l">Total collateral</div><div class="v" id="ps-coll">—</div></div>
+    <div class="b"><div class="l">Total borrowed</div><div class="v" id="ps-borrow">—</div></div>
+    <div class="b"><div class="l">Net equity</div><div class="v" id="ps-equity">—</div></div>
+    <div class="b"><div class="l">Lowest HF</div><div class="v" id="ps-hf">—</div></div>
+    <div class="b"><div class="l">Net daily (est.)</div><div class="v blue" id="ps-daily">—</div></div>
+    <div class="b"><div class="l">Positions</div><div class="v" id="ps-count">—</div></div>
   </div>
 
-  <div class="pos-summary">
-    <div class="b"><div class="l">Total collateral</div><div class="v">$87.8k</div></div>
-    <div class="b"><div class="l">Total borrowed</div><div class="v">$42.6k</div></div>
-    <div class="b"><div class="l">Net equity</div><div class="v">$45.2k</div></div>
-    <div class="b"><div class="l">Lowest HF</div><div class="v">1.72×</div></div>
-    <div class="b"><div class="l">Portfolio looped APY</div><div class="v blue">+18.44%</div></div>
-    <div class="b"><div class="l">Net daily</div><div class="v blue">+$22.85</div></div>
-  </div>
-
-  <div class="pos-grid">
-    <!-- Position 1 -->
-    <div class="pos-card">
-      <div class="head">
-        <div>
-          <div class="pair">PT-apxUSD-18JUN2026<span class="sl"> / USDC</span></div>
-          <div class="lltv">LLTV 86%</div>
-        </div>
-        <div class="hf-big">1.72×<span class="lbl">Health Factor</span></div>
-      </div>
-      <div class="health-bar"><i style="width: 60%"></i></div>
-      <div class="kvs">
-        <div class="kv"><div class="l">Collateral</div><div class="v">$70.3k</div></div>
-        <div class="kv"><div class="l">Borrowed</div><div class="v">$35.0k</div></div>
-        <div class="kv"><div class="l">LTV / LLTV</div><div class="v">49.89% / 86%</div></div>
-        <div class="kv"><div class="l">Borrow APY</div><div class="v">8.71%</div></div>
-        <div class="kv"><div class="l">Liq. price</div><div class="v bad">$0.57</div></div>
-        <div class="kv"><div class="l">Drop to liq.</div><div class="v">42.0%</div></div>
-      </div>
-      <div class="borrow-cost">
-        <span>Daily borrow cost <strong>$8.36</strong></span>
-        <span>Monthly <strong>$254.26</strong></span>
-        <span>Annual <strong>$3,051.08</strong></span>
-      </div>
-      <div class="returns-box">
-        <div class="title">Your looped position returns</div>
-        <div class="kvs">
-          <div class="kv"><div class="l">Your looped APY</div><div class="v blue">+16.77%</div></div>
-          <div class="kv"><div class="l">Leverage</div><div class="v">2.00×</div></div>
-          <div class="kv"><div class="l">Days left</div><div class="v">29d</div></div>
-          <div class="kv"><div class="l">PT yield/day</div><div class="v blue">+$24.54</div></div>
-          <div class="kv"><div class="l">Net/day</div><div class="v blue">+$16.18</div></div>
-          <div class="kv"><div class="l">Borrow cost/day</div><div class="v bad">−$8.36</div></div>
-          <div class="kv"><div class="l">Gross to maturity</div><div class="v blue">+$712</div></div>
-          <div class="kv"><div class="l">Net to maturity</div><div class="v blue">+$469</div></div>
-          <div class="kv"><div class="l">On equity</div><div class="v">$35.2k</div></div>
-        </div>
-      </div>
-      <div class="pendle-tag">
-        <span>Pendle: <strong>12.75% APY</strong> · 29d to maturity</span>
-        <span class="buy">▲ Buy PT</span>
-      </div>
-      <div class="sim-box">
-        <div class="title">HF Simulator — what if I change my position?</div>
-        <div class="row">
-          <span style="font-family: var(--mono); font-size: 11px;">Target HF:</span>
-          <input type="number" value="1.72" step="0.01" min="1.0">
-          <span class="msg">Already at target HF.</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Position 2 -->
-    <div class="pos-card">
-      <div class="head">
-        <div>
-          <div class="pair">PT-apyUSD-18JUN2026<span class="sl"> / USDC</span></div>
-          <div class="lltv">LLTV 86%</div>
-        </div>
-        <div class="hf-big">2.01×<span class="lbl">Health Factor</span></div>
-      </div>
-      <div class="health-bar"><i style="width: 70%"></i></div>
-      <div class="kvs">
-        <div class="kv"><div class="l">Collateral</div><div class="v">$17.6k</div></div>
-        <div class="kv"><div class="l">Borrowed</div><div class="v">$7.55k</div></div>
-        <div class="kv"><div class="l">LTV / LLTV</div><div class="v">42.97% / 86%</div></div>
-        <div class="kv"><div class="l">Borrow APY</div><div class="v">7.91%</div></div>
-        <div class="kv"><div class="l">Liq. price</div><div class="v bad">$0.49</div></div>
-        <div class="kv"><div class="l">Drop to liq.</div><div class="v">50.0%</div></div>
-      </div>
-      <div class="borrow-cost">
-        <span>Daily borrow cost <strong>$1.64</strong></span>
-        <span>Monthly <strong>$49.79</strong></span>
-        <span>Annual <strong>$597.47</strong></span>
-      </div>
-      <div class="returns-box">
-        <div class="title">Your looped position returns</div>
-        <div class="kvs">
-          <div class="kv"><div class="l">Your looped APY</div><div class="v blue">+24.29%</div></div>
-          <div class="kv"><div class="l">Leverage</div><div class="v">1.75×</div></div>
-          <div class="kv"><div class="l">Days left</div><div class="v">29d</div></div>
-          <div class="kv"><div class="l">PT yield/day</div><div class="v blue">+$8.31</div></div>
-          <div class="kv"><div class="l">Net/day</div><div class="v blue">+$6.67</div></div>
-          <div class="kv"><div class="l">Borrow cost/day</div><div class="v bad">−$1.64</div></div>
-          <div class="kv"><div class="l">Gross to maturity</div><div class="v blue">+$241</div></div>
-          <div class="kv"><div class="l">Net to maturity</div><div class="v blue">+$193</div></div>
-          <div class="kv"><div class="l">On equity</div><div class="v">$10.0k</div></div>
-        </div>
-      </div>
-      <div class="pendle-tag">
-        <span>Pendle: <strong>17.25% APY</strong> · 29d to maturity</span>
-        <span class="buy">▲ Buy PT</span>
-      </div>
-      <div class="sim-box">
-        <div class="title">HF Simulator — what if I change my position?</div>
-        <div class="row">
-          <span style="font-family: var(--mono); font-size: 11px;">Target HF:</span>
-          <input type="number" value="2.01" step="0.01" min="1.0">
-          <span class="msg">Already at target HF.</span>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div id="pos-grid" class="pos-grid"></div>
+  <div id="pos-empty" style="display:none;font-family:var(--mono);font-size:13px;color:var(--ink-mute);padding:32px 0;text-align:center;">No Morpho positions found for this address.</div>
 </section>
 
 <!-- =========================================================================
@@ -3717,6 +3617,121 @@ footer.site ul a:hover { color: var(--blue); }
 
     console.log('[yield-tracker] data loaded:', new Date().toLocaleTimeString());
   }
+
+  /* ---- Live Positions ---- */
+  function hfBarPct(hf) { return Math.min(Math.round((hf / 3) * 100), 100); }
+  function hfClass(hf) { return hf < 1.15 ? 'bad' : hf < 1.5 ? 'warn' : ''; }
+
+  function renderPositions(positions) {
+    const grid = document.getElementById('pos-grid');
+    const summary = document.getElementById('pos-summary');
+    const empty = document.getElementById('pos-empty');
+    if (!positions.length) {
+      grid.innerHTML = '';
+      summary.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    // Summary
+    const totalColl = positions.reduce((s, p) => s + p.collUsd, 0);
+    const totalBorrow = positions.reduce((s, p) => s + p.borrowUsd, 0);
+    const equity = totalColl - totalBorrow;
+    const lowestHf = Math.min(...positions.map(p => p.hf).filter(h => h > 0));
+    const netDaily = positions.reduce((s, p) => {
+      const eq = p.collUsd - p.borrowUsd;
+      const lev = p.collUsd > 0 ? p.collUsd / eq : 1;
+      const netApy = (p.supplyApy / 100) * lev - (p.borrowApy / 100) * (lev - 1);
+      return s + eq * netApy / 365;
+    }, 0);
+    document.getElementById('ps-coll').textContent = U(totalColl);
+    document.getElementById('ps-borrow').textContent = U(totalBorrow);
+    document.getElementById('ps-equity').textContent = U(equity);
+    document.getElementById('ps-hf').textContent = lowestHf > 0 && lowestHf < 999 ? lowestHf.toFixed(2) + '×' : '—';
+    document.getElementById('ps-daily').textContent = (netDaily >= 0 ? '+' : '') + U(netDaily);
+    document.getElementById('ps-count').textContent = positions.length;
+    summary.style.display = '';
+
+    // Cards
+    grid.innerHTML = positions.map(p => {
+      const eq = p.collUsd - p.borrowUsd;
+      const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
+      const netApyPct = (p.supplyApy) * lev - (p.borrowApy) * (lev - 1);
+      const netDaily = eq * netApyPct / 100 / 365;
+      const hfPct = hfBarPct(p.hf);
+      const hfCls = hfClass(p.hf);
+      return `
+<div class="pos-card">
+  <div class="head">
+    <div>
+      <div class="pair">${p.collateralSymbol}<span class="sl"> / ${p.loanSymbol}</span></div>
+      <div class="lltv">LLTV ${p.lltv}%</div>
+    </div>
+    <div class="hf-big ${hfCls}">${p.hf > 0 ? p.hf.toFixed(2) + '×' : '—'}<span class="lbl">Health Factor</span></div>
+  </div>
+  <div class="health-bar"><i style="width:${hfPct}%"></i></div>
+  <div class="kvs">
+    <div class="kv"><div class="l">Collateral</div><div class="v">${U(p.collUsd)}</div></div>
+    <div class="kv"><div class="l">Borrowed</div><div class="v">${U(p.borrowUsd)}</div></div>
+    <div class="kv"><div class="l">LTV / LLTV</div><div class="v">${p.ltv.toFixed(2)}% / ${p.lltv}%</div></div>
+    <div class="kv"><div class="l">Borrow APY</div><div class="v">${P(p.borrowApy)}</div></div>
+    ${p.liquidationPrice > 0 ? `<div class="kv"><div class="l">Liq. price</div><div class="v bad">$${p.liquidationPrice.toFixed(4)}</div></div>` : ''}
+    ${p.dropToLiq > 0 ? `<div class="kv"><div class="l">Drop to liq.</div><div class="v">${p.dropToLiq.toFixed(1)}%</div></div>` : ''}
+  </div>
+  <div class="borrow-cost">
+    <span>Daily borrow cost <strong>${U(p.dailyCost)}</strong></span>
+    <span>Monthly <strong>${U(p.monthlyCost)}</strong></span>
+    <span>Annual <strong>${U(p.annualCost)}</strong></span>
+  </div>
+  ${p.supplyApy > 0 ? `
+  <div class="returns-box">
+    <div class="title">Estimated position returns</div>
+    <div class="kvs">
+      <div class="kv"><div class="l">Supply APY</div><div class="v blue">+${P(p.supplyApy)}</div></div>
+      <div class="kv"><div class="l">Leverage (actual)</div><div class="v">${lev.toFixed(2)}×</div></div>
+      <div class="kv"><div class="l">Est. net APY</div><div class="v ${netApyPct >= 0 ? 'blue' : 'bad'}">${netApyPct >= 0 ? '+' : ''}${P(netApyPct)}</div></div>
+      <div class="kv"><div class="l">Est. net/day</div><div class="v ${netDaily >= 0 ? 'blue' : 'bad'}">${netDaily >= 0 ? '+' : ''}${U(netDaily)}</div></div>
+      <div class="kv"><div class="l">Net equity</div><div class="v">${U(eq)}</div></div>
+    </div>
+  </div>` : ''}
+</div>`;
+    }).join('');
+  }
+
+  async function fetchPositions() {
+    const addr = document.getElementById('pos-addr').value.trim();
+    const chainId = document.getElementById('pos-chain').value;
+    const btn = document.getElementById('pos-fetch-btn');
+    const errEl = document.getElementById('pos-error');
+    errEl.style.display = 'none';
+    if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+      errEl.textContent = 'Enter a valid 0x wallet address.';
+      errEl.style.display = 'block';
+      return;
+    }
+    btn.textContent = 'Loading…';
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/morpho-positions?address=${addr}&chainId=${chainId}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      renderPositions(json.positions || []);
+    } catch (e) {
+      errEl.textContent = 'Failed to load positions: ' + (e.message || 'network error');
+      errEl.style.display = 'block';
+    } finally {
+      btn.textContent = 'Fetch';
+      btn.disabled = false;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('pos-fetch-btn');
+    if (btn) btn.addEventListener('click', fetchPositions);
+    const addr = document.getElementById('pos-addr');
+    if (addr) addr.addEventListener('keydown', function(e) { if (e.key === 'Enter') fetchPositions(); });
+  });
 
   document.addEventListener('DOMContentLoaded', load);
 })();
