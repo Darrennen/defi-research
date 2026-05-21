@@ -14,6 +14,7 @@ export interface WhaleAlert {
   chain?: string
   txHash?: string
   txUrl?: string
+  arkhamUrl?: string
   direction?: string
   fromLabel?: string
   toLabel?: string
@@ -109,6 +110,7 @@ export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
     if (allowed.some(prefix => url.startsWith(prefix))) {
       out.txUrl = url
     }
+    out.arkhamUrl = `https://platform.arkhamintelligence.com/explorer/tx/${txMatch[0]}`
   }
 
   // Wallet address (40-char hex, skip tx hashes)

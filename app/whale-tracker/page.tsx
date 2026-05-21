@@ -308,18 +308,23 @@ export default function WhaleTrackerPage() {
                     {timeAgo(alert.ts)}
                   </td>
 
-                  {/* Tx link */}
+                  {/* Tx links */}
                   <td style={{ textAlign: 'right' }}>
-                    {alert.txUrl ? (
-                      <a
-                        href={alert.txUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue)', textDecoration: 'none' }}
-                      >
-                        View ↗
-                      </a>
-                    ) : '—'}
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                      {alert.arkhamUrl && (
+                        <a href={alert.arkhamUrl} target="_blank" rel="noopener noreferrer"
+                          style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue)', textDecoration: 'none' }}>
+                          Arkham ↗
+                        </a>
+                      )}
+                      {alert.txUrl && (
+                        <a href={alert.txUrl} target="_blank" rel="noopener noreferrer"
+                          style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', textDecoration: 'none' }}>
+                          Etherscan ↗
+                        </a>
+                      )}
+                      {!alert.arkhamUrl && !alert.txUrl && '—'}
+                    </div>
                   </td>
                 </tr>
               ))}
