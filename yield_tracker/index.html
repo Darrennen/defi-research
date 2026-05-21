@@ -3789,10 +3789,15 @@ footer.site ul a:hover { color: var(--blue); }
 
     // Portfolio growth block
     const portHistory = portfolioHistory(positions);
-    const portEntry = portHistory[0];
-    // Auto-detect entry date from history; user can override both fields
-    const autoEntryTs = portEntry?.ts ?? null;
-    const autoEntryEquity = portEntry?.equity ?? null;
+
+    // Derive entry equity and date by summing individual position data —
+    // much more reliable than the merged portfolio timeseries
+    const posWithEntry = positions.filter(p => p.entryEquity != null);
+    const autoEntryEquity = posWithEntry.length ? posWithEntry.reduce((s, p) => s + p.entryEquity, 0) : null;
+    // Use the earliest per-position entry timestamp
+    const autoEntryTs = posWithEntry.length
+      ? Math.min(...posWithEntry.map(p => p.entryTs).filter(Boolean))
+      : null;
     const currentEquityNow = equity;
 
     const ppBlock = document.createElement('div');
