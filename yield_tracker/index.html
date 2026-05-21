@@ -2184,8 +2184,8 @@ footer.site ul a:hover { color: var(--blue); }
     <button class="yt-theme-btn" id="ytThemeBtn" aria-label="Toggle theme"><svg width="14" height="19" viewBox="0 0 560 760" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M339.66 587.06C358.34 535.13 386.43 487.06 426.41 451.5C436.24 438.4 445.39 424.78 453.76 410.6C462.18 396.33 492.97 331.04 493.42 325.89C492.36 327.16 491.44 328.25 490.53 329.35C482.4 339.19 474.44 349.18 466.12 358.85C442.1 386.78 415.83 412.57 389.65 438.42C377.03 450.88 366.29 464.71 358.55 480.7C352.34 493.53 350.02 505.8 343.46 518.47C318.1 567.42 291.95 587.72 276.35 598.16C275.07 599.02 274.25 599.34 273.74 599.35C259.95 612.07 244.76 623.4 228.34 633.08C181.66 661.31 128.8 676.19 78.29 695.66C71.66 698.26 65.04 700.98 58.55 703.94C56.94 704.97 55.33 706.01 53.71 707.02C44.66 712.2 36.65 719.63 30.42 728.13C27.64 732 24.91 736.17 24.16 740.97C13.72 731.92 9.2 720.63 8.83 707.56C8.43 693.06 13.89 677.78 24.28 663.22C28.34 665.74 32.27 668.51 36.48 670.75C48.62 677.21 61.96 678.78 75.39 679.18C129.9 635.13 175.63 581.48 217.82 526.16C241.14 495.25 263.56 463.21 284.98 430.99C337.29 353.14 384.19 271.72 433.12 191.58C369.38 269.11 295.27 338.86 223.19 407.78C181.07 448.23 138.06 487.93 100.87 532.99C78.96 560.33 51.71 597.95 57.61 634.76C45.01 589.28 84.7 536.49 111.51 502.54C142.3 464.61 176.74 429.92 211.32 395.54C306.03 302.1 404.82 211.26 486.74 106.29C496.2 91.8 505.83 77.42 515.66 63.17C520.55 54.57 525.43 46.03 530.31 37.58C537.54 25.06 544.74 12.53 551.95 0C551.11 0.02 550.71 0.37 550.38 0.78C532.56 23.03 515.03 45.53 496.87 67.5C444.41 130.93 389.29 192.01 332.93 251.98C287.87 299.91 241.32 346.34 193.65 391.68C160.92 422.8 128.11 453.85 96.04 485.64C70.86 510.6 47.94 537.58 30.45 568.73C19.68 587.91 10.61 607.74 7.29 629.71C5.64 640.63 6 651.33 12.83 660.76C12.41 661.51 12.06 662.14 11.7 662.76C0.85 682.05 -3.31 702.39 2.9 724.04C6.66 737.15 13.69 747.98 26.75 753.78C28.52 754.57 30.37 755.18 32.57 756.03C30.45 744.62 34.42 736.24 43.01 730.58C48.68 726.85 55.15 723.91 61.66 721.05C123.66 693.85 188.66 673.78 247.41 638.4C277.84 620.07 305.36 597.78 326.62 568.91C334.39 570.16 336.95 578.55 339.66 587.06Z" fill="var(--blue)"/><path d="M558.69 57.75C553.77 64.75 548.84 71.74 543.96 78.77C502.43 138.57 459.5 197.33 415.38 255.2C376.95 322.84 337.14 389.93 293.28 454.23C237.41 535.5 175.49 614.69 97.65 676.12C114.8 668.29 132.56 660.94 149.21 653.69C237.8 616.05 296.28 573.93 340.22 486.05C365.44 424.98 386.96 378.07 410.38 332.05C428.61 296.24 448.11 261.06 467.41 225.79C492.78 179.42 518.53 133.25 544.05 86.96C549.5 77.08 554.7 67.07 560.02 57.12C559.24 57.09 558.94 57.39 558.7 57.73Z" fill="var(--blue)"/></svg></button>
   </div>
   <div class="kpi-strip">
-    <div class="ksk"><div class="l">Capital (USD)</div><div class="v">4,100</div></div>
-    <div class="ksk"><div class="l">Health Factor</div><div class="v">2.00</div></div>
+    <div class="ksk"><div class="l">Capital (USD)</div><div class="v" id="kpi-capital">4,100</div></div>
+    <div class="ksk"><div class="l">Health Factor</div><div class="v" id="kpi-hf">2.00</div></div>
     <div class="ksk"><div class="l">Min PT APY (%)</div><div class="v">5.00</div></div>
     <div class="ksk"><div class="l">Gas</div><div class="v" id="kpi-gas">0.10 gwei · $0</div></div>
     <div class="ksk"><div class="l">apxUSD peg</div><div class="v blue" id="kpi-peg">$0.9998 <span class="d">+0.01%</span></div></div>
@@ -2358,7 +2358,7 @@ footer.site ul a:hover { color: var(--blue); }
       <span class="num">01</span>
       <span class="h-up">Strategy Calculator</span>
     </div>
-    <div class="rhs">29d · HF 2.00 · 8 loops · LLTV 86.0%</div>
+    <div class="rhs" id="sec-calc-rhs">Calculating…</div>
   </div>
 
   <div class="calc-toolbar">
@@ -2377,22 +2377,17 @@ footer.site ul a:hover { color: var(--blue); }
       </div>
       <div class="field">
         <span class="lbl">Strategy preset</span>
-        <select>
-          <option>PT-apyUSD-18JUN2026 + Morpho (borrow apxUSD) · 25.91%</option>
-          <option>PT-apyUSD-18JUN2026 + Morpho (borrow USDC) · 24.30%</option>
-          <option>PT-apxUSD-18JUN2026 + Morpho (borrow USDC) · 16.39%</option>
-          <option>PT-reUSDe-25JUN2026 + Morpho · 11.34%</option>
-        </select>
+        <select id="cin-preset"><option value="">Loading live strategies…</option></select>
       </div>
       <div class="pair-row">
-        <div class="field"><span class="lbl">Capital <span class="u">USD</span></span><input type="number" value="4100"></div>
-        <div class="field"><span class="lbl">Duration <span class="u">days</span></span><input type="number" value="29"></div>
-        <div class="field"><span class="lbl">Collateral APY <span class="u">%</span></span><input type="number" value="17.25" step="0.01"></div>
-        <div class="field"><span class="lbl">Borrow APY <span class="u">%</span></span><input type="number" value="5.77" step="0.01"></div>
-        <div class="field"><span class="lbl">LLTV <span class="u">%</span></span><input type="number" value="86.00" step="0.5"></div>
-        <div class="field"><span class="lbl">Target HF <span class="u">×</span></span><input type="number" value="2.00" step="0.05"></div>
-        <div class="field"><span class="lbl">Gas / loop tx <span class="u">$</span></span><input type="number" value="150"></div>
-        <div class="field"><span class="lbl">Loops</span><input type="number" value="8"></div>
+        <div class="field"><span class="lbl">Capital <span class="u">USD</span></span><input id="cin-capital" type="number" value="4100"></div>
+        <div class="field"><span class="lbl">Duration <span class="u">days</span></span><input id="cin-duration" type="number" value="29"></div>
+        <div class="field"><span class="lbl">Collateral APY <span class="u">%</span></span><input id="cin-coll-apy" type="number" value="17.25" step="0.01"></div>
+        <div class="field"><span class="lbl">Borrow APY <span class="u">%</span></span><input id="cin-borrow-apy" type="number" value="5.77" step="0.01"></div>
+        <div class="field"><span class="lbl">LLTV <span class="u">%</span></span><input id="cin-lltv" type="number" value="86.00" step="0.5"></div>
+        <div class="field"><span class="lbl">Target HF <span class="u">×</span></span><input id="cin-hf" type="number" value="2.00" step="0.05"></div>
+        <div class="field"><span class="lbl">Gas / loop tx <span class="u">$</span></span><input id="cin-gas" type="number" value="150"></div>
+        <div class="field"><span class="lbl">Loops</span><input id="cin-loops" type="number" value="8"></div>
       </div>
       <div class="hint">↑ Live PT APY / borrow rates auto-fill when you pick a Pendle preset.</div>
     </div>
@@ -2400,48 +2395,48 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="calc-out">
       <div class="top">
         <span class="l">Position output</span>
-        <span class="r">29d · HF 2.00 · 8 loops · LLTV 86.0%</span>
+        <span class="r" id="cout-summary">—</span>
       </div>
       <div class="top-row">
         <div class="b featured">
           <div class="l">Net APY</div>
-          <div class="v blue">25.91<span class="unit">%</span></div>
-          <div class="s pos">▲ 8.66% vs simple hold</div>
+          <div class="v blue" id="cout-net-apy">—</div>
+          <div class="s pos" id="cout-net-apy-sub">—</div>
         </div>
         <div class="b">
           <div class="l">Leverage</div>
-          <div class="v">1.75<span class="unit">×</span></div>
-          <div class="s">8 loops · LTV 43.0%</div>
+          <div class="v" id="cout-leverage">—</div>
+          <div class="s" id="cout-leverage-sub">—</div>
         </div>
         <div class="b">
           <div class="l">Total position</div>
-          <div class="v">$7,193</div>
-          <div class="s">debt $3,093</div>
+          <div class="v" id="cout-total-pos">—</div>
+          <div class="s" id="cout-total-pos-sub">—</div>
         </div>
         <div class="b">
           <div class="l">Liq. price</div>
-          <div class="v bad">0.5000</div>
-          <div class="s">HF 2.00</div>
+          <div class="v bad" id="cout-liq-price">—</div>
+          <div class="s" id="cout-liq-hf">—</div>
         </div>
         <div class="b">
           <div class="l">Gross profit</div>
-          <div class="v">$84</div>
-          <div class="s">over 29 days</div>
+          <div class="v" id="cout-gross">—</div>
+          <div class="s" id="cout-gross-sub">—</div>
         </div>
         <div class="b">
           <div class="l">Gas cost</div>
-          <div class="v">$150</div>
+          <div class="v" id="cout-gas">—</div>
           <div class="s">loop tx</div>
         </div>
         <div class="b">
           <div class="l">Net profit</div>
-          <div class="v bad">$−66</div>
-          <div class="s bad">on $4,100 capital</div>
+          <div class="v" id="cout-net-profit">—</div>
+          <div class="s" id="cout-net-profit-sub">—</div>
         </div>
         <div class="b">
           <div class="l">B/E borrow</div>
-          <div class="v">40.12<span class="unit">%</span></div>
-          <div class="s">B/E capital $16,713</div>
+          <div class="v" id="cout-be-borrow">—</div>
+          <div class="s" id="cout-be-capital-sub">—</div>
         </div>
       </div>
 
@@ -2454,13 +2449,7 @@ footer.site ul a:hover { color: var(--blue); }
           <thead>
             <tr><th>HF</th><th>LTV</th><th>Leverage</th><th>Net APY</th><th>Gross</th><th>Net profit</th></tr>
           </thead>
-          <tbody>
-            <tr><td>1.50×</td><td>57.3%</td><td>2.34×</td><td class="pos">32.68%</td><td>$106</td><td class="bad">$−44</td></tr>
-            <tr><td>1.75×</td><td>49.1%</td><td>1.97×</td><td class="pos">28.34%</td><td>$92</td><td class="bad">$−58</td></tr>
-            <tr class="focus"><td>2.00× ★</td><td>43.0%</td><td>1.75×</td><td class="pos">25.91%</td><td>$84</td><td class="bad">$−66</td></tr>
-            <tr><td>2.50×</td><td>34.4%</td><td>1.52×</td><td class="pos">23.27%</td><td>$76</td><td class="bad">$−74</td></tr>
-            <tr><td>3.00×</td><td>28.7%</td><td>1.40×</td><td class="pos">21.86%</td><td>$71</td><td class="bad">$−79</td></tr>
-          </tbody>
+          <tbody id="cout-hf-tbody"></tbody>
         </table></div>
       </div>
     </div>
@@ -3310,6 +3299,8 @@ footer.site ul a:hover { color: var(--blue); }
 
 <script>
 (function() {
+  let cachedData = null;
+
   /* ---- format helpers ---- */
   function U(n) {
     if (n == null || isNaN(n)) return '—';
@@ -3333,6 +3324,132 @@ footer.site ul a:hover { color: var(--blue); }
     return `<div class="signal-cell">Neutral<span class="tier ${tc(p.risk_tier)}">T${p.risk_tier}</span></div>`;
   }
 
+  /* ---- calculator engine ---- */
+  function calcAtHF(capital, days, collApy, borrowApy, lltv, gasLoop, hf) {
+    const ltv = (lltv / 100) / hf;
+    const leverage = 1 / (1 - ltv);
+    const netApyFrac = (collApy / 100) * leverage - (borrowApy / 100) * (leverage - 1);
+    const gross = capital * netApyFrac * days / 365;
+    return { ltv: ltv * 100, leverage, netApy: netApyFrac * 100, gross, netProfit: gross - gasLoop };
+  }
+
+  function loopCalc() {
+    const capital   = parseFloat(document.getElementById('cin-capital').value)   || 0;
+    const days      = parseFloat(document.getElementById('cin-duration').value)   || 0;
+    const collApy   = parseFloat(document.getElementById('cin-coll-apy').value)   || 0;
+    const borrowApy = parseFloat(document.getElementById('cin-borrow-apy').value) || 0;
+    const lltv      = parseFloat(document.getElementById('cin-lltv').value)       || 0;
+    const hf        = parseFloat(document.getElementById('cin-hf').value)         || 2;
+    const gasLoop   = parseFloat(document.getElementById('cin-gas').value)        || 0;
+
+    const r = calcAtHF(capital, days, collApy, borrowApy, lltv, gasLoop, hf);
+    const totalPos = capital * r.leverage;
+    const debt = totalPos - capital;
+    const liqPrice = totalPos > 0 ? debt / (totalPos * (lltv / 100)) : 0;
+    const simpleAlpha = r.netApy - collApy;
+    const bevenBorrow = r.leverage > 1 ? collApy * r.leverage / (r.leverage - 1) : null;
+    const extraFrac = Math.max(0, (r.netApy - collApy) / 100);
+    const bevenCapital = extraFrac > 0 ? Math.round(gasLoop / (extraFrac * days / 365)) : null;
+
+    function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+    function setH(id, val) { const el = document.getElementById(id); if (el) el.innerHTML = val; }
+    function fmtProfit(n) { return n >= 0 ? '$' + Math.round(n) : '$−' + Math.round(Math.abs(n)); }
+
+    // Net APY
+    const naEl = document.getElementById('cout-net-apy');
+    if (naEl) { naEl.innerHTML = r.netApy.toFixed(2) + '<span class="unit">%</span>'; naEl.className = 'v ' + (r.netApy >= 0 ? 'blue' : 'bad'); }
+    const naSubEl = document.getElementById('cout-net-apy-sub');
+    if (naSubEl) { naSubEl.textContent = (simpleAlpha >= 0 ? '▲ ' : '▼ ') + Math.abs(simpleAlpha).toFixed(2) + '% vs simple hold'; naSubEl.className = 's ' + (simpleAlpha >= 0 ? 'pos' : 'bad'); }
+
+    // Leverage
+    setH('cout-leverage', r.leverage.toFixed(2) + '<span class="unit">×</span>');
+    set('cout-leverage-sub', 'LTV ' + r.ltv.toFixed(1) + '%');
+
+    // Total position
+    set('cout-total-pos', '$' + Math.round(totalPos).toLocaleString());
+    set('cout-total-pos-sub', 'debt $' + Math.round(debt).toLocaleString());
+
+    // Liq price
+    const liqEl = document.getElementById('cout-liq-price');
+    if (liqEl) { liqEl.textContent = liqPrice.toFixed(4); liqEl.className = 'v bad'; }
+    set('cout-liq-hf', 'HF ' + hf.toFixed(2));
+
+    // Profits
+    set('cout-gross', '$' + Math.round(r.gross));
+    set('cout-gross-sub', 'over ' + days + ' days');
+    set('cout-gas', '$' + Math.round(gasLoop));
+    const npEl = document.getElementById('cout-net-profit');
+    if (npEl) { npEl.textContent = fmtProfit(r.netProfit); npEl.className = 'v ' + (r.netProfit >= 0 ? '' : 'bad'); }
+    const npSubEl = document.getElementById('cout-net-profit-sub');
+    if (npSubEl) { npSubEl.textContent = 'on $' + Math.round(capital).toLocaleString() + ' capital'; npSubEl.className = 's ' + (r.netProfit >= 0 ? '' : 'bad'); }
+
+    // B/E borrow
+    if (bevenBorrow !== null) {
+      setH('cout-be-borrow', bevenBorrow.toFixed(2) + '<span class="unit">%</span>');
+      set('cout-be-capital-sub', bevenCapital !== null ? 'B/E capital $' + bevenCapital.toLocaleString() : '');
+    }
+
+    // Summary lines
+    const summary = days + 'd · HF ' + hf.toFixed(2) + ' · LLTV ' + lltv.toFixed(1) + '%';
+    set('cout-summary', summary);
+    set('sec-calc-rhs', summary);
+
+    // KPI strip sync
+    set('kpi-capital', Math.round(capital).toLocaleString());
+    set('kpi-hf', hf.toFixed(2));
+
+    // HF sensitivity table
+    const tbody = document.getElementById('cout-hf-tbody');
+    if (tbody) {
+      tbody.innerHTML = [1.5, 1.75, 2.0, 2.5, 3.0].map(h => {
+        const row = calcAtHF(capital, days, collApy, borrowApy, lltv, gasLoop, h);
+        const isCur = Math.abs(h - hf) < 0.01;
+        return '<tr' + (isCur ? ' class="focus"' : '') + '>' +
+          '<td>' + h.toFixed(2) + '×' + (isCur ? ' ★' : '') + '</td>' +
+          '<td>' + row.ltv.toFixed(1) + '%</td>' +
+          '<td>' + row.leverage.toFixed(2) + '×</td>' +
+          '<td class="' + (row.netApy >= 0 ? 'pos' : 'bad') + '">' + row.netApy.toFixed(2) + '%</td>' +
+          '<td>$' + Math.round(row.gross) + '</td>' +
+          '<td class="' + (row.netProfit >= 0 ? '' : 'bad') + '">' + fmtProfit(row.netProfit) + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+  }
+
+  function populatePresets(loops) {
+    const sel = document.getElementById('cin-preset');
+    if (!sel || !loops) return;
+    const top = loops.filter(l => l.loop && l.days_left).sort((a,b) => (b.loop.net_apy||0) - (a.loop.net_apy||0)).slice(0, 10);
+    if (!top.length) return;
+    sel.innerHTML = top.map(l =>
+      '<option value="' + l.collateral + '|' + l.loan + '">' +
+      l.collateral + ' + Morpho (borrow ' + l.loan + ') · ' + (l.loop.net_apy||0).toFixed(2) + '%' +
+      '</option>'
+    ).join('');
+    applyPreset(top[0]);
+    sel.addEventListener('change', function() {
+      const [col, loan] = this.value.split('|');
+      const match = (cachedData.loops || []).find(l => l.collateral === col && l.loan === loan);
+      if (match) applyPreset(match);
+    });
+  }
+
+  function applyPreset(loop) {
+    function setVal(id, v) { const el = document.getElementById(id); if (el && v != null) el.value = v; }
+    setVal('cin-coll-apy',   loop.pendle_pt_apy);
+    setVal('cin-borrow-apy', loop.borrow_apy);
+    setVal('cin-lltv',       loop.lltv);
+    setVal('cin-duration',   loop.days_left);
+    loopCalc();
+  }
+
+  /* ---- wire calculator inputs ---- */
+  ['cin-capital','cin-duration','cin-coll-apy','cin-borrow-apy','cin-lltv','cin-hf','cin-gas','cin-loops'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', loopCalc);
+  });
+  loopCalc();
+
   async function load() {
     let data;
     try {
@@ -3341,8 +3458,16 @@ footer.site ul a:hover { color: var(--blue); }
       data = j.data;
     } catch(e) { console.error('yield-data fetch failed', e); return; }
     if (!data) return;
+    cachedData = data;
 
     const { pendle = [], loops = [], lp_opps = [], morpho_lending = [], aave = [], ethena = {}, gas = {}, peg = {} } = data;
+
+    /* ---- Calculator: populate presets + auto-fill gas cost ---- */
+    if (gas.cost_loop != null) {
+      const gasInput = document.getElementById('cin-gas');
+      if (gasInput) { gasInput.value = Math.round(gas.cost_loop); }
+    }
+    populatePresets(loops);
 
     /* ---- Header KPIs ---- */
     const gasEl = document.getElementById('kpi-gas');
