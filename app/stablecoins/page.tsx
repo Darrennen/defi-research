@@ -77,7 +77,10 @@ export default async function StablecoinsPage() {
                 <tr key={s.id}>
                   <td>{i + 1}</td>
                   <td className="name">
-                    {s.symbol}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {s.logo && <img src={s.logo} alt={s.symbol} width={16} height={16} style={{ borderRadius: '50%' }} />}
+                      {s.symbol}
+                    </span>
                     <span className="sym">{s.name}</span>
                   </td>
                   <td><MechBadge mech={s.pegMechanism} /></td>
