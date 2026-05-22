@@ -157,6 +157,14 @@ def fetch_pendle():
         else:
             signal = "neutral"
 
+        cat_map = {
+            "rwa": "RWA", "lsd": "LSD", "liquid-staking": "LSD",
+            "restaking": "Restaking", "stablecoin": "Stablecoin",
+            "yield-bearing": "Yield", "btc": "BTC", "lending": "Lending",
+        }
+        cat_id       = (m.get("categoryIds") or [""])[0]
+        category_type = cat_map.get(cat_id, cat_id.title() if cat_id else "—")
+
         results.append({
             "name":                    pt.get("symbol") or m.get("symbol") or "?",
             "address":                 m.get("address", ""),
@@ -182,10 +190,14 @@ def fetch_pendle():
             "underlying_reward_apy":   round((m.get("underlyingRewardApy") or 0) * 100, 2),
             "yt_floating_apy":         round((m.get("ytFloatingApy") or 0) * 100, 2),
             "category_ids":            m.get("categoryIds") or [],
+            "category_type":           category_type,
             "protocol":                m.get("protocol") or "",
             "zappable":                bool(m.get("zappable")),
             "alpha":                   None,
             "risk_tier":               None,
+            "trend_7d":                None,
+            "trend_dir":               None,
+            "spark_implied":           None,
         })
     return sorted(results, key=lambda x: x["pt_apy"], reverse=True)
 

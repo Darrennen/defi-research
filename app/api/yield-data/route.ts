@@ -25,6 +25,17 @@ function r1(n: number) { return Math.round(n * 10) / 10 }
 
 // ── Pendle ────────────────────────────────────────────────────────────
 
+const PENDLE_CAT_MAP: Record<string, string> = {
+  'rwa':            'RWA',
+  'lsd':            'LSD',
+  'liquid-staking': 'LSD',
+  'restaking':      'Restaking',
+  'stablecoin':     'Stablecoin',
+  'yield-bearing':  'Yield',
+  'btc':            'BTC',
+  'lending':        'Lending',
+}
+
 async function fetchPendle() {
   const resp = await fetch(
     `https://api-v2.pendle.finance/core/v1/${PENDLE_CHAIN}/markets?skip=0&limit=100`,
@@ -54,6 +65,8 @@ async function fetchPendle() {
     const swapFeeApy   = r2((m.swapFeeApy   ?? 0) * 100)
     const lpRewardApy  = r2((m.lpRewardApy  ?? 0) * 100)
     const lpTotalApy   = r2(((m.underlyingApy ?? 0) + (m.pendleApy ?? 0) + (m.swapFeeApy ?? 0) + (m.lpRewardApy ?? 0)) * 100)
+    const catId        = (m.categoryIds ?? [])[0] ?? ''
+    const categoryType = PENDLE_CAT_MAP[catId] ?? (catId ? catId.split('-').map((w: string) => w.slice(0,1).toUpperCase() + w.slice(1)).join(' ') : '—')
     out.push({
       name:                    pt.symbol ?? m.symbol ?? '?',
       address:                 m.address ?? '',
@@ -77,11 +90,67 @@ async function fetchPendle() {
       underlying_reward_apy:   r2((m.underlyingRewardApy   ?? 0) * 100),
       yt_floating_apy:         r2((m.ytFloatingApy         ?? 0) * 100),
       category_ids:            m.categoryIds ?? [],
+      category_type:           categoryType,
       protocol:                m.protocol ?? '',
       zappable:                !!m.zappable,
     })
   }
   return out.sort((a, b) => b.pt_apy - a.pt_apy)
+}
+
+// ── Pendle Historical Trend (top 10 by alpha) ─────────────────────────
+
+async function fetchPendleHistory(markets: any[]): Promise<Record<string, any>> {
+  const top10 = markets
+    .filter(m => m.alpha != null)
+    .sort((a, b) => b.alpha - a.alpha)
+    .slice(0, 10)
+
+  const results = await Promise.all(top10.map(async (m) => {
+    try {
+      const resp = await fetch(
+        `https://api-v2.pendle.finance/core/v3/${PENDLE_CHAIN}/markets/${m.address}/historical-data?timeFrame=1M`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' } }
+      )
+      if (!resp.ok) return { address: m.address }
+      const data = await resp.json()
+      const pts = (data.results ?? data.data ?? []) as any[]
+      if (pts.length < 2) return { address: m.address }
+
+      const sorted = pts.slice().sort((a: any, b: any) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      )
+      const latest   = sorted[sorted.length - 1]
+      const nowApy   = r2((latest.impliedApy ?? 0) * 100)
+      const nowTs    = new Date(latest.timestamp).getTime()
+      const ago7ms   = nowTs - 7 * 86_400_000
+
+      // closest point at or before 7 days ago
+      const pt7 = sorted.reduce((best: any, pt: any) => {
+        const t = new Date(pt.timestamp).getTime()
+        if (t > ago7ms) return best
+        return (!best || Math.abs(t - ago7ms) < Math.abs(new Date(best.timestamp).getTime() - ago7ms)) ? pt : best
+      }, null as any)
+
+      const apy7d    = pt7 ? r2((pt7.impliedApy ?? 0) * 100) : null
+      const trend_7d = apy7d != null ? r2(nowApy - apy7d) : null
+      const trend_dir =
+        trend_7d == null ? null :
+        trend_7d > 0.3  ? 'up' :
+        trend_7d < -0.3 ? 'down' : 'flat'
+
+      const step          = Math.max(1, Math.floor(sorted.length / 14))
+      const spark_implied = sorted
+        .filter((_: any, i: number) => i % step === 0)
+        .map((pt: any) => r2((pt.impliedApy ?? 0) * 100))
+
+      return { address: m.address, trend_7d, trend_dir, spark_implied }
+    } catch {
+      return { address: m.address }
+    }
+  }))
+
+  return Object.fromEntries(results.map(r => [r.address, r]))
 }
 
 // ── Morpho ────────────────────────────────────────────────────────────
@@ -391,7 +460,14 @@ export async function GET() {
     const gas     = gasR.status     === 'fulfilled' ? gasR.value     : {}
     const peg     = pegR.status     === 'fulfilled' ? pegR.value     : { price: null, status: 'unknown' }
 
-    const enriched = enrichPendle(pendle, aave as any[])
+    const enriched0 = enrichPendle(pendle, aave as any[])
+    const histMap   = await safe(() => fetchPendleHistory(enriched0), {} as Record<string, any>)
+    const enriched  = enriched0.map((m: any) => {
+      const h = histMap[m.address] ?? {}
+      return h.trend_dir != null
+        ? { ...m, trend_7d: h.trend_7d, trend_dir: h.trend_dir, spark_implied: h.spark_implied }
+        : m
+    })
     const loops    = buildLoops(enriched, (morpho as any).ptList, gas)
     const lp_opps  = buildLpOpps(enriched)
 

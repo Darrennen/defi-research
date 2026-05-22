@@ -2054,6 +2054,17 @@ footer.site ul a:hover { color: var(--blue); }
   .tyc .alpha-bar .bar { width: 90px; height: 6px; background: var(--rule-soft); position: relative; }
   .tyc .alpha-bar .bar i { display: block; height: 100%; background: var(--blue); }
   .tyc .alpha-bar .v { color: var(--blue); }
+  .tyc td:nth-child(6), .tyc th:nth-child(6) { text-align: center; }
+  .cat-badge {
+    display: inline-block; padding: 1px 5px; border-radius: 3px;
+    font-family: var(--sans); font-size: 9px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    background: var(--rule-soft); color: var(--ink-mute);
+  }
+  .trend-up   { color: var(--green, #22c55e); }
+  .trend-down { color: var(--red,   #ef4444); }
+  .trend-flat { color: var(--ink-mute); }
+  .trend-cell { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; }
 
   /* ---- 06 MORPHO LENDING ---- */
   .util-cell { display: inline-flex; align-items: center; gap: 8px; }
@@ -3202,7 +3213,7 @@ footer.site ul a:hover { color: var(--blue); }
   function utilClass(u) { return u > 95 ? 'crit' : u > 80 ? 'warn' : ''; }
   function signalHtml(p) {
     if (!p) return '—';
-    if (p.signal === 'buy_yt') return `<div class="signal-cell yt-cheap">YT Cheap<span class="tier ${tc(p.risk_tier)}">T${p.risk_tier}</span></div>`;
+    if (p.signal === 'buy_yt') return `<div class="signal-cell yt-cheap">YT Cheap${p.yt_floating_apy > 0 ? ' · ' + P(p.yt_floating_apy) + ' float' : ''}<span class="tier ${tc(p.risk_tier)}">T${p.risk_tier}</span></div>`;
     if (p.signal === 'buy_pt') return `<div class="signal-cell cheap">PT Cheap · ${P(Math.abs(p.long_yield_apy),1)} above underlying<span class="tier ${tc(p.risk_tier)}">T${p.risk_tier}</span></div>`;
     return `<div class="signal-cell">Neutral<span class="tier ${tc(p.risk_tier)}">T${p.risk_tier}</span></div>`;
   }
@@ -3472,7 +3483,7 @@ footer.site ul a:hover { color: var(--blue); }
   <td>${P(p.pt_discount)}</td>
   <td>${U(p.liquidity_usd)}</td>
   <td>${U(p.volume_24h)}</td>
-  <td class="${lyaCls}">${(p.long_yield_apy ?? 0) >= 0 ? '' : '−'}${P(Math.abs(p.long_yield_apy ?? 0))}</td>
+  <td class="${lyaCls}"><div>${(p.long_yield_apy ?? 0) >= 0 ? '' : '−'}${P(Math.abs(p.long_yield_apy ?? 0))}</div>${p.yt_floating_apy > 0 ? `<div class="ds">YT ${P(p.yt_floating_apy)}</div>` : ''}</td>
   <td>${ytLev}</td>
   <td class="${alphaCls}">${alphaStr}</td>
   <td>${signalHtml(p)}</td>
@@ -3661,21 +3672,28 @@ footer.site ul a:hover { color: var(--blue); }
       ycContainer.innerHTML = Object.entries(groups).map(([sym, rows]) => {
         const sorted = rows.slice().sort((a, b) => a.days_left - b.days_left);
         const maxAlpha = Math.max(...sorted.map(r => Math.abs(r.alpha ?? 0)), 0.01);
+        const catBadge = sorted[0]?.category_type && sorted[0].category_type !== '—'
+          ? `<span class="cat-badge">${sorted[0].category_type}</span>` : '';
         return `<div class="yc-group">
-  <div class="gh"><span class="sym">${sym}</span><span class="meta">${sorted.length} maturit${sorted.length===1?'y':'ies'}</span></div>
+  <div class="gh"><span class="sym">${sym}</span>${catBadge}<span class="meta">${sorted.length} maturit${sorted.length===1?'y':'ies'}</span></div>
   <table class="tyc"><thead><tr>
-    <th>Expiry</th><th>Days</th><th>PT APY</th><th>Underlying</th><th>Alpha vs DeFi</th><th>Signal</th><th>Liquidity</th>
+    <th>Expiry</th><th>Days</th><th>PT APY</th><th>Underlying</th><th>Alpha vs DeFi</th><th>7d Trend</th><th>Signal</th><th>Liquidity</th>
   </tr></thead><tbody>
   ${sorted.map(r => {
     const alphaCls = (r.alpha ?? 0) >= 0 ? 'pos-cell' : 'neg-cell';
     const alphaStr = r.alpha != null ? ((r.alpha >= 0 ? '+' : '') + P(r.alpha)) : '—';
     const barW = Math.round(Math.min(100, (Math.abs(r.alpha ?? 0) / maxAlpha) * 100));
+    let trendCell = '<span class="trend-flat">—</span>';
+    if (r.trend_dir === 'up')   trendCell = `<span class="trend-cell trend-up">▲ +${P(r.trend_7d,2)}</span>`;
+    if (r.trend_dir === 'down') trendCell = `<span class="trend-cell trend-down">▼ ${P(r.trend_7d,2)}</span>`;
+    if (r.trend_dir === 'flat') trendCell = `<span class="trend-cell trend-flat">→ ${P(r.trend_7d??0,2)}</span>`;
     return `<tr>
     <td>${r.expiry || '—'}</td>
     <td>${r.days_left != null ? r.days_left + 'd' : '—'}</td>
     <td class="pos-cell">${P(r.pt_apy)}</td>
     <td>${P(r.underlying_apy)}</td>
     <td class="${alphaCls}"><div class="alpha-bar"><div class="bar"><i style="width:${barW}%"></i></div><span class="v">${alphaStr}</span></div></td>
+    <td>${trendCell}</td>
     <td>${signalHtml(r)}</td>
     <td>${U(r.liquidity_usd)}</td>
   </tr>`;
