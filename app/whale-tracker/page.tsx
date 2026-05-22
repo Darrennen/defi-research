@@ -6,6 +6,7 @@ import {
   PieChart, Pie,
 } from 'recharts'
 import type { WhaleAlert } from '@/app/api/slack-events/route'
+import EntityIntelligence from './EntityIntelligence'
 
 const CHAINS = ['All', 'Ethereum', 'Arbitrum', 'Base', 'Polygon', 'Optimism', 'Solana', 'BSC']
 
@@ -443,6 +444,11 @@ export default function WhaleTrackerPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Entity Intelligence */}
+      {!loading && !error && alerts.length > 0 && (
+        <EntityIntelligence alerts={alerts} />
       )}
 
       {/* Chain filter + search */}
