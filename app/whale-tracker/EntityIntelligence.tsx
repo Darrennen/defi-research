@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { WhaleAlert } from '@/app/api/slack-events/route'
 
 function fmtUSD(v: number): string {
@@ -100,6 +100,87 @@ function buildSummaries(alerts: WhaleAlert[], start: number, end: number): Entit
     .sort((a, b) => b.volume - a.volume)
 }
 
+function formatSummaryForClaude(s: EntitySummary, allAlerts: WhaleAlert[], start: number, end: number, label: string): string {
+  const MYT_MS = 8 * 60 * 60 * 1000
+  const toMYT = (ts: number) => new Date(ts + MYT_MS).toISOString().replace('T', ' ').slice(0, 16) + ' MYT'
+
+  const txs = allAlerts
+    .filter(a => a.entity === s.entity && a.ts >= start && a.ts < end)
+    .sort((a, b) => b.ts - a.ts)
+
+  const lines: string[] = [
+    `ENTITY INTELLIGENCE — ${s.entity.toUpperCase()}`,
+    `Snapshot: 24h ending ${label}`,
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `Volume:       ${fmtUSD(s.volume)}`,
+    `Transactions: ${s.txCount}`,
+    `Biggest move: ${s.biggestMove.amountFmt ?? '—'} ${s.biggestMove.token ?? ''}`,
+    s.biggestMove.fromLabel || s.biggestMove.toLabel
+      ? `  Flow: ${s.biggestMove.fromLabel ?? '?'} → ${s.biggestMove.toLabel ?? '?'}`
+      : '',
+    '',
+    `Tokens: ${s.tokens.map(t => `${t.name} ${t.pct}%`).join(' | ')}`,
+    `Chains: ${s.chains.join(', ')}`,
+    '',
+    `Key Flows:`,
+    ...s.recentFlows
+      .filter(f => f.from || f.to)
+      .map(f => `  • ${f.amount ? fmtUSD(f.amount) + ' — ' : ''}${f.from ?? '?'} → ${f.to ?? '?'}`),
+    '',
+    `All Transactions (newest first):`,
+    ...txs.map(a => {
+      const time = toMYT(a.ts)
+      const flow = (a.fromLabel || a.toLabel) ? ` | ${a.fromLabel ?? '?'} → ${a.toLabel ?? '?'}` : ''
+      const chain = a.chain ? ` | ${a.chain}` : ''
+      const link = a.arkhamUrl ? ` | ${a.arkhamUrl}` : a.txUrl ? ` | ${a.txUrl}` : ''
+      return `  [${time}] ${a.amountFmt ?? '?'} ${a.token ?? ''}${chain}${flow}${link}`
+    }),
+  ]
+
+  return lines.filter(l => l !== null).join('\n')
+}
+
+function formatAllForClaude(summaries: EntitySummary[], allAlerts: WhaleAlert[], start: number, end: number, label: string): string {
+  const header = [
+    `WHALE TRACKER — ENTITY INTELLIGENCE SNAPSHOT`,
+    `24h ending ${label}`,
+    `Entities: ${summaries.length} | Generated: ${new Date().toISOString().slice(0, 16)} UTC`,
+    `${'═'.repeat(50)}`,
+    '',
+  ].join('\n')
+
+  const bodies = summaries.map(s => formatSummaryForClaude(s, allAlerts, start, end, label))
+  return header + bodies.join('\n\n' + '─'.repeat(50) + '\n\n')
+}
+
+function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button
+      onClick={copy}
+      style={{
+        background: 'none',
+        border: '1px solid var(--rule)',
+        color: copied ? 'var(--green)' : 'var(--ink-mute)',
+        fontFamily: 'var(--mono)',
+        fontSize: 10,
+        padding: '3px 10px',
+        cursor: 'pointer',
+        letterSpacing: '0.05em',
+        whiteSpace: 'nowrap',
+        transition: 'color 0.2s',
+      }}
+    >
+      {copied ? '✓ Copied' : label}
+    </button>
+  )
+}
+
 function HourlyBar({ hourly }: { hourly: number[] }) {
   const max = Math.max(...hourly, 1)
   return (
@@ -122,7 +203,7 @@ function HourlyBar({ hourly }: { hourly: number[] }) {
   )
 }
 
-function EntityCard({ s }: { s: EntitySummary }) {
+function EntityCard({ s, copyText }: { s: EntitySummary; copyText: string }) {
   return (
     <div style={{
       background: 'var(--paper)',
@@ -137,12 +218,13 @@ function EntityCard({ s }: { s: EntitySummary }) {
         <div style={{ fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2 }}>
           {s.entity}
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--blue)' }}>
             {fmtUSD(s.volume)}
           </div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>
-            {s.txCount}tx
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>{s.txCount}tx</span>
+            <CopyButton text={copyText} label="Copy →Claude" />
           </div>
         </div>
       </div>
@@ -225,6 +307,10 @@ function EntityCard({ s }: { s: EntitySummary }) {
 export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] }) {
   const { start, end, label } = useMemo(getSnapshotWindow, [])
   const summaries = useMemo(() => buildSummaries(alerts, start, end), [alerts, start, end])
+  const allCopyText = useMemo(
+    () => formatAllForClaude(summaries, alerts, start, end, label),
+    [summaries, alerts, start, end, label]
+  )
 
   if (summaries.length === 0) {
     return (
@@ -249,6 +335,7 @@ export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] })
         <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
           24h snapshot ending {label} · {summaries.length} active entities
         </span>
+        <CopyButton text={allCopyText} label="Copy All →Claude" />
       </div>
 
       <div style={{
@@ -257,7 +344,13 @@ export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] })
         gap: 1,
         background: 'var(--rule)',
       }}>
-        {summaries.map(s => <EntityCard key={s.entity} s={s} />)}
+        {summaries.map(s => (
+          <EntityCard
+            key={s.entity}
+            s={s}
+            copyText={formatSummaryForClaude(s, alerts, start, end, label)}
+          />
+        ))}
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie,
@@ -63,48 +63,140 @@ const PIE_COLORS = ['#4a90d9', '#e8a838', '#48bb78', '#f56565', '#9f7aea', '#ed8
 // ── Analysis components ──────────────────────────────────────────────────────
 
 function VolumeChart({ alerts }: { alerts: WhaleAlert[] }) {
-  const data = useMemo(() => {
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+
+  const { data, dayAlertsMap } = useMemo(() => {
     const buckets: Record<string, number> = {}
+    const map: Record<string, WhaleAlert[]> = {}
     const now = Date.now()
     for (let i = 29; i >= 0; i--) {
       const d = new Date(now - i * 86400000)
-      buckets[`${d.getMonth() + 1}/${d.getDate()}`] = 0
+      const key = `${d.getMonth() + 1}/${d.getDate()}`
+      buckets[key] = 0
+      map[key] = []
     }
     for (const a of alerts) {
       if (!a.amount) continue
       const label = dayLabel(a.ts)
-      if (label in buckets) buckets[label] = (buckets[label] ?? 0) + a.amount
+      if (label in buckets) {
+        buckets[label] += a.amount
+        map[label].push(a)
+      }
     }
-    return Object.entries(buckets).map(([day, vol]) => ({ day, vol }))
+    // Sort each day's alerts by amount desc
+    for (const key of Object.keys(map)) map[key].sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+    return { data: Object.entries(buckets).map(([day, vol]) => ({ day, vol })), dayAlertsMap: map }
   }, [alerts])
 
   const maxVol = Math.max(...data.map(d => d.vol), 1)
+  const selectedAlerts = selectedDay ? (dayAlertsMap[selectedDay] ?? []) : []
+  const totalForDay = selectedAlerts.reduce((s, a) => s + (a.amount ?? 0), 0)
+
+  // Entity breakdown for selected day
+  const dayEntities = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const a of selectedAlerts) if (a.entity) m[a.entity] = (m[a.entity] ?? 0) + (a.amount ?? 0)
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  }, [selectedAlerts])
 
   return (
-    <ResponsiveContainer width="100%" height={160}>
-      <BarChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-        <XAxis
-          dataKey="day"
-          tick={{ fontFamily: 'var(--mono)', fontSize: 9, fill: 'var(--ink-mute)' }}
-          tickLine={false}
-          axisLine={false}
-          interval={4}
-        />
-        <YAxis hide />
-        <Tooltip
-          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-          contentStyle={{ background: '#111', border: '1px solid #2a2a2a', fontFamily: 'monospace', fontSize: 11, color: '#ccc' }}
-          labelStyle={{ color: '#ccc' }}
-          itemStyle={{ color: '#ccc' }}
-          formatter={(v: number) => [fmtUSD(v), 'Volume']}
-        />
-        <Bar dataKey="vol" radius={[2, 2, 0, 0]}>
-          {data.map((d, i) => (
-            <Cell key={i} fill={d.vol > maxVol * 0.6 ? 'var(--blue)' : 'var(--rule)'} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div>
+      <ResponsiveContainer width="100%" height={160}>
+        <BarChart
+          data={data}
+          margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
+          onClick={e => {
+            const day = e?.activeLabel as string | undefined
+            setSelectedDay(prev => prev === day ? null : (day ?? null))
+          }}
+          style={{ cursor: 'pointer' }}
+        >
+          <XAxis
+            dataKey="day"
+            tick={{ fontFamily: 'var(--mono)', fontSize: 9, fill: 'var(--ink-mute)' }}
+            tickLine={false}
+            axisLine={false}
+            interval={4}
+          />
+          <YAxis hide />
+          <Tooltip
+            cursor={{ fill: 'rgba(255,255,255,0.06)' }}
+            contentStyle={{ background: '#111', border: '1px solid #2a2a2a', fontFamily: 'monospace', fontSize: 11, color: '#ccc' }}
+            labelStyle={{ color: '#ccc' }}
+            itemStyle={{ color: '#ccc' }}
+            formatter={(v: number, _: string, p) => [
+              `${fmtUSD(v as number)} · ${dayAlertsMap[(p?.payload as { day?: string })?.day ?? '']?.length ?? 0} txs`,
+              'Volume',
+            ]}
+          />
+          <Bar dataKey="vol" radius={[2, 2, 0, 0]}>
+            {data.map((d, i) => (
+              <Cell
+                key={i}
+                fill={d.day === selectedDay ? '#7ab8f5' : d.vol > maxVol * 0.6 ? 'var(--blue)' : 'var(--rule)'}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      {/* Day drill-down panel */}
+      {selectedDay && selectedAlerts.length > 0 && (
+        <div style={{ marginTop: 16, borderTop: '1px solid var(--rule)', paddingTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)' }}>
+              {selectedDay} — {fmtUSD(totalForDay)} across {selectedAlerts.length} txs
+            </span>
+            <button onClick={() => setSelectedDay(null)} style={{ background: 'none', border: 'none', color: 'var(--ink-mute)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11 }}>
+              ✕ close
+            </button>
+          </div>
+
+          {/* Top entities that day */}
+          {dayEntities.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              {dayEntities.map(([entity, vol]) => (
+                <span key={entity} style={{ fontFamily: 'var(--mono)', fontSize: 10, padding: '2px 8px', border: '1px solid var(--rule)', color: 'var(--ink-soft)' }}>
+                  {entity} <span style={{ color: 'var(--blue)' }}>{fmtUSD(vol)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Transaction list */}
+          <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+            <table className="tab" style={{ fontSize: 12 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left' }}>Entity</th>
+                  <th>Amount</th>
+                  <th style={{ textAlign: 'left' }}>Token</th>
+                  <th style={{ textAlign: 'left' }}>Flow</th>
+                  <th style={{ textAlign: 'right' }}>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedAlerts.map(a => (
+                  <tr key={a.id}>
+                    <td className="name" style={{ fontSize: 12 }}>{a.entity ?? '—'}</td>
+                    <td className="pos" style={{ fontWeight: 600, fontSize: 12 }}>{a.amountFmt ?? '—'}</td>
+                    <td style={{ textAlign: 'left' }}>
+                      {a.token ? <span style={{ fontFamily: 'var(--mono)', fontSize: 9, padding: '1px 4px', border: '1px solid var(--rule)', color: 'var(--ink-mute)' }}>{a.token}</span> : '—'}
+                    </td>
+                    <td style={{ textAlign: 'left', fontFamily: 'var(--serif)', fontSize: 11, color: 'var(--ink-mute)' }}>
+                      {a.fromLabel}{a.fromLabel && a.toLabel ? ' → ' : ''}{a.toLabel}
+                    </td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', whiteSpace: 'nowrap' }}>
+                      {new Date(a.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
