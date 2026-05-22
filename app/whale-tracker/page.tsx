@@ -242,8 +242,8 @@ export default function WhaleTrackerPage() {
   const [error, setError] = useState<string | null>(null)
   const [chain, setChain] = useState('All')
   const [search, setSearch] = useState('')
-  const [backfilling, setBackfilling] = useState(false)
-  const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [hideCex, setHideCex] = useState(true)
   const [analysisOpen, setAnalysisOpen] = useState(true)
 
@@ -263,30 +263,35 @@ export default function WhaleTrackerPage() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchAlerts()
-    const id = setInterval(fetchAlerts, 30_000)
-    return () => clearInterval(id)
-  }, [fetchAlerts])
-
-  const runBackfill = async () => {
-    setBackfilling(true)
-    setBackfillMsg(null)
+  const runSync = useCallback(async (silent = false) => {
+    if (!silent) setSyncing(true)
+    setSyncMsg(null)
     try {
       const res = await fetch('/api/backfill-alerts', { method: 'POST' })
       const data = await res.json()
       if (data.ok) {
-        setBackfillMsg(`Loaded ${data.stored} alerts from the last 30 days`)
-        fetchAlerts()
-      } else {
-        setBackfillMsg(`Error: ${data.error}`)
+        if (data.stored > 0) {
+          fetchAlerts()
+          if (!silent) setSyncMsg(`Synced ${data.stored} new alerts`)
+        } else if (!silent) {
+          setSyncMsg('Already up to date')
+        }
+      } else if (!silent) {
+        setSyncMsg(`Error: ${data.error}`)
       }
     } catch {
-      setBackfillMsg('Failed to reach backfill endpoint')
+      if (!silent) setSyncMsg('Sync failed')
     } finally {
-      setBackfilling(false)
+      if (!silent) setSyncing(false)
     }
-  }
+  }, [fetchAlerts])
+
+  useEffect(() => {
+    fetchAlerts()
+    runSync(true) // auto-sync on mount, silently
+    const id = setInterval(fetchAlerts, 30_000)
+    return () => clearInterval(id)
+  }, [fetchAlerts, runSync])
 
   const todayStart = new Date().setHours(0, 0, 0, 0)
   const todayAlerts = alerts.filter(a => a.ts >= todayStart)
@@ -333,15 +338,15 @@ export default function WhaleTrackerPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 20, flexWrap: 'wrap' }}>
           <button
             className="btn ghost"
-            onClick={runBackfill}
-            disabled={backfilling}
-            style={{ fontSize: 12, padding: '10px 18px', opacity: backfilling ? 0.6 : 1 }}
+            onClick={() => runSync(false)}
+            disabled={syncing}
+            style={{ fontSize: 12, padding: '10px 18px', opacity: syncing ? 0.6 : 1 }}
           >
-            {backfilling ? 'Loading…' : 'Load 30-day History'} <span className="arr">↓</span>
+            {syncing ? 'Syncing…' : 'Force Sync'} <span className="arr">↺</span>
           </button>
-          {backfillMsg && (
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: backfillMsg.startsWith('Error') ? 'var(--red)' : 'var(--green)' }}>
-              {backfillMsg}
+          {syncMsg && (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: syncMsg.startsWith('Error') || syncMsg.startsWith('Sync') ? 'var(--red)' : 'var(--green)' }}>
+              {syncMsg}
             </span>
           )}
         </div>

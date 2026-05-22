@@ -11,7 +11,25 @@ export async function POST() {
     return NextResponse.json({ error: 'SLACK_BOT_TOKEN not set' }, { status: 500 })
   }
 
-  const oldest = Math.floor((Date.now() - DAYS * 24 * 60 * 60 * 1000) / 1000).toString()
+  // Find the newest alert already stored — only fetch since then (incremental sync).
+  // Falls back to 30 days if Redis is empty.
+  let oldest: string
+  try {
+    const newest = await redis.zrange<string[]>(WHALE_ALERTS_KEY, -1, -1)
+    if (newest.length > 0) {
+      const parsed = JSON.parse(newest[0]) as { ts: number }
+      // Use the newest stored alert's timestamp (minus 60s buffer for safety)
+      oldest = Math.max(
+        Math.floor(parsed.ts / 1000) - 60,
+        Math.floor((Date.now() - DAYS * 24 * 60 * 60 * 1000) / 1000)
+      ).toString()
+    } else {
+      oldest = Math.floor((Date.now() - DAYS * 24 * 60 * 60 * 1000) / 1000).toString()
+    }
+  } catch {
+    oldest = Math.floor((Date.now() - DAYS * 24 * 60 * 60 * 1000) / 1000).toString()
+  }
+
   let cursor: string | undefined
   let stored = 0
   let fetched = 0
@@ -41,11 +59,11 @@ export async function POST() {
         if (!msg.text || msg.text.length < 10) continue
         if (msg.subtype && msg.subtype !== 'bot_message') continue
 
-        const parsed = parseArkhamAlert(msg.text)
-        if (!isArkhamAlert(parsed)) continue  // skip regular chat messages
+        const parsedAlert = parseArkhamAlert(msg.text)
+        if (!isArkhamAlert(parsedAlert)) continue
 
         const ts = Math.floor(parseFloat(msg.ts) * 1000)
-        const alert: WhaleAlert = { id: msg.ts, ts, raw: msg.text, ...parsed }
+        const alert: WhaleAlert = { id: msg.ts, ts, raw: msg.text, ...parsedAlert }
 
         await redis.zadd(WHALE_ALERTS_KEY, { nx: true }, { score: ts, member: JSON.stringify(alert) })
         stored++
