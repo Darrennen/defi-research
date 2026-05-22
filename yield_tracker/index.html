@@ -3297,21 +3297,22 @@ footer.site ul a:hover { color: var(--blue); }
   <div class="rows">
     <div class="r"><span class="k">Leverage</span><span class="v">${N(lp.leverage)}×</span></div>
     <div class="r"><span class="k">Days left</span><span class="v">${l.days_left != null ? l.days_left + 'd' : '—'}</span></div>
-    <div class="r"><span class="k">Net profit</span><span class="v">$${lp.net_profit.toFixed(0)}</span></div>
+    <div class="r"><span class="k">$10k Net</span><span class="v">$${lp.net_profit.toFixed(0)}</span></div>
     <div class="r"><span class="k">LLTV</span><span class="v">${P(l.lltv,1)}</span></div>
   </div>
   <div class="progress"><i style="width:${pct}%"></i></div>
   <button type="button" class="load-btn">Load</button>
 </div>`;
       }).join('');
-      stratGrid.addEventListener('click', function(e) {
+      // use onclick (assignment) so re-renders don't stack up listeners
+      stratGrid.onclick = function(e) {
         const btn = e.target.closest('.load-btn');
         if (!btn) return;
         const card = btn.closest('[data-col]');
         if (!card) return;
         const match = (cachedData.loops || []).find(l => l.collateral === card.dataset.col && l.loan === card.dataset.loan);
         if (match) { applyPreset(match); document.getElementById('calculator')?.scrollIntoView({ behavior: 'smooth' }); }
-      });
+      };
     }
     if (bestOpp && topLoops.length) {
       const best = topLoops[0];
@@ -3327,13 +3328,14 @@ footer.site ul a:hover { color: var(--blue); }
 <div class="nums">
   <div>Net APY<span class="v">${P(lp.net_apy)}</span></div>
   <div>Leverage<span class="v ink">${N(lp.leverage)}×</span></div>
-  <div>Net profit<span class="v ink">$${lp.net_profit.toFixed(0)}</span></div>
+  <div>$10k Net<span class="v ink">$${lp.net_profit.toFixed(0)}</span></div>
 </div>
 <button type="button">Load in Builder</button>`;
-      bestOpp.querySelector('button').addEventListener('click', function() {
+      // reassign onclick so multiple load() calls never stack handlers
+      bestOpp.querySelector('button').onclick = function() {
         applyPreset(best);
         document.getElementById('calculator')?.scrollIntoView({ behavior: 'smooth' });
-      });
+      };
     }
 
     /* ---- YT Opps ---- */
@@ -3497,13 +3499,6 @@ footer.site ul a:hover { color: var(--blue); }
         (capital ? ` · Capital <span style="color:var(--ink)">$${parseFloat(capital).toLocaleString()}</span>` : '') +
         (hfVal   ? ` · HF <span style="color:var(--ink)">${parseFloat(hfVal).toFixed(2)}</span>` : '');
     }
-
-    /* ---- Update Refresh button ---- */
-    document.querySelectorAll('.btn-h').forEach(b => {
-      if (b.textContent.trim() === 'Refresh') {
-        b.addEventListener('click', load);
-      }
-    });
 
     console.log('[yield-tracker] data loaded:', new Date().toLocaleTimeString());
   }
@@ -3881,7 +3876,15 @@ footer.site ul a:hover { color: var(--blue); }
     if (addr) addr.addEventListener('keydown', function(e) { if (e.key === 'Enter') fetchPositions(); });
   });
 
-  document.addEventListener('DOMContentLoaded', load);
+  document.addEventListener('DOMContentLoaded', function() {
+    // Wire Refresh buttons once — avoids stacking listeners across load() calls
+    document.querySelectorAll('.btn-h').forEach(b => {
+      if (b.textContent.trim() === 'Refresh') b.addEventListener('click', load);
+    });
+    load();
+    // Auto-refresh every 5 minutes to match server cache window
+    setInterval(load, 5 * 60 * 1000);
+  });
 
   /* ---- Tab bar scroll fade ---- */
   (function() {
