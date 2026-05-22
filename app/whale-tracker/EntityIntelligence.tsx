@@ -174,29 +174,30 @@ function formatAllForClaude(summaries: EntitySummary[], allAlerts: WhaleAlert[],
 }
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
+  const [state, setState] = useState<'idle' | 'done'>('idle')
+  const handle = async () => {
     await navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setState('done')
+    window.open('https://claude.ai/new', '_blank', 'noopener,noreferrer')
+    setTimeout(() => setState('idle'), 3000)
   }
   return (
     <button
-      onClick={copy}
+      onClick={handle}
       style={{
-        background: 'none',
-        border: '1px solid var(--rule)',
-        color: copied ? 'var(--green)' : 'var(--ink-mute)',
+        background: state === 'done' ? 'rgba(72,187,120,0.12)' : 'none',
+        border: `1px solid ${state === 'done' ? 'var(--green)' : 'var(--rule)'}`,
+        color: state === 'done' ? 'var(--green)' : 'var(--ink-mute)',
         fontFamily: 'var(--mono)',
         fontSize: 10,
         padding: '3px 10px',
         cursor: 'pointer',
         letterSpacing: '0.05em',
         whiteSpace: 'nowrap',
-        transition: 'color 0.2s',
+        transition: 'color 0.2s, border-color 0.2s, background 0.2s',
       }}
     >
-      {copied ? '✓ Copied' : label}
+      {state === 'done' ? '✓ Paste in Claude' : label}
     </button>
   )
 }
