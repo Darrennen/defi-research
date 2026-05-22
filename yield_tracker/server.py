@@ -81,9 +81,9 @@ def fetch_gas():
     if result.get("gwei") and result.get("eth_usd"):
         gwei    = result["gwei"]
         eth_usd = result["eth_usd"]
-        # gas units: simple PT ~200k, loop iteration ~450k, 3 loops ~1.35M
-        result["cost_simple"] = round(200_000 * gwei * 1e-9 * eth_usd, 2)
-        result["cost_loop"]   = round(1_350_000 * gwei * 1e-9 * eth_usd, 2)
+        # gas units: simple deposit ~200k, one full loop (Pendle swap ~700k + Morpho bundler ~350k + approvals ~100k)
+        result["cost_simple"] = round(200_000   * gwei * 1e-9 * eth_usd, 2)
+        result["cost_loop"]   = round(1_150_000 * gwei * 1e-9 * eth_usd, 2)
 
     return result
 
@@ -110,7 +110,7 @@ def fetch_peg():
 
 def fetch_pendle():
     url  = (f"https://api-v2.pendle.finance/core/v1/{PENDLE_CHAIN}/markets"
-            f"?skip=0&limit=50")
+            f"?skip=0&limit=100")
     data = get_json(url)
     now  = datetime.now(timezone.utc)
     results = []

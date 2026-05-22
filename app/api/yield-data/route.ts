@@ -27,7 +27,7 @@ function r1(n: number) { return Math.round(n * 10) / 10 }
 
 async function fetchPendle() {
   const resp = await fetch(
-    `https://api-v2.pendle.finance/core/v1/${PENDLE_CHAIN}/markets?skip=0&limit=50`,
+    `https://api-v2.pendle.finance/core/v1/${PENDLE_CHAIN}/markets?skip=0&limit=100`,
     { headers: { 'User-Agent': 'Mozilla/5.0' } }
   )
   const data = await resp.json()
@@ -227,7 +227,7 @@ async function fetchGas() {
   } catch { res.eth_usd = null }
   if (res.gwei && res.eth_usd) {
     res.cost_simple = r2(200_000   * res.gwei * 1e-9 * res.eth_usd)
-    res.cost_loop   = r2(1_350_000 * res.gwei * 1e-9 * res.eth_usd)
+    res.cost_loop   = r2(1_150_000 * res.gwei * 1e-9 * res.eth_usd)
   }
   return res
 }
