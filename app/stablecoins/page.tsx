@@ -1,5 +1,4 @@
 import { getStablecoins, formatUsd } from '@/lib/defillama'
-import { CoinLogo } from '@/components/CoinLogo'
 
 function pegDev(price: number) { return Math.abs(price - 1) * 100 }
 
@@ -21,6 +20,24 @@ function MechBadge({ mech }: { mech: string }) {
   return <span className="badge-mech" style={s}>{label}</span>
 }
 
+async function getCoinImages(geckoIds: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (!geckoIds.length) return map
+  try {
+    const ids = geckoIds.join(',')
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&per_page=250`,
+      { next: { revalidate: 3600 } }
+    )
+    if (!res.ok) return map
+    const data: { id: string; image: string }[] = await res.json()
+    for (const c of data) {
+      if (c.image) map.set(c.id, c.image.replace('/large/', '/small/'))
+    }
+  } catch { /* return empty map on error */ }
+  return map
+}
+
 export default async function StablecoinsPage() {
   const all = await getStablecoins()
 
@@ -28,6 +45,9 @@ export default async function StablecoinsPage() {
     .filter(s => s.pegType === 'peggedUSD' && s.price != null && s.price > 0 && (s.circulating?.peggedUSD ?? 0) > 1_000_000)
     .sort((a, b) => (b.circulating?.peggedUSD ?? 0) - (a.circulating?.peggedUSD ?? 0))
     .slice(0, 40)
+
+  const geckoIds = stables.map(s => s.gecko_id).filter((id): id is string => !!id)
+  const images = await getCoinImages(geckoIds)
 
   const totalMcap = stables.reduce((s, x) => s + (x.circulating?.peggedUSD ?? 0), 0)
   const avgDev = stables.reduce((s, x) => s + pegDev(x.price), 0) / stables.length
@@ -74,12 +94,16 @@ export default async function StablecoinsPage() {
             {stables.map((s, i) => {
               const dev = pegDev(s.price)
               const devColor = dev >= 1 ? 'var(--red)' : dev >= 0.1 ? 'var(--amber)' : 'var(--green)'
+              const imgUrl = s.gecko_id ? images.get(s.gecko_id) : undefined
               return (
                 <tr key={s.id}>
                   <td>{i + 1}</td>
                   <td className="name">
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {s.gecko_id && <CoinLogo geckoId={s.gecko_id} symbol={s.symbol} />}
+                      {imgUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={imgUrl} alt={s.symbol} width={16} height={16} style={{ borderRadius: '50%', flexShrink: 0 }} />
+                      )}
                       {s.symbol}
                     </span>
                     <span className="sym">{s.name}</span>
