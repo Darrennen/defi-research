@@ -2576,7 +2576,7 @@ footer.site ul a:hover { color: var(--blue); }
     <label class="check"><input type="checkbox" checked=""> Profitable only</label>
     <span class="res-count" id="loops-count">—</span>
     <span class="grow"></span>
-    <input class="search" type="text" placeholder="Filter pair, protocol…">
+    <input class="search" type="text" placeholder="Filter pair, protocol…" id="loops-search">
     <div class="sort">
       <span class="o on">APY</span>
       <span class="o">Profit</span>
@@ -2803,75 +2803,7 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="rhs">Fixed APY across maturities · inverted curve = market expects yield to fall · Alpha = Fixed APY − best Aave/Morpho lending rate</div>
   </div>
 
-  <div class="yc-group">
-    <div class="gh"><span class="sym">apyUSD</span><span class="tier t2">T2</span><span class="meta">1 maturity · $15.94M total liq</span></div>
-    <table class="tyc">
-      <thead><tr><th>Maturity</th><th>Fixed APY</th><th>Underlying APY</th><th>Long Yield APY</th><th>APY bar · Alpha vs DeFi</th><th>Signal · Tier</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>29d · 2026-06-18</td><td class="pos-cell">17.25%</td><td>10.76%</td><td class="warn-cell">−6.49%</td>
-          <td><div class="alpha-bar"><div class="bar"><i style="width:60%"></i></div><span class="v">+13.95% α</span></div></td>
-          <td><div class="signal-cell cheap">PT Cheap · 6.5% above underlying<span class="tier t2">T2</span></div></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="yc-group">
-    <div class="gh"><span class="sym">reUSDe</span><span class="tier t1">T1</span><span class="meta">1 maturity · $5.66M total liq</span></div>
-    <table class="tyc">
-      <thead><tr><th>Maturity</th><th>Fixed APY</th><th>Underlying APY</th><th>Long Yield APY</th><th>APY bar · Alpha vs DeFi</th><th>Signal · Tier</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>36d · 2026-06-25</td><td class="pos-cell">16.26%</td><td>12.73%</td><td class="warn-cell">−3.53%</td>
-          <td><div class="alpha-bar"><div class="bar"><i style="width:56%"></i></div><span class="v">+12.96% α</span></div></td>
-          <td><div class="signal-cell cheap">PT Cheap · 3.5% above underlying<span class="tier t1">T1</span></div></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="yc-group">
-    <div class="gh"><span class="sym">apxUSD</span><span class="tier t2">T2</span><span class="meta">1 maturity · $30.78M total liq</span></div>
-    <table class="tyc">
-      <thead><tr><th>Maturity</th><th>Fixed APY</th><th>Underlying APY</th><th>Long Yield APY</th><th>APY bar · Alpha vs DeFi</th><th>Signal · Tier</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>29d · 2026-06-18</td><td class="pos-cell">12.75%</td><td>0.00%</td><td class="warn-cell">−12.75%</td>
-          <td><div class="alpha-bar"><div class="bar"><i style="width:44%"></i></div><span class="v">+9.45% α</span></div></td>
-          <td><div class="signal-cell cheap">PT Cheap · 12.8% above underlying<span class="tier t2">T2</span></div></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="yc-group">
-    <div class="gh"><span class="sym">jrUSDat</span><span class="tier t3">T3</span><span class="meta">1 maturity · $1.99M total liq</span></div>
-    <table class="tyc">
-      <thead><tr><th>Maturity</th><th>Fixed APY</th><th>Underlying APY</th><th>Long Yield APY</th><th>APY bar · Alpha vs DeFi</th><th>Signal · Tier</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>99d · 2026-08-27</td><td class="pos-cell">12.46%</td><td>7.91%</td><td class="warn-cell">−4.55%</td>
-          <td><div class="alpha-bar"><div class="bar"><i style="width:42%"></i></div><span class="v">+9.16% α</span></div></td>
-          <td><div class="signal-cell cheap">PT Cheap · 4.5% above underlying<span class="tier t3">T3</span></div></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="yc-group">
-    <div class="gh"><span class="sym">sUSDat</span><span class="tier t3">T3</span><span class="meta">1 maturity · $12.45M total liq</span></div>
-    <table class="tyc">
-      <thead><tr><th>Maturity</th><th>Fixed APY</th><th>Underlying APY</th><th>Long Yield APY</th><th>APY bar · Alpha vs DeFi</th><th>Signal · Tier</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>99d · 2026-08-27</td><td class="pos-cell">12.40%</td><td>4.83%</td><td class="warn-cell">−7.57%</td>
-          <td><div class="alpha-bar"><div class="bar"><i style="width:42%"></i></div><span class="v">+9.10% α</span></div></td>
-          <td><div class="signal-cell cheap">PT Cheap · 7.6% above underlying<span class="tier t3">T3</span></div></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <div id="yc-container"><!-- live --></div>
 </section>
 
 <!-- =========================================================================
@@ -3069,11 +3001,11 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="rhs">Saturn · Apyx · Strata — all protocols tokenizing Strategy's STRC preferred dividend</div>
   </div>
 
-  <div class="strc-kpi">
+  <div class="strc-kpi" id="strc-kpi">
     <div class="b"><div class="l">STRC dividend</div><div class="v">~11.5%/yr</div><div class="s">Strategy preferred stock · paid monthly</div></div>
-    <div class="b"><div class="l">sUSDat live yield</div><div class="v ink">4.83%</div><div class="s">Saturn on-chain STRC proxy</div></div>
-    <div class="b"><div class="l">Best PT fixed APY</div><div class="v">17.25%</div><div class="s">PT-apyUSD-18JUN2026</div></div>
-    <div class="b"><div class="l">Ecosystem liquidity</div><div class="v ink">$82.49M</div><div class="s">6 active Pendle markets</div></div>
+    <div class="b"><div class="l">sUSDat live yield</div><div class="v ink" id="strc-kpi-base">—</div><div class="s">Saturn on-chain STRC proxy</div></div>
+    <div class="b"><div class="l">Best PT fixed APY</div><div class="v" id="strc-kpi-best-pt">—</div><div class="s" id="strc-kpi-best-nm">—</div></div>
+    <div class="b"><div class="l">Ecosystem liquidity</div><div class="v ink" id="strc-kpi-liq">—</div><div class="s" id="strc-kpi-count">—</div></div>
   </div>
 
   <div class="strc-warning">
@@ -3084,38 +3016,7 @@ footer.site ul a:hover { color: var(--blue); }
     <thead>
       <tr><th>PT Token</th><th>Protocol</th><th>PT Fixed APY</th><th>Underlying APY</th><th>vs STRC base</th><th>Signal</th><th>Days left</th><th>Liquidity</th></tr>
     </thead>
-    <tbody>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt">AP</span><div class="lhs"><span class="nm">PT-apyUSD-18JUN2026</span><span class="ds"><span class="tier t2">T2</span></span></div></div></td>
-        <td>Apyx</td><td class="pos-cell">17.25%</td><td>10.76%</td><td class="pos-cell">+12.42%</td>
-        <td><div class="signal-cell cheap">Buy PT</div></td><td>29d</td><td>$15.94M</td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt">AP</span><div class="lhs"><span class="nm">PT-apxUSD-18JUN2026</span><span class="ds"><span class="tier t2">T2</span></span></div></div></td>
-        <td>Apyx</td><td class="pos-cell">12.75%</td><td>0.00%</td><td class="pos-cell">+7.92%</td>
-        <td><div class="signal-cell cheap">Buy PT</div></td><td>29d</td><td>$30.78M</td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">JR</span><div class="lhs"><span class="nm">PT-jrUSDat-27AUG2026</span><span class="ds"><span class="tier t3">T3</span></span></div></div></td>
-        <td>Strata Jr</td><td class="pos-cell">12.46%</td><td>7.91%</td><td class="pos-cell">+7.63%</td>
-        <td><div class="signal-cell cheap">Buy PT</div></td><td>99d</td><td>$1.99M</td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">SU</span><div class="lhs"><span class="nm">PT-sUSDat-27AUG2026</span><span class="ds"><span class="tier t3">T3</span></span></div></div></td>
-        <td>Saturn</td><td class="pos-cell">12.40%</td><td>4.83%</td><td class="pos-cell">+7.57%</td>
-        <td><div class="signal-cell cheap">Buy PT</div></td><td>99d</td><td>$12.45M</td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">SR</span><div class="lhs"><span class="nm">PT-srUSDat-27AUG2026</span><span class="ds"><span class="tier t3">T3</span></span></div></div></td>
-        <td>Strata Sr</td><td class="pos-cell">11.53%</td><td>7.94%</td><td class="pos-cell">+6.70%</td>
-        <td><div class="signal-cell cheap">Buy PT</div></td><td>99d</td><td>$3.23M</td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">US</span><div class="lhs"><span class="nm">PT-USDat-27AUG2026</span><span class="ds"><span class="tier t3">T3</span></span></div></div></td>
-        <td>Saturn</td><td class="pos-cell">8.82%</td><td>0.00%</td><td class="pos-cell">+3.99%</td>
-        <td><div class="signal-cell cheap">Buy PT</div></td><td>99d</td><td>$18.09M</td>
-      </tr>
-    </tbody>
+    <tbody id="strc-tbody"><!-- live --></tbody>
   </table></div>
 </section>
 
@@ -3153,7 +3054,7 @@ footer.site ul a:hover { color: var(--blue); }
      FOOTER METADATA
      ========================================================================= -->
 <div class="yt-foot">
-  <div>Last updated <span style="color: var(--ink);">3:47:03 PM</span> · 1243s ago · capital $4,100 · HF 2.0</div>
+  <div id="yt-foot-ts">Last updated <span style="color: var(--ink);">—</span></div>
   <div>Feeds · <span class="blue-text">Pendle SDK</span> · <span class="blue-text">Morpho Blue API</span> · <span class="blue-text">Aave V3 (DeFiLlama)</span> · <span class="blue-text">Ethena</span></div>
 </div>
 
@@ -3437,6 +3338,78 @@ footer.site ul a:hover { color: var(--blue); }
   });
   loopCalc();
 
+  // Wire Recalculate button
+  document.querySelectorAll('.btn-h').forEach(b => {
+    if (b.textContent.trim() === 'Recalculate') b.addEventListener('click', loopCalc);
+  });
+
+  /* ---- Loops table state + render function ---- */
+  let _loopsData = [];
+  let _loopsFilterMatched  = true;
+  let _loopsFilterProfitable = true;
+  let _loopsSearch  = '';
+  let _loopsSortKey = 'apy';
+
+  function renderLoopsTable() {
+    const tbody = document.querySelector('#tloop tbody');
+    if (!tbody) return;
+    let rows = _loopsData.filter(l => l.loop);
+    if (_loopsFilterProfitable) rows = rows.filter(l => l.loop.net_profit >= 0);
+    if (_loopsSearch) rows = rows.filter(l =>
+      (l.collateral || '').toLowerCase().includes(_loopsSearch) ||
+      (l.loan || '').toLowerCase().includes(_loopsSearch)
+    );
+    if (_loopsSortKey === 'profit') rows.sort((a,b) => (b.loop.net_profit??-999) - (a.loop.net_profit??-999));
+    else if (_loopsSortKey === 'hf') rows.sort((a,b) => (b.loop.hf??0) - (a.loop.hf??0));
+    else rows.sort((a,b) => (b.loop.net_apy??-999) - (a.loop.net_apy??-999));
+    const countEl = document.getElementById('loops-count');
+    if (countEl) countEl.textContent = rows.length + ' results';
+    tbody.innerHTML = rows.map(l => {
+      const lp = l.loop;
+      const profitCls = lp.net_profit >= 0 ? 'pos-cell' : 'bad';
+      const extraCls  = (l.loop_extra ?? 0) >= 0 ? 'pos-cell' : 'bad';
+      const extraStr  = l.loop_extra != null ? ((l.loop_extra >= 0 ? '+$' : '-$') + Math.abs(l.loop_extra).toFixed(0)) : '—';
+      const ptHold    = l.simple_pt_profit != null ? '$' + l.simple_pt_profit.toFixed(0) : '—';
+      const abr1 = initials(l.collateral), abr2 = initials(l.loan || '');
+      return `<tr>
+  <td><div class="pair-cell"><div class="toks"><span class="tok">${abr1}</span><span class="tok">${abr2}</span></div><div class="lhs"><span class="nm">${l.collateral} / ${l.loan}</span><span class="sub">${l.days_left != null ? l.days_left + 'd to maturity ' : ''}<span class="tier ${tc(l.risk_tier)}">T${l.risk_tier}</span></span></div></div></td>
+  <td>${P(l.lltv,1)}</td>
+  <td class="${lp.net_apy >= 0 ? 'pos-cell' : 'bad'}">${P(lp.net_apy)}</td>
+  <td>${N(lp.leverage)}×</td>
+  <td><span class="hf-mini"><i></i> ${N(lp.hf)}</span></td>
+  <td class="${l.liquidation_price != null ? 'bad' : ''}">${l.liquidation_price != null ? l.liquidation_price.toFixed(4) : '—'}</td>
+  <td>${l.days_left != null ? l.days_left + 'd' : '—'}</td>
+  <td class="${profitCls}">${lp.net_profit != null ? (lp.net_profit >= 0 ? '$' : '-$') + Math.abs(lp.net_profit).toFixed(0) : '—'}</td>
+  <td>${l.breakeven_borrow != null ? P(l.breakeven_borrow) : '—'}</td>
+  <td>${ptHold}</td>
+  <td class="${extraCls}">${extraStr}</td>
+  <td class="${utilClass(l.utilization) ? utilClass(l.utilization)+'-cell' : ''}">${P(l.utilization,1)}</td>
+</tr>`;
+    }).join('');
+  }
+
+  // Wire loops toolbar
+  const loopsCheckboxes = document.querySelectorAll('.loops-toolbar .check input[type="checkbox"]');
+  if (loopsCheckboxes[0]) loopsCheckboxes[0].addEventListener('change', e => {
+    _loopsFilterMatched = e.target.checked; renderLoopsTable();
+  });
+  if (loopsCheckboxes[1]) loopsCheckboxes[1].addEventListener('change', e => {
+    _loopsFilterProfitable = e.target.checked; renderLoopsTable();
+  });
+  const loopsSearch = document.getElementById('loops-search');
+  if (loopsSearch) loopsSearch.addEventListener('input', e => {
+    _loopsSearch = e.target.value.toLowerCase().trim(); renderLoopsTable();
+  });
+  document.querySelectorAll('.loops-toolbar .sort .o').forEach(o => {
+    o.addEventListener('click', () => {
+      document.querySelectorAll('.loops-toolbar .sort .o').forEach(x => x.classList.remove('on'));
+      o.classList.add('on');
+      const txt = o.textContent.trim().toLowerCase();
+      _loopsSortKey = txt === 'profit' ? 'profit' : txt === 'hf' ? 'hf' : 'apy';
+      renderLoopsTable();
+    });
+  });
+
   async function load() {
     let data;
     try {
@@ -3469,33 +3442,8 @@ footer.site ul a:hover { color: var(--blue); }
     }
 
     /* ---- Loops table ---- */
-    const loopsTbody = document.querySelector('#tloop tbody');
-    if (loopsTbody && loops.length) {
-      const validLoops = loops.filter(l => l.loop);
-      document.getElementById('loops-count').textContent = validLoops.length + ' results';
-      loopsTbody.innerHTML = validLoops.map(l => {
-        const lp = l.loop;
-        const profitCls = lp.net_profit >= 0 ? 'pos-cell' : 'bad';
-        const extraCls = (l.loop_extra ?? 0) >= 0 ? 'pos-cell' : 'bad';
-        const extraStr = l.loop_extra != null ? ((l.loop_extra >= 0 ? '+$' : '-$') + Math.abs(l.loop_extra).toFixed(0)) : '—';
-        const ptHold = l.simple_pt_profit != null ? '$' + l.simple_pt_profit.toFixed(0) : '—';
-        const abr1 = initials(l.collateral), abr2 = initials(l.loan || '');
-        return `<tr>
-  <td><div class="pair-cell"><div class="toks"><span class="tok">${abr1}</span><span class="tok">${abr2}</span></div><div class="lhs"><span class="nm">${l.collateral} / ${l.loan}</span><span class="sub">${l.days_left != null ? l.days_left + 'd to maturity ' : ''}<span class="tier ${tc(l.risk_tier)}">T${l.risk_tier}</span></span></div></div></td>
-  <td>${P(l.lltv,1)}</td>
-  <td class="${lp.net_apy >= 0 ? 'pos-cell' : 'bad'}">${P(lp.net_apy)}</td>
-  <td>${N(lp.leverage)}×</td>
-  <td><span class="hf-mini"><i></i> ${N(lp.hf)}</span></td>
-  <td class="${l.liquidation_price != null ? 'bad' : ''}">${l.liquidation_price != null ? l.liquidation_price.toFixed(4) : '—'}</td>
-  <td>${l.days_left != null ? l.days_left + 'd' : '—'}</td>
-  <td class="${profitCls}">${lp.net_profit != null ? (lp.net_profit >= 0 ? '$' : '-$') + Math.abs(lp.net_profit).toFixed(0) : '—'}</td>
-  <td>${l.breakeven_borrow != null ? P(l.breakeven_borrow) : '—'}</td>
-  <td>${ptHold}</td>
-  <td class="${extraCls}">${extraStr}</td>
-  <td class="${utilClass(l.utilization) ? utilClass(l.utilization)+'-cell' : ''}">${P(l.utilization,1)}</td>
-</tr>`;
-      }).join('');
-    }
+    _loopsData = loops;
+    renderLoopsTable();
 
     /* ---- Pendle table (renderer also used by filter) ---- */
     let _pendleData = pendle;
@@ -3604,7 +3552,7 @@ footer.site ul a:hover { color: var(--blue); }
       stratGrid.innerHTML = topLoops.map((l, i) => {
         const lp = l.loop;
         const pct = maxApy > 0 ? Math.round((lp.net_apy / maxApy) * 100) : 100;
-        return `<div class="strat ${i===0?'best':''}">
+        return `<div class="strat ${i===0?'best':''}" data-col="${l.collateral}" data-loan="${l.loan}">
   <div class="pair">${l.collateral} + Morpho</div>
   <div class="chain-path"><span class="ch">Pendle</span><span class="ar">→</span><span class="ch">Morpho</span><span class="ar">→</span><span class="ch">borrow ${l.loan}</span></div>
   <div class="apy-big">${lp.net_apy.toFixed(2)}<span class="unit">%</span><span class="vs">${l.pendle_pt_apy != null ? '+' + (lp.net_apy - l.pendle_pt_apy).toFixed(2) + '% vs PT' : ''}</span></div>
@@ -3618,6 +3566,14 @@ footer.site ul a:hover { color: var(--blue); }
   <button type="button" class="load-btn">Load</button>
 </div>`;
       }).join('');
+      stratGrid.addEventListener('click', function(e) {
+        const btn = e.target.closest('.load-btn');
+        if (!btn) return;
+        const card = btn.closest('[data-col]');
+        if (!card) return;
+        const match = (cachedData.loops || []).find(l => l.collateral === card.dataset.col && l.loan === card.dataset.loan);
+        if (match) { applyPreset(match); document.getElementById('calculator')?.scrollIntoView({ behavior: 'smooth' }); }
+      });
     }
     if (bestOpp && topLoops.length) {
       const best = topLoops[0];
@@ -3636,6 +3592,10 @@ footer.site ul a:hover { color: var(--blue); }
   <div>Net profit<span class="v ink">$${lp.net_profit.toFixed(0)}</span></div>
 </div>
 <button type="button">Load in Builder</button>`;
+      bestOpp.querySelector('button').addEventListener('click', function() {
+        applyPreset(best);
+        document.getElementById('calculator')?.scrollIntoView({ behavior: 'smooth' });
+      });
     }
 
     /* ---- YT Opps ---- */
@@ -3691,6 +3651,97 @@ footer.site ul a:hover { color: var(--blue); }
   <td>${U(l.liquidity_usd)}</td>
   <td><span class="tier ${tc(l.risk_tier)}">T${l.risk_tier}</span></td>
 </tr>`).join('');
+    }
+
+    /* ---- Yield Curve by Underlying ---- */
+    const ycContainer = document.getElementById('yc-container');
+    if (ycContainer && pendle.length) {
+      const groups = {};
+      pendle.forEach(p => {
+        const base = p.base_asset || p.name.replace(/^PT-/i,'').replace(/-\d.*$/,'');
+        if (!groups[base]) groups[base] = [];
+        groups[base].push(p);
+      });
+      ycContainer.innerHTML = Object.entries(groups).map(([sym, rows]) => {
+        const sorted = rows.slice().sort((a, b) => a.days_left - b.days_left);
+        const maxAlpha = Math.max(...sorted.map(r => Math.abs(r.alpha ?? 0)), 0.01);
+        return `<div class="yc-group">
+  <div class="gh"><span class="sym">${sym}</span><span class="meta">${sorted.length} maturit${sorted.length===1?'y':'ies'}</span></div>
+  <table class="tyc"><thead><tr>
+    <th>Expiry</th><th>Days</th><th>PT APY</th><th>Underlying</th><th>Alpha vs DeFi</th><th>Signal</th><th>Liquidity</th>
+  </tr></thead><tbody>
+  ${sorted.map(r => {
+    const alphaCls = (r.alpha ?? 0) >= 0 ? 'pos-cell' : 'neg-cell';
+    const alphaStr = r.alpha != null ? ((r.alpha >= 0 ? '+' : '') + P(r.alpha)) : '—';
+    const barW = Math.round(Math.min(100, (Math.abs(r.alpha ?? 0) / maxAlpha) * 100));
+    return `<tr>
+    <td>${r.expiry || '—'}</td>
+    <td>${r.days_left != null ? r.days_left + 'd' : '—'}</td>
+    <td class="pos-cell">${P(r.pt_apy)}</td>
+    <td>${P(r.underlying_apy)}</td>
+    <td class="${alphaCls}"><div class="alpha-bar"><div class="bar"><i style="width:${barW}%"></i></div><span class="v">${alphaStr}</span></div></td>
+    <td>${signalHtml(r)}</td>
+    <td>${U(r.liquidity_usd)}</td>
+  </tr>`;
+  }).join('')}
+  </tbody></table>
+</div>`;
+      }).join('');
+    }
+
+    /* ---- STRC Ecosystem ---- */
+    const STRC_TOKENS = ['SUSDAT','USDAT','APXUSD','APYUSD','JRUSDAT','SRUSDAT'];
+    const strcMarkets = pendle.filter(p => {
+      const up = (p.name || '').toUpperCase();
+      return STRC_TOKENS.some(t => up.includes(t));
+    });
+    if (strcMarkets.length) {
+      const strcBase = strcMarkets.find(p => (p.name||'').toUpperCase().includes('SUSDAT'));
+      const bestStrcPt = strcMarkets.reduce((best, p) => (p.pt_apy > (best?.pt_apy ?? -Infinity) ? p : best), null);
+      const totalLiq = strcMarkets.reduce((s, p) => s + (p.liquidity_usd || 0), 0);
+      const strcBaseApy = strcBase?.underlying_apy ?? null;
+      const kpiBase = document.getElementById('strc-kpi-base');
+      if (kpiBase) kpiBase.textContent = strcBaseApy != null ? P(strcBaseApy) : '—';
+      const kpiBestPt = document.getElementById('strc-kpi-best-pt');
+      if (kpiBestPt) kpiBestPt.textContent = bestStrcPt ? P(bestStrcPt.pt_apy) : '—';
+      const kpiBestNm = document.getElementById('strc-kpi-best-nm');
+      if (kpiBestNm) kpiBestNm.textContent = bestStrcPt ? bestStrcPt.name : '—';
+      const kpiLiq = document.getElementById('strc-kpi-liq');
+      if (kpiLiq) kpiLiq.textContent = U(totalLiq);
+      const kpiCount = document.getElementById('strc-kpi-count');
+      if (kpiCount) kpiCount.textContent = strcMarkets.length + ' active market' + (strcMarkets.length === 1 ? '' : 's');
+      const strcTbody = document.getElementById('strc-tbody');
+      if (strcTbody) {
+        const PROTO_MAP = { SUSDAT: 'Saturn', USDAT: 'Saturn', APXUSD: 'Apyx', APYUSD: 'Apyx', JRUSDAT: 'Strata Jr', SRUSDAT: 'Strata Sr' };
+        strcTbody.innerHTML = strcMarkets.sort((a, b) => b.pt_apy - a.pt_apy).map(p => {
+          const up = (p.name || '').toUpperCase();
+          const proto = PROTO_MAP[STRC_TOKENS.find(t => up.includes(t))] || '—';
+          const vs = strcBaseApy != null ? Math.round((p.pt_apy - strcBaseApy) * 100) / 100 : null;
+          const vsCls = vs != null ? (vs >= 0 ? 'pos-cell' : 'bad') : '';
+          const vsStr = vs != null ? ((vs >= 0 ? '+' : '') + P(vs)) : '—';
+          return `<tr>
+  <td><span class="nm">${p.name}</span></td>
+  <td>${proto}</td>
+  <td class="pos-cell">${P(p.pt_apy)}</td>
+  <td>${P(p.underlying_apy)}</td>
+  <td class="${vsCls}">${vsStr}</td>
+  <td>${signalHtml(p)}</td>
+  <td>${p.days_left != null ? p.days_left + 'd' : '—'}</td>
+  <td>${U(p.liquidity_usd)}</td>
+</tr>`;
+        }).join('');
+      }
+    }
+
+    /* ---- Footer timestamp ---- */
+    const footTs = document.getElementById('yt-foot-ts');
+    if (footTs) {
+      const capital = document.getElementById('cin-capital')?.value;
+      const hfVal   = document.getElementById('cin-hf')?.value;
+      const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      footTs.innerHTML = `Last updated <span style="color:var(--ink)">${ts}</span>` +
+        (capital ? ` · Capital <span style="color:var(--ink)">$${parseFloat(capital).toLocaleString()}</span>` : '') +
+        (hfVal   ? ` · HF <span style="color:var(--ink)">${parseFloat(hfVal).toFixed(2)}</span>` : '');
     }
 
     /* ---- Update Refresh button ---- */
