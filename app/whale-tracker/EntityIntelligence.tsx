@@ -1,7 +1,18 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import type { WhaleAlert } from '@/app/api/slack-events/route'
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setMobile(window.innerWidth < 720)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+  return mobile
+}
 
 function fmtUSD(v: number): string {
   if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`
@@ -212,108 +223,107 @@ function HourlyBar({ hourly }: { hourly: number[] }) {
   )
 }
 
-function EntityCard({ s, copyText }: { s: EntitySummary; copyText: string }) {
+function EntityCard({ s, copyText, mobile }: { s: EntitySummary; copyText: string; mobile: boolean }) {
+  const pad = mobile ? '14px 16px' : '20px 22px'
+
   return (
-    <div style={{
-      background: 'var(--paper)',
-      border: '1px solid var(--rule)',
-      padding: '20px 22px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 0,
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 17, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2 }}>
+    <div style={{ background: 'var(--paper)', padding: pad, display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+
+      {/* Header: entity + volume */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: mobile ? 15 : 17, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2, minWidth: 0, wordBreak: 'break-word' }}>
           {s.entity}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--blue)' }}>
+        <div style={{ flexShrink: 0, textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: mobile ? 14 : 15, fontWeight: 700, color: 'var(--blue)' }}>
             {fmtUSD(s.volume)}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>{s.txCount}tx</span>
-            <CopyButton text={copyText} label="Copy →Claude" />
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', marginTop: 3 }}>
+            {s.txCount}tx
           </div>
         </div>
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, background: 'var(--rule)', margin: '14px 0' }} />
+      <div style={{ height: 1, background: 'var(--rule)', margin: mobile ? '10px 0' : '14px 0' }} />
 
-      {/* Biggest move */}
-      <div style={{ marginBottom: 10 }}>
-        <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginRight: 8 }}>
-          Biggest
-        </span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
-          {s.biggestMove.amountFmt ?? '—'}
-          {s.biggestMove.token && (
-            <span style={{ marginLeft: 5, padding: '0 4px', border: '1px solid var(--rule)', fontSize: 9, letterSpacing: '0.08em', color: 'var(--ink-mute)' }}>
-              {s.biggestMove.token}
-            </span>
-          )}
-        </span>
-        {(s.biggestMove.fromLabel || s.biggestMove.toLabel) && (
-          <span style={{ fontFamily: 'var(--serif)', fontSize: 11, color: 'var(--ink-mute)', marginLeft: 8 }}>
-            {s.biggestMove.fromLabel}
-            {s.biggestMove.fromLabel && s.biggestMove.toLabel && <span style={{ margin: '0 3px' }}>→</span>}
-            {s.biggestMove.toLabel}
+      {/* Biggest move — stacked on mobile so long addresses don't overflow */}
+      <div style={{ marginBottom: 10, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)' }}>
+            Biggest
           </span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
+            {s.biggestMove.amountFmt ?? '—'}
+            {s.biggestMove.token && (
+              <span style={{ marginLeft: 5, padding: '0 4px', border: '1px solid var(--rule)', fontSize: 9, letterSpacing: '0.08em', color: 'var(--ink-mute)' }}>
+                {s.biggestMove.token}
+              </span>
+            )}
+          </span>
+        </div>
+        {(s.biggestMove.fromLabel || s.biggestMove.toLabel) && (
+          <div style={{ fontFamily: 'var(--serif)', fontSize: 11, color: 'var(--ink-mute)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {s.biggestMove.fromLabel ?? s.entity}
+            <span style={{ margin: '0 4px' }}>→</span>
+            {s.biggestMove.toLabel ?? '?'}
+          </div>
         )}
       </div>
 
-      {/* Tokens */}
-      {s.tokens.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          {s.tokens.map(t => (
-            <span key={t.name} style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', padding: '1px 6px', border: '1px solid var(--rule)' }}>
-              {t.name} <span style={{ color: 'var(--ink-soft)' }}>{t.pct}%</span>
-            </span>
-          ))}
-        </div>
-      )}
+      {/* Tokens + chains on one row */}
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+        {s.tokens.map(t => (
+          <span key={t.name} style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', padding: '1px 6px', border: '1px solid var(--rule)' }}>
+            {t.name} <span style={{ color: 'var(--ink-soft)' }}>{t.pct}%</span>
+          </span>
+        ))}
+        {s.chains.map(c => (
+          <span key={c} style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--blue)', padding: '1px 5px', border: '1px solid var(--blue)', opacity: 0.75 }}>
+            {c}
+          </span>
+        ))}
+      </div>
 
-      {/* Chains */}
-      {s.chains.length > 0 && (
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
-          {s.chains.map(c => (
-            <span key={c} style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--blue)', padding: '1px 5px', border: '1px solid var(--blue)', opacity: 0.75 }}>
-              {c}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Key flows */}
+      {/* Key flows — truncated, full address visible on scroll */}
       {s.recentFlows.some(f => f.from || f.to) && (
-        <div style={{ marginBottom: 4 }}>
+        <div style={{ marginBottom: 8, minWidth: 0 }}>
           {s.recentFlows.filter(f => f.from || f.to).map((f, i) => (
-            <div key={i} style={{ fontFamily: 'var(--serif)', fontSize: 11, color: 'var(--ink-mute)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {f.amount ? <span style={{ fontFamily: 'var(--mono)', fontSize: 10, marginRight: 6, color: 'var(--ink-soft)' }}>{fmtUSD(f.amount)}</span> : null}
-              {f.from}{f.from && f.to && <span style={{ margin: '0 4px', color: 'var(--ink-mute)' }}>→</span>}{f.to}
+            <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'baseline', marginBottom: 4, minWidth: 0, overflow: 'hidden' }}>
+              {f.amount && (
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--blue)', flexShrink: 0 }}>
+                  {fmtUSD(f.amount)}
+                </span>
+              )}
+              <span style={{ fontFamily: 'var(--serif)', fontSize: 11, color: 'var(--ink-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {f.from}{f.from && f.to ? ' → ' : ''}{f.to}
+              </span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Hourly activity bar */}
+      {/* Hourly bar */}
       <HourlyBar hourly={s.hourly} />
 
-      {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+      {/* Footer: label + last active + copy button */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 8 }}>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-mute)', letterSpacing: '0.06em' }}>
-          HOURLY ACTIVITY (MYT)
+          {mobile ? 'HOURLY (MYT)' : 'HOURLY ACTIVITY (MYT)'}
         </span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-mute)' }}>
-          last active {timeAgo(s.lastActivity)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-mute)' }}>
+            {timeAgo(s.lastActivity)}
+          </span>
+          <CopyButton text={copyText} label={mobile ? 'Copy' : 'Copy →Claude'} />
+        </div>
       </div>
     </div>
   )
 }
 
 export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] }) {
+  const mobile = useIsMobile()
   const { start, end, label } = useMemo(getSnapshotWindow, [])
   const summaries = useMemo(() => buildSummaries(alerts, start, end), [alerts, start, end])
   const allCopyText = useMemo(
@@ -352,6 +362,7 @@ export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] })
           <EntityCard
             key={s.entity}
             s={s}
+            mobile={mobile}
             copyText={formatSummaryForClaude(s, alerts, start, end, label)}
           />
         ))}
