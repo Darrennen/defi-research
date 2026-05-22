@@ -75,8 +75,9 @@ export function isArkhamAlert(parsed: Partial<WhaleAlert>): boolean {
 export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   const out: Partial<WhaleAlert> = {}
 
-  // ── Title: first <url|{Name} Whale Alert> token ───────────────────
-  const titleMatch = text.match(/<[^|>]+\|([^>]+?)\s+(?:Whale\s+)?Alert>/)
+  // ── Title: must be the very first token in the message ───────────────
+  // Anchored to ^ so we never match the "Pause Alert" footer CTA link
+  const titleMatch = text.match(/^<[^|>]+\|([^>]+?)\s+(?:Whale\s+)?Alert>/)
   if (titleMatch) out.entity = titleMatch[1].trim()
 
   // ── From line ─────────────────────────────────────────────────────
@@ -93,7 +94,8 @@ export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
     /<https?:\/\/intel\.arkm\.com\/explorer\/address\/(0x[a-fA-F0-9]+)\|([^>]+)>/
   )
   if (fromAddrMatch) {
-    out.address = fromAddrMatch[1]
+    const addr = fromAddrMatch[1]
+    if (!/^0x0+$/.test(addr)) out.address = addr
     const label = fromAddrMatch[2].replace(/\s*\(0x[a-fA-F0-9]+\)\s*$/, '').trim()
     out.fromLabel = label
     // Only use from-label as entity if the title gave us nothing
