@@ -1,4 +1,5 @@
 import { getStablecoins, formatUsd } from '@/lib/defillama'
+import { CoinLogo } from '@/components/CoinLogo'
 
 function pegDev(price: number) { return Math.abs(price - 1) * 100 }
 
@@ -78,7 +79,7 @@ export default async function StablecoinsPage() {
                   <td>{i + 1}</td>
                   <td className="name">
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {s.logo && <img src={s.logo} alt={s.symbol} width={16} height={16} style={{ borderRadius: '50%' }} />}
+                      {s.gecko_id && <CoinLogo geckoId={s.gecko_id} symbol={s.symbol} />}
                       {s.symbol}
                     </span>
                     <span className="sym">{s.name}</span>

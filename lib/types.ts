@@ -7,6 +7,7 @@ export interface StablecoinAsset {
   circulating: { peggedUSD?: number; peggedEUR?: number }
   price: number
   chains: string[]
+  gecko_id?: string
   logo?: string
 }
 
