@@ -1,6 +1,10 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  PieChart, Pie,
+} from 'recharts'
 import type { WhaleAlert } from '@/app/api/slack-events/route'
 
 const CHAINS = ['All', 'Ethereum', 'Arbitrum', 'Base', 'Polygon', 'Optimism', 'Solana', 'BSC']
@@ -21,6 +25,14 @@ function alertInvolvesCex(alert: WhaleAlert): boolean {
   return isCex(alert.entity) || isCex(alert.toLabel) || isCex(alert.fromLabel)
 }
 
+function alertTowardsCex(alert: WhaleAlert): boolean {
+  return isCex(alert.toLabel) || isCex(alert.fromLabel) && !isCex(alert.toLabel) ? false : isCex(alert.toLabel)
+}
+
+function alertAwayFromCex(alert: WhaleAlert): boolean {
+  return isCex(alert.fromLabel) && !isCex(alert.toLabel)
+}
+
 function timeAgo(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000)
   if (diff < 60) return `${diff}s ago`
@@ -33,6 +45,194 @@ function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`
 }
 
+function fmtUSD(v: number): string {
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`
+  return `$${v.toFixed(0)}`
+}
+
+function dayLabel(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+const PIE_COLORS = ['#4a90d9', '#e8a838', '#48bb78', '#f56565', '#9f7aea', '#ed8936', '#38b2ac']
+
+// ── Analysis components ──────────────────────────────────────────────────────
+
+function VolumeChart({ alerts }: { alerts: WhaleAlert[] }) {
+  const data = useMemo(() => {
+    const buckets: Record<string, number> = {}
+    const now = Date.now()
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now - i * 86400000)
+      buckets[`${d.getMonth() + 1}/${d.getDate()}`] = 0
+    }
+    for (const a of alerts) {
+      if (!a.amount) continue
+      const label = dayLabel(a.ts)
+      if (label in buckets) buckets[label] = (buckets[label] ?? 0) + a.amount
+    }
+    return Object.entries(buckets).map(([day, vol]) => ({ day, vol }))
+  }, [alerts])
+
+  const maxVol = Math.max(...data.map(d => d.vol), 1)
+
+  return (
+    <ResponsiveContainer width="100%" height={160}>
+      <BarChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+        <XAxis
+          dataKey="day"
+          tick={{ fontFamily: 'var(--mono)', fontSize: 9, fill: 'var(--ink-mute)' }}
+          tickLine={false}
+          axisLine={false}
+          interval={4}
+        />
+        <YAxis hide />
+        <Tooltip
+          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+          contentStyle={{ background: 'var(--paper)', border: '1px solid var(--rule)', fontFamily: 'var(--mono)', fontSize: 11 }}
+          formatter={(v: number) => [fmtUSD(v), 'Volume']}
+        />
+        <Bar dataKey="vol" radius={[2, 2, 0, 0]}>
+          {data.map((d, i) => (
+            <Cell key={i} fill={d.vol > maxVol * 0.6 ? 'var(--blue)' : 'var(--rule)'} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function BreakdownChart({ alerts, field, title }: { alerts: WhaleAlert[], field: 'token' | 'chain', title: string }) {
+  const data = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const a of alerts) {
+      const key = a[field]
+      if (!key || !a.amount) continue
+      counts[key] = (counts[key] ?? 0) + a.amount
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, value]) => ({ name, value }))
+  }, [alerts, field])
+
+  const total = data.reduce((s, d) => s + d.value, 0)
+
+  return (
+    <div>
+      <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 12 }}>
+        {title}
+      </div>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <PieChart width={100} height={100}>
+          <Pie
+            data={data}
+            cx={50} cy={50}
+            innerRadius={28} outerRadius={46}
+            dataKey="value"
+            strokeWidth={0}
+          >
+            {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+          </Pie>
+        </PieChart>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {data.map((d, i) => (
+            <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)', flex: 1 }}>{d.name}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
+                {total > 0 ? `${((d.value / total) * 100).toFixed(0)}%` : '—'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CexFlowBar({ alerts }: { alerts: WhaleAlert[] }) {
+  const { inflow, outflow } = useMemo(() => {
+    let inflow = 0, outflow = 0
+    const todayStart = new Date().setHours(0, 0, 0, 0)
+    for (const a of alerts) {
+      if (a.ts < todayStart || !a.amount) continue
+      if (alertTowardsCex(a)) inflow += a.amount
+      else if (alertAwayFromCex(a)) outflow += a.amount
+    }
+    return { inflow, outflow }
+  }, [alerts])
+
+  const total = inflow + outflow
+  const inflowPct = total > 0 ? (inflow / total) * 100 : 50
+  const net = outflow - inflow
+  const netFmt = fmtUSD(Math.abs(net))
+  const signal = net > 0 ? 'Net outflow' : net < 0 ? 'Net inflow' : 'Neutral'
+  const signalColor = net > 0 ? 'var(--green)' : net < 0 ? 'var(--red)' : 'var(--ink-mute)'
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)' }}>Out {fmtUSD(outflow)}</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--red)' }}>In {fmtUSD(inflow)}</span>
+      </div>
+      <div style={{ height: 8, borderRadius: 4, background: 'var(--rule)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${100 - inflowPct}%`, background: 'var(--green)', borderRadius: 4, transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ marginTop: 8, fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', color: signalColor }}>
+        {signal} {total > 0 ? netFmt : ''}{net !== 0 ? (net > 0 ? ' → accumulation signal' : ' → sell pressure signal') : ''}
+      </div>
+    </div>
+  )
+}
+
+function EntityLeaderboard({ alerts }: { alerts: WhaleAlert[] }) {
+  const rows = useMemo(() => {
+    const map: Record<string, { volume: number, count: number }> = {}
+    for (const a of alerts) {
+      if (!a.entity || !a.amount) continue
+      if (!map[a.entity]) map[a.entity] = { volume: 0, count: 0 }
+      map[a.entity].volume += a.amount
+      map[a.entity].count++
+    }
+    return Object.entries(map)
+      .sort((a, b) => b[1].volume - a[1].volume)
+      .slice(0, 10)
+  }, [alerts])
+
+  if (rows.length === 0) {
+    return <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>No data yet</p>
+  }
+
+  const maxVol = rows[0][1].volume
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {rows.map(([entity, { volume, count }], i) => (
+        <div key={entity}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)' }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', marginRight: 8 }}>#{i + 1}</span>
+              {entity}
+            </span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', marginLeft: 12, whiteSpace: 'nowrap' }}>
+              {fmtUSD(volume)} · {count}tx
+            </span>
+          </div>
+          <div style={{ height: 3, borderRadius: 2, background: 'var(--rule)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${(volume / maxVol) * 100}%`, background: 'var(--blue)', borderRadius: 2 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
+
 export default function WhaleTrackerPage() {
   const [alerts, setAlerts] = useState<WhaleAlert[]>([])
   const [updatedAt, setUpdatedAt] = useState<number>(0)
@@ -43,6 +243,7 @@ export default function WhaleTrackerPage() {
   const [backfilling, setBackfilling] = useState(false)
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null)
   const [hideCex, setHideCex] = useState(true)
+  const [analysisOpen, setAnalysisOpen] = useState(true)
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -178,8 +379,67 @@ export default function WhaleTrackerPage() {
         </div>
       </div>
 
+      {/* ── Analysis Section ── */}
+      {!loading && !error && alerts.length > 0 && (
+        <div style={{ marginTop: 40 }}>
+          <div
+            className="sec-h"
+            style={{ marginBottom: analysisOpen ? 24 : 0, cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setAnalysisOpen(v => !v)}
+          >
+            <span className="h">Analysis</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
+              {alerts.length} alerts · last 30 days
+            </span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
+              {analysisOpen ? '▲' : '▼'}
+            </span>
+          </div>
+
+          {analysisOpen && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--rule)' }}>
+
+              {/* Volume over time — full width */}
+              <div style={{ gridColumn: '1 / -1', background: 'var(--paper)', padding: '24px 28px' }}>
+                <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>
+                  Daily Volume — Last 30 Days
+                </div>
+                <VolumeChart alerts={alerts} />
+              </div>
+
+              {/* Token breakdown */}
+              <div style={{ background: 'var(--paper)', padding: '24px 28px' }}>
+                <BreakdownChart alerts={alerts} field="token" title="Volume by Token" />
+              </div>
+
+              {/* Chain breakdown */}
+              <div style={{ background: 'var(--paper)', padding: '24px 28px' }}>
+                <BreakdownChart alerts={alerts} field="chain" title="Volume by Chain" />
+              </div>
+
+              {/* CEX flow */}
+              <div style={{ background: 'var(--paper)', padding: '24px 28px' }}>
+                <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>
+                  CEX Flow Today
+                </div>
+                <CexFlowBar alerts={alerts} />
+              </div>
+
+              {/* Entity leaderboard */}
+              <div style={{ background: 'var(--paper)', padding: '24px 28px' }}>
+                <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>
+                  Top Whales by Volume
+                </div>
+                <EntityLeaderboard alerts={alerts} />
+              </div>
+
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Chain filter + search */}
-      <div className="ch-row" style={{ marginTop: 32, alignItems: 'center' }}>
+      <div className="ch-row" style={{ marginTop: 40, alignItems: 'center' }}>
         {CHAINS.map(c => (
           <button key={c} className={`ch${chain === c ? ' on' : ''}`} onClick={() => setChain(c)}>
             {c}
@@ -252,20 +512,15 @@ export default function WhaleTrackerPage() {
               )}
               {filtered.map(alert => (
                 <tr key={alert.id}>
-                  {/* Entity */}
                   <td className="name">
                     {alert.entity ?? (alert.address ? shortAddr(alert.address) : '—')}
                     {alert.address && alert.entity && (
                       <span className="sym">{shortAddr(alert.address)}</span>
                     )}
                   </td>
-
-                  {/* Amount */}
                   <td className="pos" style={{ fontWeight: 600 }}>
                     {alert.amountFmt ?? '—'}
                   </td>
-
-                  {/* Token chip */}
                   <td style={{ textAlign: 'left' }}>
                     {alert.token ? (
                       <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', padding: '1px 5px', border: '1px solid var(--rule)' }}>
@@ -273,8 +528,6 @@ export default function WhaleTrackerPage() {
                       </span>
                     ) : '—'}
                   </td>
-
-                  {/* Chain chip */}
                   <td style={{ textAlign: 'left' }}>
                     {alert.chain ? (
                       <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--blue)', padding: '1px 5px', border: '1px solid var(--blue)', opacity: 0.85 }}>
@@ -282,13 +535,9 @@ export default function WhaleTrackerPage() {
                       </span>
                     ) : '—'}
                   </td>
-
-                  {/* Direction */}
                   <td style={{ textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                     {alert.direction ?? '—'}
                   </td>
-
-                  {/* From → To */}
                   <td style={{ textAlign: 'left' }}>
                     {alert.fromLabel || alert.toLabel ? (
                       <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-soft)' }}>
@@ -302,13 +551,9 @@ export default function WhaleTrackerPage() {
                       <span style={{ color: 'var(--ink-mute)' }}>—</span>
                     )}
                   </td>
-
-                  {/* Time */}
                   <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
                     {timeAgo(alert.ts)}
                   </td>
-
-                  {/* Tx links */}
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
                       {alert.arkhamUrl && (
@@ -320,7 +565,7 @@ export default function WhaleTrackerPage() {
                       {alert.txUrl && (
                         <a href={alert.txUrl} target="_blank" rel="noopener noreferrer"
                           style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', textDecoration: 'none' }}>
-                          Etherscan ↗
+                          Explorer ↗
                         </a>
                       )}
                       {!alert.arkhamUrl && !alert.txUrl && '—'}
@@ -333,7 +578,7 @@ export default function WhaleTrackerPage() {
         </div>
       )}
 
-      {/* Raw message panel — shown when parsing extracted nothing meaningful */}
+      {/* Raw message panel */}
       {!loading && !error && filtered.some(a => !a.amountFmt && !a.entity) && (
         <div style={{ marginTop: 32, borderTop: '1px solid var(--rule)', paddingTop: 24 }}>
           <div className="sec-h" style={{ marginBottom: 16 }}>
