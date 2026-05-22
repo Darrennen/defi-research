@@ -2350,10 +2350,6 @@ footer.site ul a:hover { color: var(--blue); }
 
   <div class="calc-toolbar">
     <div></div>
-    <div class="seg">
-      <span class="o on">Builder</span>
-      <span class="o">Compare Strategies</span>
-    </div>
   </div>
 
   <div class="calc-grid">
@@ -2373,10 +2369,9 @@ footer.site ul a:hover { color: var(--blue); }
         <div class="field"><span class="lbl">Borrow APY <span class="u">%</span></span><input id="cin-borrow-apy" type="number" value="5.77" step="0.01"></div>
         <div class="field"><span class="lbl">LLTV <span class="u">%</span></span><input id="cin-lltv" type="number" value="86.00" step="0.5"></div>
         <div class="field"><span class="lbl">Target HF <span class="u">×</span></span><input id="cin-hf" type="number" value="2.00" step="0.05"></div>
-        <div class="field"><span class="lbl">Gas / loop tx <span class="u">$</span></span><input id="cin-gas" type="number" value="150"></div>
-        <div class="field"><span class="lbl">Loops</span><input id="cin-loops" type="number" value="8"></div>
+        <div class="field"><span class="lbl">Gas cost <span class="u">$</span></span><input id="cin-gas" type="number" value="150"></div>
       </div>
-      <div class="hint">↑ Live PT APY / borrow rates auto-fill when you pick a Pendle preset.</div>
+      <div class="hint">↑ Live PT APY / borrow rates auto-fill when you pick a Pendle preset. Gas cost auto-fills from live on-chain price.</div>
     </div>
 
     <div class="calc-out">
@@ -3332,7 +3327,7 @@ footer.site ul a:hover { color: var(--blue); }
   }
 
   /* ---- wire calculator inputs ---- */
-  ['cin-capital','cin-duration','cin-coll-apy','cin-borrow-apy','cin-lltv','cin-hf','cin-gas','cin-loops'].forEach(id => {
+  ['cin-capital','cin-duration','cin-coll-apy','cin-borrow-apy','cin-lltv','cin-hf','cin-gas'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', loopCalc);
   });
