@@ -79,11 +79,19 @@ function buildSummaries(alerts: WhaleAlert[], start: number, end: number): Entit
       // Unique chains
       const chains = [...new Set(txs.map(a => a.chain).filter(Boolean))] as string[]
 
-      // Recent notable flows (biggest 3)
-      const recentFlows = [...txs]
-        .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
-        .slice(0, 3)
-        .map(a => ({ from: a.fromLabel, to: a.toLabel, amount: a.amount }))
+      // Unique flows: deduplicate by from→to pair, keep highest-volume example of each
+      const flowMap: Record<string, { from?: string; to?: string; amount: number }> = {}
+      for (const a of txs) {
+        const from = a.fromLabel || entity  // fall back to entity name when from is empty
+        const to = a.toLabel
+        const key = `${from ?? ''}→${to ?? ''}`
+        if (!flowMap[key] || (a.amount ?? 0) > flowMap[key].amount) {
+          flowMap[key] = { from, to, amount: a.amount ?? 0 }
+        }
+      }
+      const recentFlows = Object.values(flowMap)
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 4)
 
       // Hourly activity (24 buckets from start)
       const hourly = Array(24).fill(0)
@@ -115,8 +123,8 @@ function formatSummaryForClaude(s: EntitySummary, allAlerts: WhaleAlert[], start
     `Volume:       ${fmtUSD(s.volume)}`,
     `Transactions: ${s.txCount}`,
     `Biggest move: ${s.biggestMove.amountFmt ?? '—'} ${s.biggestMove.token ?? ''}`,
-    s.biggestMove.fromLabel || s.biggestMove.toLabel
-      ? `  Flow: ${s.biggestMove.fromLabel ?? '?'} → ${s.biggestMove.toLabel ?? '?'}`
+    (s.biggestMove.fromLabel || s.biggestMove.toLabel)
+      ? `  Flow: ${s.biggestMove.fromLabel || s.entity} → ${s.biggestMove.toLabel ?? '?'}`
       : '',
     '',
     `Tokens: ${s.tokens.map(t => `${t.name} ${t.pct}%`).join(' | ')}`,
@@ -130,7 +138,8 @@ function formatSummaryForClaude(s: EntitySummary, allAlerts: WhaleAlert[], start
     `All Transactions (newest first):`,
     ...txs.map(a => {
       const time = toMYT(a.ts)
-      const flow = (a.fromLabel || a.toLabel) ? ` | ${a.fromLabel ?? '?'} → ${a.toLabel ?? '?'}` : ''
+      const from = a.fromLabel || s.entity
+      const flow = (from || a.toLabel) ? ` | ${from ?? '?'} → ${a.toLabel ?? '?'}` : ''
       const chain = a.chain ? ` | ${a.chain}` : ''
       const link = a.arkhamUrl ? ` | ${a.arkhamUrl}` : a.txUrl ? ` | ${a.txUrl}` : ''
       return `  [${time}] ${a.amountFmt ?? '?'} ${a.token ?? ''}${chain}${flow}${link}`
