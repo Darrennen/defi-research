@@ -2195,10 +2195,18 @@ footer.site ul a:hover { color: var(--blue); }
     .yt-header .actions { display: none; }
 
     /* --- tabs: horizontal scroll on mobile --- */
-    .yt-tabs { padding: 0 16px;
-      overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
+    .yt-tabs {
+      padding: 0 12px;
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none; flex-wrap: nowrap;
+    }
     .yt-tabs::-webkit-scrollbar { display: none; }
-    .yt-tabs a { white-space: nowrap; }
+    .yt-tabs a {
+      flex: none;           /* natural width, don't squish */
+      padding: 13px 14px;   /* bigger tap target */
+      font-size: 12px;
+      white-space: nowrap;
+    }
 
     /* --- section layout --- */
     .wrap-wide { padding: 0 16px; }
