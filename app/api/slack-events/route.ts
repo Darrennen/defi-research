@@ -63,6 +63,19 @@ const TOKEN_NAMES: Record<string, string> = {
   'gho': 'GHO', 'lusd': 'LUSD', 'susde': 'sUSDe', 'usde': 'USDe',
 }
 
+const ENTITY_BLOCKLIST = [
+  'pause', 'null address', 'unknown', 'view on arkham', 'view on etherscan',
+]
+
+function cleanEntity(entity: string | undefined): string | undefined {
+  if (!entity) return undefined
+  // Drop Arkham "(Copy)" custom labels — they're duplicates, not real whales
+  if (/\(copy\)/i.test(entity)) return undefined
+  // Drop blocklisted names
+  if (ENTITY_BLOCKLIST.some(b => entity.toLowerCase() === b)) return undefined
+  return entity
+}
+
 export function isArkhamAlert(parsed: Partial<WhaleAlert>): boolean {
   if (parsed.amount && parsed.amount >= MIN_WHALE_USD) return true
   if (parsed.txHash && parsed.chain) return true
@@ -154,6 +167,7 @@ export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
   }
 
   out.direction = 'transferred'
+  out.entity = cleanEntity(out.entity)
   return out
 }
 
