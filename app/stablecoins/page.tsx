@@ -1,5 +1,55 @@
 import { getStablecoins, formatUsd } from '@/lib/defillama'
 
+const CG = 'https://coin-images.coingecko.com/coins/images'
+
+// Static map: gecko_id → CoinGecko image path (large→small swap at render)
+// Sourced once from CoinGecko /coins/markets — CDN URLs are stable.
+const COIN_IMAGES: Record<string, string> = {
+  'tether':                                               '325/Tether.png',
+  'usd-coin':                                             '6319/USDC.png',
+  'usds':                                                 '39926/usds.webp',
+  'usd1-wlfi':                                            '54977/USD1_1000x1000_transparent.png',
+  'dai':                                                  '9956/Badge_Dai.png',
+  'ethena-usde':                                          '33613/usde.png',
+  'paypal-usd':                                           '31212/PYUSD_Token_Logo_2x.png',
+  'blackrock-usd-institutional-digital-liquidity-fund':   '36291/blackrock.png',
+  'hashnote-usyc':                                        '51054/Hashnote_SDYC_200x200.png',
+  'global-dollar':                                        '51281/GDN_USDG_Token_200x200.png',
+  'ondo-us-dollar-yield':                                 '31700/usdy_%281%29.png',
+  'ripple-usd':                                           '39651/RLUSD_200x200_%281%29.png',
+  'falcon-finance':                                       '54558/ff_200_X_200.png',
+  'usdd':                                                 '25380/UUSD.jpg',
+  'usdtb':                                                '52804/76357aa8-4ef7-446c-bad3-a3f944eeec7a.jpeg',
+  'united-stables':                                       '71157/united-stables-logo.jpg',
+  'usdx-money-usdx':                                      '50360/USDX200px.png',
+  'gho':                                                  '30663/gho-token-logo.png',
+  'usual-usd':                                            '38272/USD0LOGO.png',
+  'ylds':                                                 '66486/YLDS.png',
+  'apxusd':                                               '102172243/apxUSD.png',
+  'true-usd':                                             '3449/tusd.png',
+  'usx':                                                  '68429/Solstice_Icons_for_DEX_512x512_USX.png',
+  'first-digital-usd':                                    '31079/FDUSD_icon_black.png',
+  'usdgo':                                                '102172077/USDGO_%287%29.png',
+  'usda-2':                                               '51599/SUSDA.png',
+  'crvusd':                                               '30118/crvusd.jpg',
+  'frax':                                                 '13422/LFRAX.png',
+  'frax-usd':                                             '53963/frxUSD.png',
+  'husd':                                                 '9567/HUSD.jpg',
+  'openeden-tbill':                                       '30576/OE_Logo_200x200_Transparent.png',
+  'gusd':                                                 '68725/gusd-logo.jpeg',
+  'agora-dollar':                                         '39284/AUSD_1024px.png',
+  'dola-usd':                                             '14287/dola.png',
+  'binance-peg-busd':                                     '9576/BUSD.png',
+}
+
+function coinImg(geckoId?: string): string | undefined {
+  if (!geckoId) return undefined
+  const path = COIN_IMAGES[geckoId]
+  if (!path) return undefined
+  const [numId, file] = path.split('/')
+  return `${CG}/${numId}/small/${file}`
+}
+
 function pegDev(price: number) { return Math.abs(price - 1) * 100 }
 
 function PegBadge({ price }: { price: number }) {
@@ -20,24 +70,6 @@ function MechBadge({ mech }: { mech: string }) {
   return <span className="badge-mech" style={s}>{label}</span>
 }
 
-async function getCoinImages(geckoIds: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>()
-  if (!geckoIds.length) return map
-  try {
-    const ids = geckoIds.join(',')
-    const res = await fetch(
-      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&per_page=250`,
-      { next: { revalidate: 3600 } }
-    )
-    if (!res.ok) return map
-    const data: { id: string; image: string }[] = await res.json()
-    for (const c of data) {
-      if (c.image) map.set(c.id, c.image.replace('/large/', '/small/'))
-    }
-  } catch { /* return empty map on error */ }
-  return map
-}
-
 export default async function StablecoinsPage() {
   const all = await getStablecoins()
 
@@ -45,9 +77,6 @@ export default async function StablecoinsPage() {
     .filter(s => s.pegType === 'peggedUSD' && s.price != null && s.price > 0 && (s.circulating?.peggedUSD ?? 0) > 1_000_000)
     .sort((a, b) => (b.circulating?.peggedUSD ?? 0) - (a.circulating?.peggedUSD ?? 0))
     .slice(0, 40)
-
-  const geckoIds = stables.map(s => s.gecko_id).filter((id): id is string => !!id)
-  const images = await getCoinImages(geckoIds)
 
   const totalMcap = stables.reduce((s, x) => s + (x.circulating?.peggedUSD ?? 0), 0)
   const avgDev = stables.reduce((s, x) => s + pegDev(x.price), 0) / stables.length
@@ -94,7 +123,7 @@ export default async function StablecoinsPage() {
             {stables.map((s, i) => {
               const dev = pegDev(s.price)
               const devColor = dev >= 1 ? 'var(--red)' : dev >= 0.1 ? 'var(--amber)' : 'var(--green)'
-              const imgUrl = s.gecko_id ? images.get(s.gecko_id) : undefined
+              const imgUrl = coinImg(s.gecko_id)
               return (
                 <tr key={s.id}>
                   <td>{i + 1}</td>
