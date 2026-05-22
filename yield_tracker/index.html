@@ -1839,6 +1839,36 @@ footer.site ul a:hover { color: var(--blue); }
     letter-spacing: .02em;
   }
 
+  /* ---- Fetch status banner ---- */
+  #yt-fetch-banner {
+    position: sticky; top: 0; z-index: 300;
+    padding: 8px 32px; font-size: 12px; font-family: var(--font-mono, monospace);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #yt-fetch-banner.loading {
+    background: var(--blue); color: #fff;
+  }
+  #yt-fetch-banner.error {
+    background: var(--red, #d93025); color: #fff;
+  }
+  #yt-fetch-banner .banner-close {
+    margin-left: auto; cursor: pointer; opacity: 0.7; font-size: 14px; line-height: 1;
+    background: none; border: none; color: inherit; padding: 0;
+  }
+  #yt-fetch-banner .banner-close:hover { opacity: 1; }
+
+  /* ---- Tab bar scroll fade ---- */
+  .yt-tabs-wrap {
+    position: relative;
+  }
+  .yt-tabs-wrap::after {
+    content: '';
+    position: absolute; right: 0; top: 0; bottom: 0; width: 40px;
+    background: linear-gradient(to right, transparent, var(--paper));
+    pointer-events: none; opacity: 0; transition: opacity 180ms;
+  }
+  .yt-tabs-wrap.can-scroll-right::after { opacity: 1; }
+
   /* ---- 03 LIVE PROTOCOL RATES ---- */
   .rates-grid {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
@@ -2301,6 +2331,7 @@ footer.site ul a:hover { color: var(--blue); }
   </div>
 </header>
 
+<div class="yt-tabs-wrap" id="ytTabsWrap">
 <nav class="yt-tabs" id="ytTabs">
   <a href="#positions" class="active">00 Positions</a>
   <a href="#calculator">01 Calculator</a>
@@ -2314,7 +2345,10 @@ footer.site ul a:hover { color: var(--blue); }
   <a href="#strc">09 STRC</a>
   <a href="#lp-opps">10 LP Opps</a>
 </nav>
+</div>
 </div><!-- /.yt-sticky-bar -->
+
+<div id="yt-fetch-banner" style="display:none"></div>
 
 <!-- =========================================================================
      00  MY LIVE POSITIONS
@@ -2533,51 +2567,8 @@ footer.site ul a:hover { color: var(--blue); }
         <th>Util%</th>
       </tr>
     </thead>
-    <tbody><!-- live -->
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">AP</span><span class="tok">AP</span></div><div class="lhs"><span class="nm">PT-apyUSD-18JUN2026 / apxUSD</span><span class="sub">29d to maturity <span class="tier t2">T2</span></span></div></div></td>
-        <td>86.0%</td><td class="pos-cell">25.91%</td><td>1.75×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>29d</td><td class="pos-cell">$84</td><td>40.12%</td><td>$56</td><td class="pos-cell">+$28</td><td class="warn-cell">88.8%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">AP</span><span class="tok">US</span></div><div class="lhs"><span class="nm">PT-apyUSD-18JUN2026 / USDC</span><span class="sub">29d to maturity <span class="tier t2">T2</span></span></div></div></td>
-        <td>86.0%</td><td class="pos-cell">24.30%</td><td>1.75×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>29d</td><td class="pos-cell">$79</td><td>40.12%</td><td>$56</td><td class="pos-cell">+$23</td><td class="warn-cell">91.0%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">AP</span><span class="tok">US</span></div><div class="lhs"><span class="nm">PT-apxUSD-18JUN2026 / USDC</span><span class="sub">29d to maturity <span class="tier t2">T2</span></span></div></div></td>
-        <td>91.5%</td><td class="pos-cell">16.39%</td><td>1.84×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>29d</td><td class="pos-cell">$53</td><td>27.87%</td><td>$42</td><td class="pos-cell">+$12</td><td class="warn-cell">91.9%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">AP</span><span class="tok">US</span></div><div class="lhs"><span class="nm">PT-apxUSD-18JUN2026 / USDC</span><span class="sub">29d to maturity <span class="tier t2">T2</span></span></div></div></td>
-        <td>86.0%</td><td class="pos-cell">15.78%</td><td>1.75×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>29d</td><td class="pos-cell">$51</td><td>29.65%</td><td>$42</td><td class="pos-cell">+$10</td><td class="warn-cell">87.1%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">AP</span><span class="tok">AP</span></div><div class="lhs"><span class="nm">PT-apxUSD-18JUN2026 / apxUSD</span><span class="sub">29d to maturity <span class="tier t2">T2</span></span></div></div></td>
-        <td>86.0%</td><td class="pos-cell">13.20%</td><td>1.75×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>29d</td><td class="pos-cell">$43</td><td>29.65%</td><td>$42</td><td class="pos-cell">+$1</td><td class="warn-cell">90.8%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">RE</span><span class="tok">UT</span></div><div class="lhs"><span class="nm">PT-reUSD-25JUN2026 / USDT</span><span class="sub">36d to maturity <span class="tier t3">T3</span></span></div></div></td>
-        <td>91.5%</td><td class="pos-cell">11.34%</td><td>1.84×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>36d</td><td class="pos-cell">$46</td><td>19.32%</td><td>$36</td><td class="pos-cell">+$10</td><td class="warn-cell">85.8%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">RE</span><span class="tok">UC</span></div><div class="lhs"><span class="nm">PT-reUSD-25JUN2026 / USDC</span><span class="sub">36d to maturity <span class="tier t3">T3</span></span></div></div></td>
-        <td>91.5%</td><td class="pos-cell">11.24%</td><td>1.84×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>36d</td><td class="pos-cell">$45</td><td>19.32%</td><td>$36</td><td class="pos-cell">+$9</td><td class="warn-cell">83.9%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">SN</span><span class="tok">US</span></div><div class="lhs"><span class="nm">PT-sNUSD-4JUN2026 / USDC</span><span class="sub">15d to maturity <span class="tier t1">T1</span></span></div></div></td>
-        <td>86.0%</td><td class="pos-cell">10.02%</td><td>1.75×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>15d</td><td class="pos-cell">$17</td><td>19.23%</td><td>$14</td><td class="pos-cell">+$3</td><td class="warn-cell">87.7%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">SR</span><span class="tok">US</span></div><div class="lhs"><span class="nm">PT-srNUSD-28MAY2026 / USDC</span><span class="sub">8d to maturity <span class="tier t3">T3</span></span></div></div></td>
-        <td>91.5%</td><td class="pos-cell">9.53%</td><td>1.84×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>8d</td><td class="pos-cell">$8</td><td>17.64%</td><td>$7</td><td class="pos-cell">+$1</td><td class="warn-cell">81.4%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">US</span><span class="tok">AS</span></div><div class="lhs"><span class="nm">PT-USDat-27AUG2026 / AUSD</span><span class="sub">99d to maturity <span class="tier t3">T3</span></span></div></div></td>
-        <td>91.5%</td><td class="pos-cell">9.23%</td><td>1.84×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>99d</td><td class="pos-cell">$102</td><td>19.28%</td><td>$98</td><td class="pos-cell">+$4</td><td class="warn-cell">79.2%</td>
-      </tr>
-      <tr>
-        <td><div class="pair-cell"><div class="toks"><span class="tok">CU</span><span class="tok">UT</span></div><div class="lhs"><span class="nm">PT-cUSD-23JUL2026 / USDT</span><span class="sub">64d to maturity <span class="tier t3">T3</span></span></div></div></td>
-        <td>91.5%</td><td class="pos-cell">8.45%</td><td>1.84×</td><td><span class="hf-mini"><i></i> 2.00</span></td><td class="bad">0.5000</td><td>64d</td><td class="pos-cell">$60</td><td>14.16%</td><td>$47</td><td class="pos-cell">+$14</td><td class="warn-cell">73.7%</td>
-      </tr>
+    <tbody>
+      <tr><td colspan="12" class="loading-text" style="text-align:center;padding:20px 0">Loading loops…</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -2623,103 +2614,8 @@ footer.site ul a:hover { color: var(--blue); }
         <th>Signal · Tier</th>
       </tr>
     </thead>
-    <tbody><!-- live -->
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt">AP</span><div class="lhs"><span class="nm">PT-apyUSD-18JUN2026</span><span class="ds">2026-06-18</span></div></div></td>
-        <td class="pos-cell">17.25%</td><td>10.76%</td>
-        <td><div class="maturity-cell"><span class="d">29d remaining</span><span class="e">expires 2026-06-18</span></div></td>
-        <td>$0.9900</td><td>1.29%</td><td>$15.94M</td><td>$3.10M</td>
-        <td class="warn-cell">−6.49%</td><td>77.5×</td><td class="pos-cell">+13.95%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 6.5% above underlying<span class="tier t2">T2</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt2">RE</span><div class="lhs"><span class="nm">PT-reUSDe-25JUN2026</span><span class="ds">2026-06-25</span></div></div></td>
-        <td class="pos-cell">16.26%</td><td>12.73%</td>
-        <td><div class="maturity-cell"><span class="d">36d remaining</span><span class="e">expires 2026-06-25</span></div></td>
-        <td>$0.9800</td><td>1.50%</td><td>$5.66M</td><td>$82.9k</td>
-        <td class="warn-cell">−3.53%</td><td>66.7×</td><td class="pos-cell">+12.96%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 3.5% above underlying<span class="tier t1">T1</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt">AP</span><div class="lhs"><span class="nm">PT-apxUSD-18JUN2026</span><span class="ds">2026-06-18</span></div></div></td>
-        <td class="pos-cell">12.75%</td><td>0.00%</td>
-        <td><div class="maturity-cell"><span class="d">29d remaining</span><span class="e">expires 2026-06-18</span></div></td>
-        <td>$0.9900</td><td>0.97%</td><td>$30.78M</td><td>$10.73M</td>
-        <td class="warn-cell">−12.75%</td><td>103.1×</td><td class="pos-cell">+9.45%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 12.8% above underlying<span class="tier t2">T2</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">JR</span><div class="lhs"><span class="nm">PT-jrUSDat-27AUG2026</span><span class="ds">2026-08-27</span></div></div></td>
-        <td class="pos-cell">12.46%</td><td>7.91%</td>
-        <td><div class="maturity-cell"><span class="d">99d remaining</span><span class="e">expires 2026-08-27</span></div></td>
-        <td>$0.9700</td><td>3.16%</td><td>$1.99M</td><td>$57.2k</td>
-        <td class="warn-cell">−4.55%</td><td>31.6×</td><td class="pos-cell">+9.16%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 4.5% above underlying<span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">SU</span><div class="lhs"><span class="nm">PT-sUSDat-27AUG2026</span><span class="ds">2026-08-27</span></div></div></td>
-        <td class="pos-cell">12.40%</td><td>4.83%</td>
-        <td><div class="maturity-cell"><span class="d">99d remaining</span><span class="e">expires 2026-08-27</span></div></td>
-        <td>$0.9700</td><td>3.14%</td><td>$12.45M</td><td>$517.1k</td>
-        <td class="warn-cell">−7.57%</td><td>31.8×</td><td class="pos-cell">+9.10%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 7.6% above underlying<span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">SE</span><div class="lhs"><span class="nm">PT-sENA-24SEP2026</span><span class="ds">2026-09-24</span></div></div></td>
-        <td class="pos-cell">12.18%</td><td>0.00%</td>
-        <td><div class="maturity-cell"><span class="d">127d remaining</span><span class="e">expires 2026-09-24</span></div></td>
-        <td>$0.1000</td><td>3.94%</td><td>$3.34M</td><td>$6.40k</td>
-        <td class="warn-cell">−12.18%</td><td>25.4×</td><td class="pos-cell">+8.88%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 12.2% above underlying<span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">MS</span><div class="lhs"><span class="nm">PT-msY-30JUL2026</span><span class="ds">2026-07-30</span></div></div></td>
-        <td class="pos-cell">11.94%</td><td>12.00%</td>
-        <td><div class="maturity-cell"><span class="d">71d remaining</span><span class="e">expires 2026-07-30</span></div></td>
-        <td>$0.9800</td><td>2.19%</td><td>$10.04M</td><td>$29.1k</td>
-        <td class="pos-cell">+0.06%</td><td>45.7×</td><td class="pos-cell">+8.64%</td>
-        <td><div class="signal-cell neutral">Neutral <span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">SR</span><div class="lhs"><span class="nm">PT-srUSDat-27AUG2026</span><span class="ds">2026-08-27</span></div></div></td>
-        <td class="pos-cell">11.53%</td><td>7.94%</td>
-        <td><div class="maturity-cell"><span class="d">99d remaining</span><span class="e">expires 2026-08-27</span></div></td>
-        <td>$0.9700</td><td>2.94%</td><td>$3.23M</td><td>$574.4k</td>
-        <td class="warn-cell">−3.59%</td><td>34×</td><td class="pos-cell">+8.23%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 3.6% above underlying<span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">SI</span><div class="lhs"><span class="nm">PT-SIERRA-2JUL2026</span><span class="ds">2026-07-02</span></div></div></td>
-        <td class="pos-cell">10.67%</td><td>3.64%</td>
-        <td><div class="maturity-cell"><span class="d">43d remaining</span><span class="e">expires 2026-07-02</span></div></td>
-        <td>$0.9900</td><td>1.21%</td><td>$14.39M</td><td>$111.4k</td>
-        <td class="warn-cell">−7.03%</td><td>82.6×</td><td class="pos-cell">+7.37%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 7.0% above underlying<span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">YN</span><div class="lhs"><span class="nm">PT-ynRWAx-15OCT2026</span><span class="ds">2026-10-15</span></div></div></td>
-        <td class="pos-cell">10.14%</td><td>11.40%</td>
-        <td><div class="maturity-cell"><span class="d">148d remaining</span><span class="e">expires 2026-10-15</span></div></td>
-        <td>$0.9600</td><td>3.86%</td><td>$813.1k</td><td>$434</td>
-        <td class="pos-cell">+1.26%</td><td>25.9×</td><td class="pos-cell">+6.84%</td>
-        <td><div class="signal-cell neutral">Neutral <span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">JR</span><div class="lhs"><span class="nm">PT-jrNUSD-28MAY2026</span><span class="ds">2026-05-28</span></div></div></td>
-        <td class="pos-cell">9.30%</td><td>7.21%</td>
-        <td><div class="maturity-cell"><span class="d">8d remaining</span><span class="e">expires 2026-05-28</span></div></td>
-        <td>$1.0000</td><td>0.21%</td><td>$1.43M</td><td>$15.7k</td>
-        <td class="warn-cell">−2.09%</td><td>—</td><td class="pos-cell">+5.99%</td>
-        <td><div class="signal-cell cheap">PT Cheap · 2.1% above underlying<span class="tier t3">T3</span></div></td>
-      </tr>
-      <tr>
-        <td><div class="pt-tok"><span class="ic alt3">SU</span><div class="lhs"><span class="nm">PT-sUSN-30JUL2026</span><span class="ds">2026-07-30</span></div></div></td>
-        <td class="pos-cell">9.04%</td><td>12.23%</td>
-        <td><div class="maturity-cell"><span class="d">71d remaining</span><span class="e">expires 2026-07-30</span></div></td>
-        <td>$0.9800</td><td>1.68%</td><td>$1.75M</td><td>$48.5k</td>
-        <td class="pos-cell">+3.19%</td><td>59.5×</td><td class="pos-cell">+5.74%</td>
-        <td><div class="signal-cell yt-cheap">YT Cheap · 3.2% Long Yield<span class="tier t3">T3</span></div></td>
-      </tr>
+    <tbody>
+      <tr><td colspan="14" class="loading-text" style="text-align:center;padding:20px 0">Loading markets…</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -2755,131 +2651,11 @@ footer.site ul a:hover { color: var(--blue); }
   </div>
 
   <div class="yt-summary" id="yt-summary">
-    <span class="ct">3 YT Cheap</span> <span class="alt">(underlying &gt; implied, buy YT for leveraged yield)</span> ·
-    <span class="ct">17 PT Cheap</span> <span class="alt">(fixed rate &gt; underlying, lock in premium)</span> ·
-    <span class="alt">17 Neutral</span> · Best alt rate: 3.30% (Aave)
+    <span class="loading-text">Loading signal summary…</span>
   </div>
 
   <div class="yt-grid" id="yt-grid">
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-superUSDC-26NOV2026</span><span class="tier t3">T3</span></div>
-      <div class="signal-pill yt-cheap">YT Cheap · +8.3% Long Yield</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">8.06%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">16.37%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+8.31%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">25.2×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+4.76%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 8.06% for 190d to profit</div>
-      <div class="meta"><span>190d · 2026-11-26</span><span>$1.93M</span></div>
-    </div>
-
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-superWETH-26NOV2026</span><span class="tier t3">T3</span></div>
-      <div class="signal-pill yt-cheap">YT Cheap · +5.9% Long Yield</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">4.72%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">10.60%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+5.88%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">42×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+3.13%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 4.72% for 190d to profit</div>
-      <div class="meta"><span>190d · 2026-11-26</span><span>$774.7k</span></div>
-    </div>
-
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-sUSN-30JUL2026</span><span class="tier t3">T3</span></div>
-      <div class="signal-pill yt-cheap">YT Cheap · +3.2% Long Yield</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">9.04%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">12.23%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+3.19%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">59.5×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+5.74%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 9.04% for 71d to profit</div>
-      <div class="meta"><span>71d · 2026-07-30</span><span>$1.75M</span></div>
-    </div>
-
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-savUSD-6AUG2026</span><span class="tier t3">T3</span></div>
-      <div class="signal-pill neutral">Neutral</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">6.42%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">8.04%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+1.62%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">75.2×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+3.12%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 6.42% for 78d to profit</div>
-      <div class="meta"><span>78d · 2026-08-06</span><span>$3.22M</span></div>
-    </div>
-
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-ynRWAx-15OCT2026</span><span class="tier t3">T3</span></div>
-      <div class="signal-pill neutral">Neutral</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">10.14%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">11.40%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+1.26%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">25.9×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+6.84%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 10.14% for 148d to profit</div>
-      <div class="meta"><span>148d · 2026-10-15</span><span>$813.1k</span></div>
-    </div>
-
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-mHYPER-24SEP2026</span><span class="tier t3">T3</span></div>
-      <div class="signal-pill neutral">Neutral</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">7.90%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">8.62%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+0.72%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">38.2×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+4.60%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 7.90% for 127d to profit</div>
-      <div class="meta"><span>127d · 2026-09-24</span><span>$815.0k</span></div>
-    </div>
-
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-stETH-30DEC2027</span><span class="tier t1">T1</span></div>
-      <div class="signal-pill neutral">Neutral</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">2.38%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">2.47%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+0.09%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">26.8×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+0.79%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 2.38% for 589d to profit</div>
-      <div class="meta"><span>589d · 2027-12-30</span><span>$3.62M</span></div>
-    </div>
-
-    <div class="yt-card">
-      <div class="hd"><span class="nm">PT-msY-30JUL2026</span><span class="tier t3">T3</span></div>
-      <div class="signal-pill neutral">Neutral</div>
-      <div class="grid2">
-        <div><div class="lab">Fixed APY</div><div class="val green">11.94%</div></div>
-        <div><div class="lab">Underlying APY</div><div class="val">12.00%</div></div>
-        <div><div class="lab">Long Yield APY</div><div class="val blue">+0.06%</div></div>
-        <div><div class="lab">YT Leverage</div><div class="val">45.7×</div></div>
-        <div><div class="lab">Alpha vs DeFi</div><div class="val green">+8.64%</div></div>
-        <div></div>
-      </div>
-      <div class="be"><div class="h">YT Breakeven</div>Avg ≥ 11.94% for 71d to profit</div>
-      <div class="meta"><span>71d · 2026-07-30</span><span>$10.04M</span></div>
-    </div>
+    <div class="loading-text" style="padding:20px 0">Loading opportunities…</div>
   </div>
 </section>
 
@@ -2897,10 +2673,10 @@ footer.site ul a:hover { color: var(--blue); }
 
   <div class="tbl-wrap"><table class="tmorpho" id="tmorpho">
     <thead>
-      <tr><th>Collateral</th><th>Debt</th><th>LLTV</th><th>Supply APY</th><th>Borrow APY</th><th>Utilization</th><th>Supply liq.</th><th>Borrow liq.</th></tr>
+      <tr><th>Collateral</th><th>Debt</th><th>LLTV</th><th>Supply APY</th><th>$10k/yr</th><th>Borrow APY</th><th>Utilization</th><th>Supply liq.</th><th>Borrow liq.</th></tr>
     </thead>
     <tbody>
-      <tr><td colspan="8" class="loading-text" style="text-align:center;padding:20px 0">Loading markets…</td></tr>
+      <tr><td colspan="9" class="loading-text" style="text-align:center;padding:20px 0">Loading markets…</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -2930,7 +2706,7 @@ footer.site ul a:hover { color: var(--blue); }
 
   <div class="tbl-wrap"><table class="tmorpho">
     <thead>
-      <tr><th>PT Token</th><th>Protocol</th><th>PT Fixed APY</th><th>Underlying APY</th><th>vs STRC base</th><th>Signal</th><th>Days left</th><th>Liquidity</th></tr>
+      <tr><th>PT Token</th><th>Protocol</th><th>PT Fixed APY</th><th>$10k Ret</th><th>Underlying APY</th><th>vs STRC base</th><th>Signal</th><th>Days left</th><th>Liquidity</th></tr>
     </thead>
     <tbody id="strc-tbody"><!-- live --></tbody>
   </table></div>
@@ -2958,6 +2734,7 @@ footer.site ul a:hover { color: var(--blue); }
         <th>Swap Fees</th>
         <th>LP Rewards</th>
         <th>Total LP APY</th>
+        <th>$10k Ret</th>
         <th>Liquidity</th>
         <th>Tier</th>
       </tr>
@@ -3332,13 +3109,38 @@ footer.site ul a:hover { color: var(--blue); }
     });
   });
 
+  function showBanner(msg, type) {
+    const b = document.getElementById('yt-fetch-banner');
+    if (!b) return;
+    b.className = type;
+    b.style.display = 'flex';
+    b.innerHTML = `<span>${msg}</span><button class="banner-close" aria-label="Dismiss">✕</button>`;
+    b.querySelector('.banner-close').addEventListener('click', () => { b.style.display = 'none'; });
+  }
+  function hideBanner() {
+    const b = document.getElementById('yt-fetch-banner');
+    if (b) b.style.display = 'none';
+  }
+
   async function load() {
+    const refreshBtn = document.querySelector('.btn-h:not(.primary)');
+    if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'Loading…'; }
+    showBanner('Refreshing data…', 'loading');
+
     let data;
     try {
       const res = await fetch('/api/yield-data');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const j = await res.json();
       data = j.data;
-    } catch(e) { console.error('yield-data fetch failed', e); return; }
+    } catch(e) {
+      console.error('yield-data fetch failed', e);
+      showBanner(`Failed to load data — ${e.message || 'network error'}. Data may be stale.`, 'error');
+      if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = 'Retry'; }
+      return;
+    }
+    hideBanner();
+    if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh'; }
     if (!data) return;
     cachedData = data;
 
@@ -3438,6 +3240,7 @@ footer.site ul a:hover { color: var(--blue); }
   <td>${m.loan}</td>
   <td>${P(m.lltv,1)}</td>
   <td class="pos-cell">${P(m.supply_apy)}</td>
+  <td class="pos-cell">+$${Math.round(10000 * (m.supply_apy / 100))}</td>
   <td class="warn-cell">${P(m.borrow_apy)}</td>
   <td><div class="util-cell"><div class="bar ${uc}"><i style="width:${Math.min(100,m.utilization).toFixed(0)}%"></i></div>${P(m.utilization,0)}</div></td>
   <td>${U(m.supply_total_usd)}</td>
@@ -3445,7 +3248,7 @@ footer.site ul a:hover { color: var(--blue); }
 </tr>`;
       }).join('');
     } else if (morphoTbody) {
-      morphoTbody.innerHTML = '<tr><td colspan="8" class="loading-text" style="text-align:center;padding:20px 0">No markets available</td></tr>';
+      morphoTbody.innerHTML = '<tr><td colspan="9" class="loading-text" style="text-align:center;padding:20px 0">No markets available</td></tr>';
     }
 
     /* ---- Rates grid ---- */
@@ -3456,6 +3259,7 @@ footer.site ul a:hover { color: var(--blue); }
       let html = aaveFiltered.map(a => `<div class="rate">
   <div class="hd"><div class="sym">${a.symbol}</div><div class="proto">Aave V3</div></div>
   <div class="r"><span class="k">Supply APY</span><span class="v pos">${P(a.supply_apy)}</span></div>
+  <div class="r"><span class="k">$10k / yr</span><span class="v pos">+$${Math.round(10000 * (a.supply_apy / 100))}</span></div>
   <div class="r"><span class="k">Borrow APY</span><span class="v warn">${P(a.borrow_apy)}</span></div>
   <div class="r"><span class="k">LTV</span><span class="v">${P(a.ltv,1)}</span></div>
   <div class="r"><span class="k">Supplied</span><span class="v">${U(a.total_supply_usd)}</span></div>
@@ -3464,6 +3268,7 @@ footer.site ul a:hover { color: var(--blue); }
         html += `<div class="rate">
   <div class="hd"><div class="sym">sUSDe</div><div class="proto">Ethena</div></div>
   <div class="r"><span class="k">Staking APY</span><span class="v pos">${P(ethena.staking_apy)}</span></div>
+  <div class="r"><span class="k">$10k / yr</span><span class="v pos">+$${Math.round(10000 * (ethena.staking_apy / 100))}</span></div>
   <div class="r"><span class="k">30d avg</span><span class="v">${P(ethena.avg30d_apy)}</span></div>
   <div class="r"><span class="k">Protocol APY</span><span class="v">${P(ethena.protocol_apy)}</span></div>
   <div class="r"><span class="k">Source</span><span class="v">app.ethena.fi</span></div>
@@ -3563,11 +3368,15 @@ footer.site ul a:hover { color: var(--blue); }
     <div><div class="lab">YT Leverage</div><div class="val">${p.yt_leverage != null ? N(p.yt_leverage,1)+'×' : '—'}</div></div>
     <div><div class="lab">Alpha vs DeFi</div><div class="val green">${p.alpha != null ? '+'+P(p.alpha) : '—'}</div></div>
     <div><div class="lab">PENDLE+</div><div class="val">${p.pendle_apy > 0 ? P(p.pendle_apy) : '—'}</div></div>
+    <div><div class="lab">$10k Ret</div><div class="val green">${(() => { const r = p.signal === 'buy_yt' ? Math.round(10000 * (p.yt_floating_apy / 100)) : (p.days_left ? Math.round(10000 * (p.pt_apy / 100) * (p.days_left / 365)) : null); return r != null ? '+$' + r + (p.signal === 'buy_yt' ? '/yr' : '') : '—'; })()}</div></div>
   </div>
   <div class="be"><div class="h">YT Breakeven</div>${beText}</div>
   <div class="meta"><span>${p.days_left != null ? p.days_left+'d · '+p.expiry : p.expiry}</span><span>${U(p.liquidity_usd)}</span></div>
 </div>`;
       }).join('');
+    } else if (ytGrid) {
+      ytGrid.innerHTML = '<div class="loading-text" style="padding:20px 0">No YT opportunities available</div>';
+      if (ytSummary) ytSummary.innerHTML = '<span class="loading-text">No signal data</span>';
     }
 
     /* ---- LP Opps table ---- */
@@ -3581,6 +3390,7 @@ footer.site ul a:hover { color: var(--blue); }
   <td>${l.swap_fee_apy > 0 ? P(l.swap_fee_apy) : '—'}</td>
   <td>${l.lp_reward_apy > 0 ? P(l.lp_reward_apy) : '—'}</td>
   <td class="pos-cell">${P(l.lp_total_apy)}</td>
+  <td class="pos-cell">${l.days_left ? '+$' + Math.round(10000 * (l.lp_total_apy / 100) * (l.days_left / 365)) : '+$' + Math.round(10000 * (l.lp_total_apy / 100)) + '/yr'}</td>
   <td>${U(l.liquidity_usd)}</td>
   <td><span class="tier ${tc(l.risk_tier)}">T${l.risk_tier}</span></td>
 </tr>`).join('');
@@ -3603,7 +3413,7 @@ footer.site ul a:hover { color: var(--blue); }
         return `<div class="yc-group">
   <div class="gh"><span class="sym">${sym}</span>${catBadge}<span class="meta">${sorted.length} maturit${sorted.length===1?'y':'ies'}</span></div>
   <table class="tyc"><thead><tr>
-    <th>Expiry</th><th>Days</th><th>PT APY</th><th>Underlying</th><th>Alpha vs DeFi</th><th>7d Trend</th><th>Signal</th><th>Liquidity</th>
+    <th>Expiry</th><th>Days</th><th>PT APY</th><th>$10k Ret</th><th>Underlying</th><th>Alpha vs DeFi</th><th>7d Trend</th><th>Signal</th><th>Liquidity</th>
   </tr></thead><tbody>
   ${sorted.map(r => {
     const alphaCls = (r.alpha ?? 0) >= 0 ? 'pos-cell' : 'neg-cell';
@@ -3613,10 +3423,12 @@ footer.site ul a:hover { color: var(--blue); }
     if (r.trend_dir === 'up')   trendCell = `<span class="trend-cell trend-up">▲ +${P(r.trend_7d,2)}</span>`;
     if (r.trend_dir === 'down') trendCell = `<span class="trend-cell trend-down">▼ ${P(r.trend_7d,2)}</span>`;
     if (r.trend_dir === 'flat') trendCell = `<span class="trend-cell trend-flat">→ ${P(r.trend_7d??0,2)}</span>`;
+    const ycRet = r.days_left ? '+$' + Math.round(10000 * (r.pt_apy / 100) * (r.days_left / 365)) : '—';
     return `<tr>
     <td>${r.expiry || '—'}</td>
     <td>${r.days_left != null ? r.days_left + 'd' : '—'}</td>
     <td class="pos-cell">${P(r.pt_apy)}</td>
+    <td class="pos-cell">${ycRet}</td>
     <td>${P(r.underlying_apy)}</td>
     <td class="${alphaCls}"><div class="alpha-bar"><div class="bar"><i style="width:${barW}%"></i></div><span class="v">${alphaStr}</span></div></td>
     <td>${trendCell}</td>
@@ -3659,10 +3471,12 @@ footer.site ul a:hover { color: var(--blue); }
           const vs = strcBaseApy != null ? Math.round((p.pt_apy - strcBaseApy) * 100) / 100 : null;
           const vsCls = vs != null ? (vs >= 0 ? 'pos-cell' : 'bad') : '';
           const vsStr = vs != null ? ((vs >= 0 ? '+' : '') + P(vs)) : '—';
+          const strcRet = p.days_left ? '+$' + Math.round(10000 * (p.pt_apy / 100) * (p.days_left / 365)) : '—';
           return `<tr>
   <td><span class="nm">${p.name}</span></td>
   <td>${proto}</td>
   <td class="pos-cell">${P(p.pt_apy)}</td>
+  <td class="pos-cell">${strcRet}</td>
   <td>${P(p.underlying_apy)}</td>
   <td class="${vsCls}">${vsStr}</td>
   <td>${signalHtml(p)}</td>
@@ -4068,6 +3882,21 @@ footer.site ul a:hover { color: var(--blue); }
   });
 
   document.addEventListener('DOMContentLoaded', load);
+
+  /* ---- Tab bar scroll fade ---- */
+  (function() {
+    const nav = document.getElementById('ytTabs');
+    const wrap = document.getElementById('ytTabsWrap');
+    if (!nav || !wrap) return;
+    function updateFade() {
+      const scrollable = nav.scrollWidth > nav.clientWidth;
+      const atEnd = nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 4;
+      wrap.classList.toggle('can-scroll-right', scrollable && !atEnd);
+    }
+    nav.addEventListener('scroll', updateFade, { passive: true });
+    window.addEventListener('resize', updateFade);
+    updateFade();
+  })();
 })();
 </script>
 
