@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-theme="light">
       <head>
         {/* Apply saved theme before first paint to prevent flash */}
-        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('paragrine-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var t=localStorage.getItem('paragrine-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);})();` }} />
       </head>
       <body className={`${interTight.variable} ${sourceSerif.variable} ${jetbrainsMono.variable}`}>
         <ProgressBar />

@@ -368,7 +368,10 @@ export default function WhaleTrackerPage() {
     if (!silent) setSyncing(true)
     setSyncMsg(null)
     try {
-      const res = await fetch('/api/backfill-alerts', { method: 'POST' })
+      const res = await fetch('/api/backfill-alerts', {
+        method: 'POST',
+        headers: { 'x-backfill-secret': process.env.NEXT_PUBLIC_BACKFILL_SECRET ?? '' },
+      })
       const data = await res.json()
       if (data.ok) {
         if (data.stored > 0) {
@@ -595,7 +598,7 @@ export default function WhaleTrackerPage() {
         <div style={{ padding: '48px 0', textAlign: 'center' }}>
           <p style={{ fontFamily: 'var(--serif)', fontSize: 18, color: 'var(--red)', marginBottom: 8 }}>{error}</p>
           <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
-            Check that UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set in your environment.
+            Alert store temporarily unavailable. Please try again later.
           </p>
         </div>
       )}

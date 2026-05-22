@@ -43,9 +43,15 @@ function downsample<T>(arr: T[], maxPoints: number): T[] {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const address = searchParams.get('address')?.toLowerCase()
-  const chainId = parseInt(searchParams.get('chainId') || '1')
+  const chainIdRaw = searchParams.get('chainId') || '1'
+  const chainId = parseInt(chainIdRaw)
 
-  if (!address) return NextResponse.json({ error: 'address required' }, { status: 400 })
+  if (!address || !/^0x[a-f0-9]{40}$/.test(address)) {
+    return NextResponse.json({ error: 'invalid address' }, { status: 400 })
+  }
+  if (![1, 8453].includes(chainId)) {
+    return NextResponse.json({ error: 'unsupported chainId' }, { status: 400 })
+  }
 
   const res = await fetch(MORPHO_GQL, {
     method: 'POST',

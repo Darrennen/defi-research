@@ -5,5 +5,6 @@ export const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 })
 
-export const WHALE_ALERTS_KEY = 'whale:alerts'
+const env = process.env.VERCEL_ENV ?? 'dev'
+export const WHALE_ALERTS_KEY = env === 'production' ? 'whale:alerts' : `whale:alerts:${env}`
 export const MAX_ALERTS = 5000

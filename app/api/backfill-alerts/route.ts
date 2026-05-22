@@ -5,10 +5,17 @@ import { parseArkhamAlert, isArkhamAlert, type WhaleAlert } from '@/app/api/slac
 const CHANNEL_ID = 'C097VGAQ5FB'
 const DAYS = 30
 
-export async function POST() {
+export async function POST(req: Request) {
+  // Require internal secret so this endpoint can't be abused from the public internet.
+  // The frontend sends this header; it is never exposed in client-side JS bundles.
+  const secret = process.env.BACKFILL_SECRET
+  if (secret && req.headers.get('x-backfill-secret') !== secret) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   const token = process.env.SLACK_BOT_TOKEN
   if (!token) {
-    return NextResponse.json({ error: 'SLACK_BOT_TOKEN not set' }, { status: 500 })
+    return NextResponse.json({ error: 'configuration error' }, { status: 500 })
   }
 
   // Find the newest alert already stored — only fetch since then (incremental sync).
@@ -49,7 +56,7 @@ export async function POST() {
       const data = await res.json()
 
       if (!data.ok) {
-        return NextResponse.json({ error: data.error ?? 'Slack API error', detail: data }, { status: 400 })
+        return NextResponse.json({ error: data.error ?? 'Slack API error' }, { status: 400 })
       }
 
       const messages: Array<{ ts: string; text?: string; subtype?: string }> = data.messages ?? []

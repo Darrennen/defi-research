@@ -168,6 +168,9 @@ export function parseArkhamAlert(text: string): Partial<WhaleAlert> {
 
   out.direction = 'transferred'
   out.entity = cleanEntity(out.entity)
+  // Only keep URLs that are strictly https to prevent javascript: or data: href injection
+  if (out.arkhamUrl && !out.arkhamUrl.startsWith('https://')) delete out.arkhamUrl
+  if (out.txUrl && !out.txUrl.startsWith('https://')) delete out.txUrl
   return out
 }
 
@@ -180,21 +183,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const payload = JSON.parse(body)
+  let payload: Record<string, unknown>
+  try {
+    payload = JSON.parse(body)
+  } catch {
+    return NextResponse.json({ error: 'invalid json' }, { status: 400 })
+  }
 
   // Slack URL verification handshake
   if (payload.type === 'url_verification') {
-    return NextResponse.json({ challenge: payload.challenge })
+    const challenge = typeof payload.challenge === 'string' ? payload.challenge : ''
+    return NextResponse.json({ challenge })
   }
 
-  const ev = payload.event
-  if (ev?.type === 'message' && ev.subtype !== 'message_deleted' && ev.subtype !== 'message_changed' && ev.text?.length > 10) {
+  const ev = payload.event as Record<string, unknown> | undefined
+  if (ev?.type === 'message' && ev.subtype !== 'message_deleted' && ev.subtype !== 'message_changed' && typeof ev.text === 'string' && ev.text.length > 10) {
     const parsed = parseArkhamAlert(ev.text)
     // Only store if it looks like a real Arkham alert
     if (!isArkhamAlert(parsed)) return NextResponse.json({ ok: true })
 
-    const ts = Math.floor(parseFloat(ev.ts) * 1000)
-    const alert: WhaleAlert = { id: ev.ts, ts, raw: ev.text, ...parsed }
+    const ts = Math.floor(parseFloat(ev.ts as string) * 1000)
+    const alert: WhaleAlert = { id: ev.ts as string, ts, raw: ev.text as string, ...parsed }
 
     await redis.zadd(WHALE_ALERTS_KEY, { score: ts, member: JSON.stringify(alert) })
 
