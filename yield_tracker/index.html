@@ -3427,8 +3427,9 @@ footer.site ul a:hover { color: var(--blue); }
     /* ---- Header KPIs ---- */
     const gasEl = document.getElementById('kpi-gas');
     if (gasEl && gas.gwei != null) {
-      const costStr = gas.cost_loop != null ? ' · $' + gas.cost_loop.toFixed(0) : '';
-      gasEl.textContent = gas.gwei.toFixed(2) + ' gwei' + costStr;
+      const bfStr = gas.base_fee != null ? gas.base_fee.toFixed(2) + '+' + (gas.priority_fee ?? 0).toFixed(2) : gas.gwei.toFixed(2);
+      const costStr = gas.cost_loop != null ? ' · $' + gas.cost_loop.toFixed(2) : '';
+      gasEl.textContent = bfStr + ' gwei' + costStr;
     }
     const pegEl = document.getElementById('kpi-peg');
     if (pegEl && peg.price != null) {

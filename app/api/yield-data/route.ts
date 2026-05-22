@@ -208,10 +208,17 @@ async function fetchGas() {
     const r = await fetch('https://ethereum.publicnode.com', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc:'2.0', method:'eth_gasPrice', params:[], id:1 }),
+      body: JSON.stringify({ jsonrpc:'2.0', method:'eth_feeHistory', params:['0x5','pending',[50]], id:1 }),
     })
     const d = await r.json()
-    res.gwei = r2(parseInt(d.result, 16) / 1e9)
+    const hist = d.result
+    // pending block base fee + median priority tip from last 5 blocks
+    const baseFee  = parseInt(hist.baseFeePerGas[hist.baseFeePerGas.length - 1], 16) / 1e9
+    const tips     = (hist.reward as string[][]).map(b => parseInt(b[0], 16) / 1e9)
+    const medTip   = tips.sort((a, b) => a - b)[Math.floor(tips.length / 2)]
+    res.gwei = r2(baseFee + medTip)
+    res.base_fee = r2(baseFee)
+    res.priority_fee = r2(medTip)
   } catch { res.gwei = null }
   try {
     const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
