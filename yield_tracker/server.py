@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-CAPITAL         = 4100
+CAPITAL         = 10_000
 HF              = 2.0
 GAS_SIMPLE      = 35
 GAS_LOOP        = 150

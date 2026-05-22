@@ -1834,6 +1834,11 @@ footer.site ul a:hover { color: var(--blue); }
   }
   .strat .load-btn:hover { border-color: var(--blue); color: var(--blue); }
 
+  .loading-text {
+    color: var(--ink-3); font-size: 13px; font-family: var(--font-mono, monospace);
+    letter-spacing: .02em;
+  }
+
   /* ---- 03 LIVE PROTOCOL RATES ---- */
   .rates-grid {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
@@ -2374,13 +2379,13 @@ footer.site ul a:hover { color: var(--blue); }
         <select id="cin-preset"><option value="">Loading live strategies…</option></select>
       </div>
       <div class="pair-row">
-        <div class="field"><span class="lbl">Capital <span class="u">USD</span></span><input id="cin-capital" type="number" value="4100"></div>
-        <div class="field"><span class="lbl">Duration <span class="u">days</span></span><input id="cin-duration" type="number" value="29"></div>
-        <div class="field"><span class="lbl">Collateral APY <span class="u">%</span></span><input id="cin-coll-apy" type="number" value="17.25" step="0.01"></div>
-        <div class="field"><span class="lbl">Borrow APY <span class="u">%</span></span><input id="cin-borrow-apy" type="number" value="5.77" step="0.01"></div>
-        <div class="field"><span class="lbl">LLTV <span class="u">%</span></span><input id="cin-lltv" type="number" value="86.00" step="0.5"></div>
-        <div class="field"><span class="lbl">Target HF <span class="u">×</span></span><input id="cin-hf" type="number" value="2.00" step="0.05"></div>
-        <div class="field"><span class="lbl">Gas cost <span class="u">$</span></span><input id="cin-gas" type="number" value="150"></div>
+        <div class="field"><span class="lbl">Capital <span class="u">USD</span></span><input id="cin-capital" type="number" value="10000" min="0"></div>
+        <div class="field"><span class="lbl">Duration <span class="u">days</span></span><input id="cin-duration" type="number" value="29" min="1"></div>
+        <div class="field"><span class="lbl">Collateral APY <span class="u">%</span></span><input id="cin-coll-apy" type="number" value="17.25" step="0.01" min="0"></div>
+        <div class="field"><span class="lbl">Borrow APY <span class="u">%</span></span><input id="cin-borrow-apy" type="number" value="5.77" step="0.01" min="0"></div>
+        <div class="field"><span class="lbl">LLTV <span class="u">%</span></span><input id="cin-lltv" type="number" value="86.00" step="0.5" min="1" max="99.9"></div>
+        <div class="field"><span class="lbl">Target HF <span class="u">×</span></span><input id="cin-hf" type="number" value="2.00" step="0.05" min="1.01"></div>
+        <div class="field"><span class="lbl">Gas cost <span class="u">$</span></span><input id="cin-gas" type="number" value="150" min="0"></div>
       </div>
       <div class="hint">↑ Live PT APY / borrow rates auto-fill when you pick a Pendle preset. Gas cost auto-fills from live on-chain price.</div>
     </div>
@@ -2462,63 +2467,10 @@ footer.site ul a:hover { color: var(--blue); }
   </div>
 
   <div class="best-opp" id="best-opp">
-    <span class="pill">Best opportunity</span>
-    <div>
-      <div class="tokens"><span class="tok">AP</span><span class="tok">AP</span></div>
-      <div class="pair" style="display: inline-block; margin-left: 8px;">PT-apyUSD-18JUN2026 / apxUSD</div>
-      <div class="meta">Pendle V2 → Morpho · 29d to maturity</div>
-    </div>
-    <div class="nums">
-      <div>Net APY<span class="v">25.91%</span></div>
-      <div>Leverage<span class="v ink">1.75×</span></div>
-      <div>Net profit<span class="v ink">$84</span></div>
-    </div>
-    <button type="button">Load in Builder</button>
+    <span class="loading-text">Loading strategies…</span>
   </div>
 
-  <div class="strat-grid" id="strat-grid">
-    <div class="strat best">
-      <div class="pair">PT-apyUSD-18JUN2026 + Morpho</div>
-      <div class="chain-path"><span class="ch">Pendle</span><span class="ar">→</span><span class="ch">Morpho</span><span class="ar">→</span><span class="ch">borrow apxUSD</span></div>
-      <div class="apy-big">25.91<span class="unit">%</span><span class="vs">+8.66% vs PT</span></div>
-      <div class="rows">
-        <div class="r"><span class="k">Leverage</span><span class="v">1.75×</span></div>
-        <div class="r"><span class="k">Days left</span><span class="v">29d</span></div>
-        <div class="r"><span class="k">Net profit</span><span class="v">$84</span></div>
-        <div class="r"><span class="k">LLTV</span><span class="v">86.0%</span></div>
-      </div>
-      <div class="progress"><i style="width: 100%"></i></div>
-      <button type="button" class="load-btn">Load</button>
-    </div>
-
-    <div class="strat">
-      <div class="pair">PT-apyUSD-18JUN2026 + Morpho</div>
-      <div class="chain-path"><span class="ch">Pendle</span><span class="ar">→</span><span class="ch">Morpho</span><span class="ar">→</span><span class="ch">borrow USDC</span></div>
-      <div class="apy-big">24.30<span class="unit">%</span><span class="vs">+7.05% vs PT</span></div>
-      <div class="rows">
-        <div class="r"><span class="k">Leverage</span><span class="v">1.75×</span></div>
-        <div class="r"><span class="k">Days left</span><span class="v">29d</span></div>
-        <div class="r"><span class="k">Net profit</span><span class="v">$79</span></div>
-        <div class="r"><span class="k">LLTV</span><span class="v">86.0%</span></div>
-      </div>
-      <div class="progress"><i style="width: 94%"></i></div>
-      <button type="button" class="load-btn">Load</button>
-    </div>
-
-    <div class="strat">
-      <div class="pair">PT-apxUSD-18JUN2026 + Morpho</div>
-      <div class="chain-path"><span class="ch">Pendle</span><span class="ar">→</span><span class="ch">Morpho</span><span class="ar">→</span><span class="ch">borrow USDC</span></div>
-      <div class="apy-big">16.39<span class="unit">%</span><span class="vs">+3.64% vs PT</span></div>
-      <div class="rows">
-        <div class="r"><span class="k">Leverage</span><span class="v">1.84×</span></div>
-        <div class="r"><span class="k">Days left</span><span class="v">29d</span></div>
-        <div class="r"><span class="k">Net profit</span><span class="v">$53</span></div>
-        <div class="r"><span class="k">LLTV</span><span class="v">91.5%</span></div>
-      </div>
-      <div class="progress"><i style="width: 63%"></i></div>
-      <button type="button" class="load-btn">Load</button>
-    </div>
-  </div>
+  <div class="strat-grid" id="strat-grid"></div>
 </section>
 
 <!-- =========================================================================
@@ -2534,34 +2486,7 @@ footer.site ul a:hover { color: var(--blue); }
   </div>
 
   <div class="rates-grid" id="rates-grid">
-    <div class="rate">
-      <div class="hd"><div class="sym">USDC</div><div class="proto">Aave V3</div></div>
-      <div class="r"><span class="k">Supply APY</span><span class="v pos">3.30%</span></div>
-      <div class="r"><span class="k">Borrow APY</span><span class="v warn">3.99%</span></div>
-      <div class="r"><span class="k">LTV</span><span class="v">75.0%</span></div>
-      <div class="r"><span class="k">Supplied</span><span class="v">$170.01M</span></div>
-    </div>
-    <div class="rate">
-      <div class="hd"><div class="sym">USDT</div><div class="proto">Aave V3</div></div>
-      <div class="r"><span class="k">Supply APY</span><span class="v pos">2.73%</span></div>
-      <div class="r"><span class="k">Borrow APY</span><span class="v warn">3.63%</span></div>
-      <div class="r"><span class="k">LTV</span><span class="v">75.0%</span></div>
-      <div class="r"><span class="k">Supplied</span><span class="v">$379.72M</span></div>
-    </div>
-    <div class="rate">
-      <div class="hd"><div class="sym">WETH</div><div class="proto">Aave V3</div></div>
-      <div class="r"><span class="k">Supply APY</span><span class="v pos">1.59%</span></div>
-      <div class="r"><span class="k">Borrow APY</span><span class="v warn">2.22%</span></div>
-      <div class="r"><span class="k">LTV</span><span class="v">80.5%</span></div>
-      <div class="r"><span class="k">Supplied</span><span class="v">$582.40M</span></div>
-    </div>
-    <div class="rate">
-      <div class="hd"><div class="sym">sUSDe</div><div class="proto">Ethena</div></div>
-      <div class="r"><span class="k">Staking APY</span><span class="v pos">10.84%</span></div>
-      <div class="r"><span class="k">30d avg</span><span class="v">9.62%</span></div>
-      <div class="r"><span class="k">Protocol APY</span><span class="v">8.42%</span></div>
-      <div class="r"><span class="k">Source</span><span class="v">app.ethena.fi</span></div>
-    </div>
+    <div class="loading-text">Loading rates…</div>
   </div>
 </section>
 
@@ -2601,6 +2526,7 @@ footer.site ul a:hover { color: var(--blue); }
         <th>Liq. price</th>
         <th>Days</th>
         <th>Net profit</th>
+        <th>$10k Net</th>
         <th>B/E borrow</th>
         <th>PT hold</th>
         <th>Loop extra</th>
@@ -2682,6 +2608,7 @@ footer.site ul a:hover { color: var(--blue); }
       <tr>
         <th>PT Token</th>
         <th>Fixed APY</th>
+        <th>$10k Ret</th>
         <th>Underlying APY</th>
         <th>PENDLE+</th>
         <th>LP APY</th>
@@ -2972,25 +2899,8 @@ footer.site ul a:hover { color: var(--blue); }
     <thead>
       <tr><th>Collateral</th><th>Debt</th><th>LLTV</th><th>Supply APY</th><th>Borrow APY</th><th>Utilization</th><th>Supply liq.</th><th>Borrow liq.</th></tr>
     </thead>
-    <tbody><!-- live -->
-      <tr><td><div class="pt-tok"><span class="ic alt3">CB</span><span class="nm">cbBTC</span></div></td><td>USDC</td><td>86.0%</td><td class="pos-cell">4.77%</td><td class="warn-cell">5.29%</td><td><div class="util-cell"><div class="bar crit"><i style="width:90%"></i></div>90%</div></td><td>$1.35B</td><td>$1.22B</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt2">WS</span><span class="nm">wstETH</span></div></td><td>USDT</td><td>86.0%</td><td class="pos-cell">2.49%</td><td class="warn-cell">3.10%</td><td><div class="util-cell"><div class="bar warn"><i style="width:81%"></i></div>81%</div></td><td>$212.77M</td><td>$171.74M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">CB</span><span class="nm">cbBTC</span></div></td><td>USDC</td><td>86.0%</td><td class="pos-cell">3.41%</td><td class="warn-cell">3.83%</td><td><div class="util-cell"><div class="bar crit"><i style="width:89%"></i></div>89%</div></td><td>$273.17M</td><td>$243.59M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">SU</span><span class="nm">sUSDS</span></div></td><td>USDT</td><td>96.5%</td><td class="pos-cell">2.18%</td><td class="warn-cell">2.79%</td><td><div class="util-cell"><div class="bar warn"><i style="width:78%"></i></div>78%</div></td><td>$116.81M</td><td>$91.43M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">SU</span><span class="nm">sUSDe</span></div></td><td>PYUSD</td><td>91.5%</td><td class="pos-cell">1.99%</td><td class="warn-cell">2.70%</td><td><div class="util-cell"><div class="bar"><i style="width:74%"></i></div>74%</div></td><td>$81.88M</td><td>$60.69M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">SU</span><span class="nm">sUSDe</span></div></td><td>USDtb</td><td>91.5%</td><td class="pos-cell">1.61%</td><td class="warn-cell">1.99%</td><td><div class="util-cell"><div class="bar warn"><i style="width:81%"></i></div>81%</div></td><td>$105.17M</td><td>$85.38M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">WB</span><span class="nm">WBTC</span></div></td><td>USDC</td><td>86.0%</td><td class="pos-cell">3.40%</td><td class="warn-cell">3.82%</td><td><div class="util-cell"><div class="bar crit"><i style="width:89%"></i></div>89%</div></td><td>$159.32M</td><td>$141.98M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt2">WS</span><span class="nm">wstETH</span></div></td><td>WETH</td><td>96.5%</td><td class="pos-cell">1.64%</td><td class="warn-cell">1.92%</td><td><div class="util-cell"><div class="bar warn"><i style="width:86%"></i></div>86%</div></td><td>$104.13M</td><td>$89.17M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt2">WS</span><span class="nm">wstETH</span></div></td><td>WETH</td><td>94.5%</td><td class="pos-cell">1.06%</td><td class="warn-cell">1.42%</td><td><div class="util-cell"><div class="bar"><i style="width:75%"></i></div>75%</div></td><td>$57.15M</td><td>$42.68M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">WB</span><span class="nm">WBTC</span></div></td><td>USDT</td><td>86.0%</td><td class="pos-cell">2.49%</td><td class="warn-cell">3.10%</td><td><div class="util-cell"><div class="bar warn"><i style="width:81%"></i></div>81%</div></td><td>$73.41M</td><td>$59.28M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">SY</span><span class="nm">syrupUSDC</span></div></td><td>PYUSD</td><td>91.5%</td><td class="pos-cell">3.58%</td><td class="warn-cell">4.13%</td><td><div class="util-cell"><div class="bar warn"><i style="width:87%"></i></div>87%</div></td><td>$74.92M</td><td>$65.08M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">WE</span><span class="nm">weETH</span></div></td><td>WETH</td><td>94.5%</td><td class="pos-cell">1.64%</td><td class="warn-cell">2.07%</td><td><div class="util-cell"><div class="bar"><i style="width:79%"></i></div>79%</div></td><td>$43.88M</td><td>$34.83M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">AA</span><span class="nm">AA_FalconXUSDC</span></div></td><td>USDC</td><td>77.0%</td><td class="pos-cell">4.45%</td><td class="warn-cell">5.23%</td><td><div class="util-cell"><div class="bar warn"><i style="width:85%"></i></div>85%</div></td><td>$53.80M</td><td>—</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">VB</span><span class="nm">vbWBTC</span></div></td><td>vbUSDC</td><td>86.0%</td><td class="pos-cell">1.55%</td><td class="warn-cell">2.02%</td><td><div class="util-cell"><div class="bar"><i style="width:77%"></i></div>77%</div></td><td>$34.34M</td><td>—</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">WE</span><span class="nm">WETH</span></div></td><td>USDC</td><td>86.0%</td><td class="pos-cell">4.77%</td><td class="warn-cell">5.29%</td><td><div class="util-cell"><div class="bar crit"><i style="width:90%"></i></div>90%</div></td><td>$45.62M</td><td>$41.04M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">WE</span><span class="nm">weETH</span></div></td><td>RLUSD</td><td>86.0%</td><td class="pos-cell">1.90%</td><td class="warn-cell">2.27%</td><td><div class="util-cell"><div class="bar"><i style="width:84%"></i></div>84%</div></td><td>$10.04M</td><td>$8.43M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">WE</span><span class="nm">weETH</span></div></td><td>USDC</td><td>86.0%</td><td class="pos-cell">3.40%</td><td class="warn-cell">4.04%</td><td><div class="util-cell"><div class="bar"><i style="width:84%"></i></div>84%</div></td><td>$3.36M</td><td>$2.83M</td></tr>
-      <tr><td><div class="pt-tok"><span class="ic alt3">AV</span><span class="nm">AVLT</span></div></td><td>USDt0</td><td>91.5%</td><td class="pos-cell">7.06%</td><td class="warn-cell">8.08%</td><td><div class="util-cell"><div class="bar warn"><i style="width:88%"></i></div>88%</div></td><td>$4.29M</td><td>$3.77M</td></tr>
+    <tbody>
+      <tr><td colspan="8" class="loading-text" style="text-align:center;padding:20px 0">Loading markets…</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -3377,6 +3287,11 @@ footer.site ul a:hover { color: var(--blue); }
       const extraStr  = l.loop_extra != null ? ((l.loop_extra >= 0 ? '+$' : '-$') + Math.abs(l.loop_extra).toFixed(0)) : '—';
       const ptHold    = l.simple_pt_profit != null ? '$' + l.simple_pt_profit.toFixed(0) : '—';
       const abr1 = initials(l.collateral), abr2 = initials(l.loan || '');
+      const gasL   = cachedData?.gas_loop ?? 20;
+      const net10k = l.days_left && lp.net_apy != null
+        ? Math.round(10000 * (lp.net_apy / 100) * (l.days_left / 365) - gasL) : null;
+      const net10kCls = net10k == null ? '' : net10k >= 0 ? 'pos-cell' : 'bad';
+      const net10kStr = net10k == null ? '—' : (net10k >= 0 ? '+$' : '-$') + Math.abs(net10k);
       return `<tr>
   <td><div class="pair-cell"><div class="toks"><span class="tok">${abr1}</span><span class="tok">${abr2}</span></div><div class="lhs"><span class="nm">${l.collateral} / ${l.loan}</span><span class="sub">${l.days_left != null ? l.days_left + 'd to maturity ' : ''}<span class="tier ${tc(l.risk_tier)}">T${l.risk_tier}</span></span></div></div></td>
   <td>${P(l.lltv,1)}</td>
@@ -3386,6 +3301,7 @@ footer.site ul a:hover { color: var(--blue); }
   <td class="${l.liquidation_price != null ? 'bad' : ''}">${l.liquidation_price != null ? l.liquidation_price.toFixed(4) : '—'}</td>
   <td>${l.days_left != null ? l.days_left + 'd' : '—'}</td>
   <td class="${profitCls}">${lp.net_profit != null ? (lp.net_profit >= 0 ? '$' : '-$') + Math.abs(lp.net_profit).toFixed(0) : '—'}</td>
+  <td class="${net10kCls}">${net10kStr}</td>
   <td>${l.breakeven_borrow != null ? P(l.breakeven_borrow) : '—'}</td>
   <td>${ptHold}</td>
   <td class="${extraCls}">${extraStr}</td>
@@ -3472,9 +3388,13 @@ footer.site ul a:hover { color: var(--blue); }
         const alphaStr  = p.alpha != null ? (p.alpha >= 0 ? '+' : '') + P(p.alpha) : '—';
         const pendlePct = p.pendle_apy > 0 ? `<span style="color:var(--blue)">+${P(p.pendle_apy)}</span>` : '—';
         const lpApyCls  = p.lp_total_apy > 0 ? 'pos-cell' : '';
-        return `<tr>
+        const ret10k  = p.days_left && p.pt_apy != null
+        ? Math.round(10000 * (p.pt_apy / 100) * (p.days_left / 365)) : null;
+      const ret10kStr = ret10k != null ? '+$' + ret10k.toLocaleString() : '—';
+      return `<tr>
   <td><div class="pt-tok"><span class="ic ${p.risk_tier===1?'alt2':p.risk_tier===2?'alt':'alt3'}">${initials(p.name)}</span><div class="lhs"><span class="nm">${p.name}</span><span class="ds">${p.expiry || ''}</span></div></div></td>
   <td class="pos-cell">${P(p.pt_apy)}</td>
+  <td class="pos-cell">${ret10kStr}</td>
   <td>${P(p.underlying_apy)}</td>
   <td>${pendlePct}</td>
   <td class="${lpApyCls}">${p.lp_total_apy > 0 ? P(p.lp_total_apy) : '—'}</td>
@@ -3524,6 +3444,8 @@ footer.site ul a:hover { color: var(--blue); }
   <td>${U(m.borrow_total_usd)}</td>
 </tr>`;
       }).join('');
+    } else if (morphoTbody) {
+      morphoTbody.innerHTML = '<tr><td colspan="8" class="loading-text" style="text-align:center;padding:20px 0">No markets available</td></tr>';
     }
 
     /* ---- Rates grid ---- */
@@ -3547,13 +3469,17 @@ footer.site ul a:hover { color: var(--blue); }
   <div class="r"><span class="k">Source</span><span class="v">app.ethena.fi</span></div>
 </div>`;
       }
-      ratesGrid.innerHTML = html;
+      ratesGrid.innerHTML = html || '<div class="loading-text">No rate data available</div>';
     }
 
     /* ---- Strategies ---- */
     const stratGrid = document.getElementById('strat-grid');
     const bestOpp   = document.getElementById('best-opp');
     const topLoops  = loops.filter(l => l.loop && l.loop.net_profit != null).slice(0,4);
+    if (stratGrid && !topLoops.length) {
+      stratGrid.innerHTML = '<p class="loading-text" style="padding:12px 0">No loop strategies available</p>';
+      if (bestOpp) bestOpp.innerHTML = '<span class="loading-text">No strategies available</span>';
+    }
     if (stratGrid && topLoops.length) {
       const maxApy = topLoops[0].loop.net_apy;
       stratGrid.innerHTML = topLoops.map((l, i) => {
