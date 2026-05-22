@@ -429,3 +429,23 @@ footer.site-footer ul a:hover { color: var(--blue); }
   .risk-grid { grid-template-columns: 1fr; }
   footer.site-footer { grid-template-columns: 1fr; }
 }
+
+/* ── Whale Tracker responsive ─────────────────────────────────────── */
+.wt-analysis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--rule);
+}
+.wt-analysis-full { grid-column: 1 / -1; }
+.wt-entity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+}
+@media (max-width: 720px) {
+  .wt-analysis-grid { grid-template-columns: 1fr; }
+  .wt-analysis-full { grid-column: 1; }
+  .wt-entity-grid { grid-template-columns: 1fr; }
+}

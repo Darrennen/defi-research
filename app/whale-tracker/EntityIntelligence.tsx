@@ -347,12 +347,7 @@ export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] })
         <CopyButton text={allCopyText} label="Copy All →Claude" />
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        gap: 1,
-        background: 'var(--rule)',
-      }}>
+      <div className="wt-entity-grid">
         {summaries.map(s => (
           <EntityCard
             key={s.entity}

@@ -339,6 +339,14 @@ export default function WhaleTrackerPage() {
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const [hideCex, setHideCex] = useState(true)
   const [analysisOpen, setAnalysisOpen] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 720)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -497,10 +505,10 @@ export default function WhaleTrackerPage() {
           </div>
 
           {analysisOpen && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--rule)' }}>
+            <div className="wt-analysis-grid">
 
               {/* Volume over time — full width */}
-              <div style={{ gridColumn: '1 / -1', background: 'var(--paper)', padding: '24px 28px' }}>
+              <div className="wt-analysis-full" style={{ background: 'var(--paper)', padding: '24px 28px' }}>
                 <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>
                   Daily Volume — Last 30 Days
                 </div>
@@ -593,74 +601,54 @@ export default function WhaleTrackerPage() {
       )}
 
       {!loading && !error && (
-        <div style={{ marginTop: 24, overflowX: 'auto' }}>
-          <table className="tab">
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left' }}>Entity / Wallet</th>
-                <th>Amount</th>
-                <th style={{ textAlign: 'left' }}>Token</th>
-                <th style={{ textAlign: 'left' }}>Chain</th>
-                <th style={{ textAlign: 'left' }}>Direction</th>
-                <th style={{ textAlign: 'left' }}>Flow</th>
-                <th style={{ textAlign: 'right' }}>Time</th>
-                <th style={{ textAlign: 'right' }}>Tx</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '64px 0', fontFamily: 'var(--serif)', fontSize: 17, color: 'var(--ink-mute)' }}>
-                    No alerts yet — once Arkham posts to <strong>#alerts</strong>, moves will appear here automatically.
-                  </td>
-                </tr>
-              )}
+        <div style={{ marginTop: 24 }}>
+          {filtered.length === 0 && (
+            <p style={{ textAlign: 'center', padding: '64px 0', fontFamily: 'var(--serif)', fontSize: 17, color: 'var(--ink-mute)' }}>
+              No alerts yet — once Arkham posts to <strong>#alerts</strong>, moves will appear here automatically.
+            </p>
+          )}
+
+          {/* Mobile card list */}
+          {isMobile && filtered.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--rule)' }}>
               {filtered.map(alert => (
-                <tr key={alert.id}>
-                  <td className="name">
-                    {alert.entity ?? (alert.address ? shortAddr(alert.address) : '—')}
-                    {alert.address && alert.entity && (
-                      <span className="sym">{shortAddr(alert.address)}</span>
-                    )}
-                  </td>
-                  <td className="pos" style={{ fontWeight: 600 }}>
-                    {alert.amountFmt ?? '—'}
-                  </td>
-                  <td style={{ textAlign: 'left' }}>
-                    {alert.token ? (
+                <div key={alert.id} style={{ background: 'var(--paper)', padding: '14px 16px' }}>
+                  {/* Row 1: entity + amount */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div className="name" style={{ fontSize: 15 }}>
+                      {alert.entity ?? (alert.address ? shortAddr(alert.address) : '—')}
+                    </div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--blue)', flexShrink: 0, marginLeft: 12 }}>
+                      {alert.amountFmt ?? '—'}
+                    </div>
+                  </div>
+                  {/* Row 2: chips + time */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                    {alert.token && (
                       <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', padding: '1px 5px', border: '1px solid var(--rule)' }}>
                         {alert.token}
                       </span>
-                    ) : '—'}
-                  </td>
-                  <td style={{ textAlign: 'left' }}>
-                    {alert.chain ? (
+                    )}
+                    {alert.chain && (
                       <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--blue)', padding: '1px 5px', border: '1px solid var(--blue)', opacity: 0.85 }}>
                         {alert.chain}
                       </span>
-                    ) : '—'}
-                  </td>
-                  <td style={{ textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    {alert.direction ?? '—'}
-                  </td>
-                  <td style={{ textAlign: 'left' }}>
-                    {alert.fromLabel || alert.toLabel ? (
-                      <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-soft)' }}>
-                        {alert.fromLabel}
-                        {alert.fromLabel && alert.toLabel && (
-                          <span style={{ color: 'var(--ink-mute)', margin: '0 4px' }}>→</span>
-                        )}
-                        {alert.toLabel}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--ink-mute)' }}>—</span>
                     )}
-                  </td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
-                    {timeAgo(alert.ts)}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', marginLeft: 'auto' }}>
+                      {timeAgo(alert.ts)}
+                    </span>
+                  </div>
+                  {/* Row 3: flow */}
+                  {(alert.fromLabel || alert.toLabel) && (
+                    <div style={{ fontFamily: 'var(--serif)', fontSize: 12, color: 'var(--ink-mute)', marginBottom: 8 }}>
+                      {alert.fromLabel}
+                      {alert.fromLabel && alert.toLabel && <span style={{ margin: '0 4px' }}>→</span>}
+                      {alert.toLabel}
+                    </div>
+                  )}
+                  {/* Row 4: links */}
+                  {(alert.arkhamUrl || alert.txUrl) && (
+                    <div style={{ display: 'flex', gap: 12 }}>
                       {alert.arkhamUrl && (
                         <a href={alert.arkhamUrl} target="_blank" rel="noopener noreferrer"
                           style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue)', textDecoration: 'none' }}>
@@ -673,13 +661,91 @@ export default function WhaleTrackerPage() {
                           Explorer ↗
                         </a>
                       )}
-                      {!alert.arkhamUrl && !alert.txUrl && '—'}
                     </div>
-                  </td>
-                </tr>
+                  )}
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
+
+          {/* Desktop table */}
+          {!isMobile && filtered.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="tab">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left' }}>Entity / Wallet</th>
+                    <th>Amount</th>
+                    <th style={{ textAlign: 'left' }}>Token</th>
+                    <th style={{ textAlign: 'left' }}>Chain</th>
+                    <th style={{ textAlign: 'left' }}>Direction</th>
+                    <th style={{ textAlign: 'left' }}>Flow</th>
+                    <th style={{ textAlign: 'right' }}>Time</th>
+                    <th style={{ textAlign: 'right' }}>Tx</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(alert => (
+                    <tr key={alert.id}>
+                      <td className="name">
+                        {alert.entity ?? (alert.address ? shortAddr(alert.address) : '—')}
+                        {alert.address && alert.entity && (
+                          <span className="sym">{shortAddr(alert.address)}</span>
+                        )}
+                      </td>
+                      <td className="pos" style={{ fontWeight: 600 }}>{alert.amountFmt ?? '—'}</td>
+                      <td style={{ textAlign: 'left' }}>
+                        {alert.token ? (
+                          <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', padding: '1px 5px', border: '1px solid var(--rule)' }}>
+                            {alert.token}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td style={{ textAlign: 'left' }}>
+                        {alert.chain ? (
+                          <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--blue)', padding: '1px 5px', border: '1px solid var(--blue)', opacity: 0.85 }}>
+                            {alert.chain}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td style={{ textAlign: 'left', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        {alert.direction ?? '—'}
+                      </td>
+                      <td style={{ textAlign: 'left' }}>
+                        {alert.fromLabel || alert.toLabel ? (
+                          <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-soft)' }}>
+                            {alert.fromLabel}
+                            {alert.fromLabel && alert.toLabel && <span style={{ color: 'var(--ink-mute)', margin: '0 4px' }}>→</span>}
+                            {alert.toLabel}
+                          </span>
+                        ) : <span style={{ color: 'var(--ink-mute)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
+                        {timeAgo(alert.ts)}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {alert.arkhamUrl && (
+                            <a href={alert.arkhamUrl} target="_blank" rel="noopener noreferrer"
+                              style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue)', textDecoration: 'none' }}>
+                              Arkham ↗
+                            </a>
+                          )}
+                          {alert.txUrl && (
+                            <a href={alert.txUrl} target="_blank" rel="noopener noreferrer"
+                              style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', textDecoration: 'none' }}>
+                              Explorer ↗
+                            </a>
+                          )}
+                          {!alert.arkhamUrl && !alert.txUrl && '—'}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
