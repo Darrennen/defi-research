@@ -92,7 +92,9 @@ function VolumeChart({ alerts }: { alerts: WhaleAlert[] }) {
         <YAxis hide />
         <Tooltip
           cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-          contentStyle={{ background: 'var(--paper)', border: '1px solid var(--rule)', fontFamily: 'var(--mono)', fontSize: 11 }}
+          contentStyle={{ background: '#111', border: '1px solid #2a2a2a', fontFamily: 'monospace', fontSize: 11, color: '#ccc' }}
+          labelStyle={{ color: '#ccc' }}
+          itemStyle={{ color: '#ccc' }}
           formatter={(v: number) => [fmtUSD(v), 'Volume']}
         />
         <Bar dataKey="vol" radius={[2, 2, 0, 0]}>
