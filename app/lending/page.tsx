@@ -42,7 +42,7 @@ export default async function LendingPage() {
         <div className="metric-cell"><div className="lbl">Chains</div><div className="val">{chainSet.size}</div></div>
       </div>
 
-      <div style={{ marginTop: 40, overflowX: 'auto' }}>
+      <div className="table-scroll-x" style={{ marginTop: 40 }}>
         <table className="tab">
           <thead>
             <tr>

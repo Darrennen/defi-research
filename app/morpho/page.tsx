@@ -130,7 +130,7 @@ export default function MorphoPage() {
   return (
     <div>
       {/* Page header */}
-      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Image src="https://icons.llamao.fi/icons/protocols/morpho-blue" alt="Morpho Blue" width={20} height={20} style={{ borderRadius: 3 }} unoptimized />
@@ -174,7 +174,7 @@ export default function MorphoPage() {
       {!loading && markets.length > 0 && (
         <>
           {/* Protocol KPIs */}
-          <div className="kpi" style={{ marginTop: 24, gridTemplateColumns: 'repeat(4,1fr)' }}>
+          <div className="kpi kpi-4col" style={{ marginTop: 24 }}>
             {[
               { l: 'Total Supplied', v: u(totalSupplyUsd), d: chainName },
               { l: 'Total Borrowed', v: u(totalBorrowUsd), d: `${activeMarkets} active markets` },
@@ -313,10 +313,12 @@ export default function MorphoPage() {
                 fontSize: 12,
                 padding: '7px 12px',
                 border: '1px solid var(--rule)',
-                background: 'var(--bg)',
+                background: 'transparent',
                 color: 'var(--ink)',
                 outline: 'none',
-                width: 320,
+                flex: 1,
+                minWidth: 0,
+                maxWidth: 320,
               }}
             />
             {filter && (
@@ -335,7 +337,7 @@ export default function MorphoPage() {
               <span className="t">All Markets — {chainName}</span>
               {chainIcon && <Image src={chainIcon} alt={chainName} width={16} height={16} style={{ borderRadius: '50%' }} unoptimized />}
             </div>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-scroll-x">
               <table className="tab">
                 <thead>
                   <tr>
@@ -393,7 +395,7 @@ export default function MorphoPage() {
                 <span className="t">MetaMorpho Vaults — {chainName}</span>
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>Curated liquidity</span>
               </div>
-              <div style={{ overflowX: 'auto' }}>
+              <div className="table-scroll-x">
                 <table className="tab">
                   <thead>
                     <tr>

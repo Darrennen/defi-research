@@ -44,7 +44,7 @@ export default function HyperLendPage() {
   return (
     <div>
       {/* Page header */}
-      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Image src="https://icons.llamao.fi/icons/protocols/hyperlend.jpg" alt="HyperLend" width={20} height={20} style={{ borderRadius: 3 }} unoptimized />
@@ -181,7 +181,7 @@ export default function HyperLendPage() {
                   <span className="t">All Reserves — HyperEVM</span>
                   <Image src="https://icons.llamao.fi/icons/chains/rsz_hyperliquid.jpg" alt="HyperEVM" width={16} height={16} style={{ borderRadius: '50%' }} unoptimized />
                 </div>
-                <div style={{ overflowX: 'auto' }}>
+                <div className="table-scroll-x">
                   <table className="tab">
                     <thead>
                       <tr>

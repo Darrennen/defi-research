@@ -105,7 +105,7 @@ export default async function StablecoinsPage() {
         </div>
       </div>
 
-      <div style={{ marginTop: 40, overflowX: 'auto' }}>
+      <div className="table-scroll-x" style={{ marginTop: 40 }}>
         <table className="tab">
           <thead>
             <tr>

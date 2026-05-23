@@ -231,7 +231,7 @@ html[data-theme="dark"] .panel { background: var(--paper-2); }
 
 /* ── Asset/chain selector chips ─────────────────────────────────── */
 .ch-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0 14px; }
-.ch { flex: none; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 10px; border: 1px solid var(--rule); color: var(--ink-soft); cursor: pointer; background: none; transition: all 120ms; }
+.ch { flex: none; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 10px; min-height: 36px; display: inline-flex; align-items: center; border: 1px solid var(--rule); color: var(--ink-soft); cursor: pointer; background: none; transition: all 120ms; }
 .ch.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 html[data-theme="dark"] .ch.on { background: var(--blue); color: #fff; border-color: var(--blue); }
 .ch:hover:not(.on) { border-color: var(--ink-mute); color: var(--ink); }
@@ -313,11 +313,29 @@ footer.site-footer ul a:hover { color: var(--blue); }
 /* ── Scrollbar ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--paper); }
-::-webkit-scrollbar-thumb { background: rgba(21,22,26,0.18); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(21,22,26,0.28); }
+::-webkit-scrollbar-thumb { background: rgba(21,22,26,0.30); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(21,22,26,0.45); }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(236,232,223,0.22); }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: rgba(236,232,223,0.38); }
 
-/* ── Responsive: 3-col KPI override class ────────────────────────── */
+/* ── Responsive: KPI column override classes ─────────────────────── */
 .kpi-3col { grid-template-columns: repeat(3, 1fr) !important; }
+.kpi-4col { grid-template-columns: repeat(4, 1fr) !important; }
+
+/* ── 4-column metrics row (e.g. whale tracker) ───────────────────── */
+.metrics-4 { grid-template-columns: repeat(4, 1fr) !important; }
+
+/* ── Scrollable table wrapper (extends to screen edges on mobile) ─── */
+.table-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── Dark mode: inputs need explicit background ──────────────────── */
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="search"] {
+  background: var(--paper-2);
+  color: var(--ink);
+  border-color: var(--rule);
+}
 
 /* ── Bottom nav (mobile only) ────────────────────────────────────── */
 .bottom-nav { display: none; }
@@ -329,6 +347,12 @@ footer.site-footer ul a:hover { color: var(--blue); }
   .meth { padding: 22px 18px !important; border-bottom: 1px solid var(--rule); }
   footer.site-footer { grid-template-columns: 1fr 1fr; }
 }
+/* ── Intermediate breakpoint: tablet / mid-size ──────────────────── */
+@media (max-width: 600px) {
+  .metrics-4 { grid-template-columns: repeat(2, 1fr) !important; }
+  .kpi-4col  { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
 @media (max-width: 720px) {
   /* Bottom nav */
   body { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
@@ -413,6 +437,9 @@ footer.site-footer ul a:hover { color: var(--blue); }
   .ch-row { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 4px; }
   .ch-row::-webkit-scrollbar { display: none; }
 
+  /* Table scroll: extend to screen edges */
+  .table-scroll-x { margin: 0 -16px; padding: 0 16px; }
+
   /* Risk & config */
   .risk-grid { grid-template-columns: 1fr 1fr; }
   .cfg-grid { grid-template-columns: 1fr 1fr; }
@@ -426,8 +453,22 @@ footer.site-footer ul a:hover { color: var(--blue); }
   .indices { grid-template-columns: 1fr; }
   .idx { border-right: 0; border-bottom: 1px solid var(--rule); padding: 14px 0; }
   .kpi-3col { grid-template-columns: 1fr !important; }
+  .kpi-4col  { grid-template-columns: 1fr 1fr !important; }
+  .metrics-4 { grid-template-columns: 1fr 1fr !important; }
   .risk-grid { grid-template-columns: 1fr; }
+  .table-scroll-x { margin: 0 -14px; padding: 0 14px; }
   footer.site-footer { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 350px) {
+  .bottom-nav a { min-width: 64px; font-size: 9px; }
+  .kpi-4col  { grid-template-columns: 1fr !important; }
+  .metrics-4 { grid-template-columns: 1fr 1fr !important; }
+}
+
+/* ── Touch: row tap feedback ─────────────────────────────────────── */
+@media (hover: none) {
+  .tab tbody tr:active td { background: var(--blue-soft); }
 }
 
 /* ── Whale Tracker responsive ─────────────────────────────────────── */

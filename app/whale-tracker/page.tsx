@@ -457,7 +457,7 @@ export default function WhaleTrackerPage() {
       </div>
 
       {/* Stats row */}
-      <div className="metrics-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="metrics-row metrics-4">
         <div className="metric-cell">
           <div className="lbl">Alerts Today</div>
           <div className="val">{todayAlerts.length}</div>
@@ -673,7 +673,7 @@ export default function WhaleTrackerPage() {
 
           {/* Desktop table */}
           {!isMobile && filtered.length > 0 && (
-            <div style={{ overflowX: 'auto' }}>
+            <div className="table-scroll-x">
               <table className="tab">
                 <thead>
                   <tr>
