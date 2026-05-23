@@ -26,7 +26,7 @@ const nextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline'",  // unsafe-inline needed for theme script in layout.tsx
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https://icons.llamao.fi https://token-icons.llamao.fi https://icons.llama.fi https://cdn.llama.fi",
+              "img-src 'self' data: https://icons.llamao.fi https://token-icons.llamao.fi https://icons.llama.fi https://cdn.llama.fi https://coin-images.coingecko.com",
               "connect-src 'self' https://*.upstash.io https://blue-api.morpho.org https://yields.llama.fi https://api.llama.fi",
               "frame-ancestors 'none'",
               "base-uri 'self'",
