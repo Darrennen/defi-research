@@ -2456,6 +2456,42 @@ footer.site ul a:hover { color: var(--blue); }
 
   <div id="pos-grid" class="pos-grid"></div>
   <div id="pos-empty" style="display:none;font-family:var(--mono);font-size:13px;color:var(--ink-mute);padding:32px 0;text-align:center;">No Morpho positions found for this address.</div>
+
+  <!-- Pendle positions -->
+  <div id="pendle-pos-wrap" style="display:none;margin-top:28px;">
+    <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;padding-top:16px;border-top:1px solid var(--rule);">Pendle Positions</div>
+    <div class="tbl-wrap"><table class="tmorpho" id="pendle-pos-table">
+      <thead><tr>
+        <th style="text-align:left">Market</th>
+        <th>Expiry</th><th>Days</th>
+        <th>PT Bal</th><th>PT Value</th>
+        <th>YT Bal</th><th>YT Value</th>
+        <th>LP Value</th>
+        <th>Total</th>
+        <th>Fixed APY</th>
+      </tr></thead>
+      <tbody id="pendle-pos-tbody"></tbody>
+    </table></div>
+  </div>
+
+  <!-- Aave V3 summary -->
+  <div id="aave-pos-wrap" style="display:none;margin-top:28px;">
+    <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;padding-top:16px;border-top:1px solid var(--rule);">Aave V3 Position</div>
+    <div id="aave-pos-kpis" class="pos-summary" style="grid-template-columns:repeat(7,1fr)"></div>
+  </div>
+
+  <!-- PT wallet balances -->
+  <div id="pt-bal-wrap" style="display:none;margin-top:28px;">
+    <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;padding-top:16px;border-top:1px solid var(--rule);">PT Token Wallet Balances</div>
+    <div class="tbl-wrap"><table class="tmorpho" id="pt-bal-table">
+      <thead><tr>
+        <th style="text-align:left">PT Token</th>
+        <th>Balance</th><th>Value USD</th>
+        <th>Expiry</th><th>Days</th><th>Fixed APY</th>
+      </tr></thead>
+      <tbody id="pt-bal-tbody"></tbody>
+    </table></div>
+  </div>
 </section>
 
 <!-- =========================================================================
@@ -4031,6 +4067,66 @@ footer.site ul a:hover { color: var(--blue); }
     initSparklines();
   }
 
+  function renderPendlePositions(positions) {
+    const wrap = document.getElementById('pendle-pos-wrap');
+    const tbody = document.getElementById('pendle-pos-tbody');
+    if (!positions || positions.length === 0) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    tbody.innerHTML = positions.map(p => {
+      const daysStr = p.days_left != null ? p.days_left + 'd' : '—';
+      const apyStr  = p.implied_apy != null ? p.implied_apy.toFixed(2) + '%' : '—';
+      return `<tr>
+        <td style="text-align:left;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name || '—'}</td>
+        <td>${p.expiry || '—'}</td>
+        <td>${daysStr}</td>
+        <td>${p.pt_balance > 0 ? p.pt_balance.toLocaleString() : '—'}</td>
+        <td>${p.pt_value_usd > 0 ? '$' + p.pt_value_usd.toLocaleString() : '—'}</td>
+        <td>${p.yt_balance > 0 ? p.yt_balance.toLocaleString() : '—'}</td>
+        <td>${p.yt_value_usd > 0 ? '$' + p.yt_value_usd.toLocaleString() : '—'}</td>
+        <td>${p.lp_value_usd > 0 ? '$' + p.lp_value_usd.toLocaleString() : '—'}</td>
+        <td style="font-weight:700;">$${p.total_value_usd.toLocaleString()}</td>
+        <td>${apyStr}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderAavePosition(aave) {
+    const wrap = document.getElementById('aave-pos-wrap');
+    const kpis = document.getElementById('aave-pos-kpis');
+    if (!aave) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    const hfColor = aave.health_factor == null ? 'var(--ink-mute)' :
+                    aave.health_factor < 1.2 ? '#f87171' :
+                    aave.health_factor < 1.5 ? '#fb923c' : '#4ade80';
+    kpis.innerHTML = `
+      <div class="b"><div class="l">Collateral</div><div class="v">$${aave.total_collateral.toLocaleString()}</div></div>
+      <div class="b"><div class="l">Debt</div><div class="v">$${aave.total_debt.toLocaleString()}</div></div>
+      <div class="b"><div class="l">Net Equity</div><div class="v">$${aave.net_equity.toLocaleString()}</div></div>
+      <div class="b"><div class="l">Avail Borrow</div><div class="v">$${aave.avail_borrow.toLocaleString()}</div></div>
+      <div class="b"><div class="l">LTV</div><div class="v">${aave.ltv_pct}%</div></div>
+      <div class="b"><div class="l">Liq Threshold</div><div class="v">${aave.liq_threshold_pct}%</div></div>
+      <div class="b"><div class="l">Health Factor</div><div class="v" style="color:${hfColor};">${aave.health_factor != null ? aave.health_factor.toFixed(2) : '∞'}</div></div>`;
+  }
+
+  function renderPtBalances(ptBal) {
+    const wrap = document.getElementById('pt-bal-wrap');
+    const tbody = document.getElementById('pt-bal-tbody');
+    if (!ptBal || ptBal.length === 0) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+    tbody.innerHTML = ptBal.map(p => {
+      const daysStr = p.days_left != null ? p.days_left + 'd' : '—';
+      const valStr  = p.value_usd != null ? '$' + p.value_usd.toLocaleString() : '—';
+      return `<tr>
+        <td style="text-align:left;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.symbol}</td>
+        <td>${p.balance.toLocaleString()}</td>
+        <td>${valStr}</td>
+        <td>${p.expiry || '—'}</td>
+        <td>${daysStr}</td>
+        <td>—</td>
+      </tr>`;
+    }).join('');
+  }
+
   async function fetchPositions() {
     const addr = document.getElementById('pos-addr').value.trim();
     const chainId = document.getElementById('pos-chain').value;
@@ -4044,11 +4140,28 @@ footer.site ul a:hover { color: var(--blue); }
     }
     btn.textContent = 'Loading…';
     btn.disabled = true;
+    // Hide wallet sections while loading
+    document.getElementById('pendle-pos-wrap').style.display = 'none';
+    document.getElementById('aave-pos-wrap').style.display = 'none';
+    document.getElementById('pt-bal-wrap').style.display = 'none';
     try {
-      const res = await fetch(`/api/morpho-positions?address=${addr}&chainId=${chainId}`);
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      renderPositions(json.positions || []);
+      const [morphoRes, walletRes] = await Promise.allSettled([
+        fetch(`/api/morpho-positions?address=${addr}&chainId=${chainId}`),
+        fetch(`/api/wallet-positions?address=${addr}`),
+      ]);
+
+      if (morphoRes.status === 'fulfilled') {
+        const json = await morphoRes.value.json();
+        if (json.error) throw new Error(json.error);
+        renderPositions(json.positions || []);
+      }
+
+      if (walletRes.status === 'fulfilled') {
+        const w = await walletRes.value.json();
+        renderPendlePositions(w.pendle || []);
+        renderAavePosition(w.aave || null);
+        renderPtBalances(w.pt_balances || []);
+      }
     } catch (e) {
       errEl.textContent = 'Failed to load positions: ' + (e.message || 'network error');
       errEl.style.display = 'block';
