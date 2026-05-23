@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  ComposedChart, BarChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
 import type { WhaleAlert } from '@/app/api/slack-events/route'
@@ -15,10 +15,21 @@ const CEX_LABELS = [
   'bitstamp', 'bithumb', 'poloniex', 'bittrex', 'ftx', 'deribit', 'robinhood',
 ]
 
+const STABLE_SYMBOLS = new Set([
+  'USDC', 'USDT', 'DAI', 'USDS', 'GHO', 'LUSD', 'FRAX', 'crvUSD',
+  'USDe', 'sUSDe', 'USD0', 'PYUSD', 'RLUSD', 'FDUSD', 'BUSD', 'TUSD',
+  'USDX', 'USDG', 'USDA', 'USDD', 'GUSD', 'DOLA', 'AUSD', 'HUSD',
+])
+
 function isCex(label?: string): boolean {
   if (!label) return false
   const l = label.toLowerCase()
   return CEX_LABELS.some(c => l.includes(c))
+}
+
+function isStable(token?: string): boolean {
+  if (!token) return true
+  return STABLE_SYMBOLS.has(token)
 }
 
 function fmtUSD(v: number): string {
@@ -26,6 +37,12 @@ function fmtUSD(v: number): string {
   if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`
   if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`
   return `$${v.toFixed(0)}`
+}
+
+function fmtPrice(v: number): string {
+  if (v >= 10000) return `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+  if (v >= 100) return `$${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}`
+  return `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
 }
 
 function timeAgo(ts: number): string {
@@ -66,9 +83,7 @@ function detectPatternGroups(alerts: WhaleAlert[]): PatternGroup[] {
       if (idxs.length >= 3) {
         idxs.forEach(idx => usedRapid.add(idx))
         groups.push({
-          type: 'RAPID',
-          count: idxs.length,
-          destination: a.toLabel,
+          type: 'RAPID', count: idxs.length, destination: a.toLabel,
           totalAmount: idxs.reduce((s, idx) => s + (sorted[idx].amount ?? 0), 0),
           firstTs: a.ts,
         })
@@ -84,9 +99,7 @@ function detectPatternGroups(alerts: WhaleAlert[]): PatternGroup[] {
       if (idxs.length >= 3) {
         idxs.forEach(idx => usedCex.add(idx))
         groups.push({
-          type: 'CEX_RUSH',
-          count: idxs.length,
-          destination: a.toLabel,
+          type: 'CEX_RUSH', count: idxs.length, destination: a.toLabel,
           totalAmount: idxs.reduce((s, idx) => s + (sorted[idx].amount ?? 0), 0),
           firstTs: a.ts,
         })
@@ -138,15 +151,11 @@ function PatternBadge({ type }: { type: 'RAPID' | 'CEX_RUSH' }) {
   const isCexRush = type === 'CEX_RUSH'
   return (
     <span style={{
-      fontFamily: 'var(--mono)',
-      fontSize: 9,
-      fontWeight: 700,
-      padding: '1px 5px',
-      letterSpacing: '0.08em',
+      fontFamily: 'var(--mono)', fontSize: 9, fontWeight: 700,
+      padding: '1px 5px', letterSpacing: '0.08em', whiteSpace: 'nowrap' as const,
       background: isCexRush ? 'rgba(192,57,43,0.12)' : 'rgba(178,116,13,0.12)',
       color: isCexRush ? 'var(--red)' : 'var(--amber)',
       border: `1px solid ${isCexRush ? 'var(--red)' : 'var(--amber)'}`,
-      whiteSpace: 'nowrap' as const,
     }}>
       {isCexRush ? 'CEX RUSH' : 'RAPID'}
     </span>
@@ -159,6 +168,7 @@ export default function EntityProfilePage() {
   const [alerts, setAlerts] = useState<WhaleAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState<'7d' | '30d'>('30d')
+  const [priceHistory, setPriceHistory] = useState<[number, number][]>([])
 
   useEffect(() => {
     fetch(`/api/whale-alerts?entity=${encodeURIComponent(entityName)}&limit=5000`)
@@ -171,6 +181,40 @@ export default function EntityProfilePage() {
   const cutoff = useMemo(() => Date.now() - days * 86400000, [days])
   const rangeAlerts = useMemo(() => alerts.filter(a => a.ts >= cutoff), [alerts, cutoff])
 
+  // Primary non-stable token by volume — used for price overlay
+  const primaryToken = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const a of rangeAlerts) {
+      if (!a.token || !a.amount || isStable(a.token)) continue
+      m[a.token] = (m[a.token] ?? 0) + a.amount
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+  }, [rangeAlerts])
+
+  // Fetch price history for primary token
+  useEffect(() => {
+    if (!primaryToken) { setPriceHistory([]); return }
+    fetch(`/api/token-prices?symbol=${encodeURIComponent(primaryToken)}&days=${days}`)
+      .then(r => r.json())
+      .then(d => setPriceHistory(d.prices ?? []))
+      .catch(() => setPriceHistory([]))
+  }, [primaryToken, days])
+
+  // Get price closest to a given timestamp
+  const getPriceAt = useCallback((ts: number): number | null => {
+    if (!priceHistory.length) return null
+    let best = priceHistory[0]
+    let bestDiff = Math.abs(priceHistory[0][0] - ts)
+    for (const pt of priceHistory) {
+      const diff = Math.abs(pt[0] - ts)
+      if (diff < bestDiff) { bestDiff = diff; best = pt }
+      if (pt[0] > ts) break // sorted ascending, stop once past target
+    }
+    return best[1]
+  }, [priceHistory])
+
+  const currentPrice = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1][1] : null
+
   const totalVolume = rangeAlerts.reduce((s, a) => s + (a.amount ?? 0), 0)
   const cexOutflow = rangeAlerts.filter(a => isCex(a.toLabel)).reduce((s, a) => s + (a.amount ?? 0), 0)
   const cexPct = totalVolume > 0 ? Math.round((cexOutflow / totalVolume) * 100) : 0
@@ -181,12 +225,14 @@ export default function EntityProfilePage() {
     (m, a) => a.amount && (!m || a.amount > (m.amount ?? 0)) ? a : m, null
   )
 
+  // Daily flow data with price overlay
   const netFlowData = useMemo(() => {
     const now = Date.now()
-    const result: { day: string; cex: number; deFi: number }[] = []
+    const result: { day: string; ts: number; cex: number; deFi: number; price?: number }[] = []
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now - i * 86400000)
-      result.push({ day: `${d.getMonth() + 1}/${d.getDate()}`, cex: 0, deFi: 0 })
+      d.setHours(12, 0, 0, 0)
+      result.push({ day: `${d.getMonth() + 1}/${d.getDate()}`, ts: d.getTime(), cex: 0, deFi: 0 })
     }
     for (const a of rangeAlerts) {
       if (!a.amount) continue
@@ -197,8 +243,21 @@ export default function EntityProfilePage() {
       if (isCex(a.toLabel)) bucket.cex += a.amount
       else bucket.deFi += a.amount
     }
+    // Merge price data
+    if (priceHistory.length > 0) {
+      for (const bucket of result) {
+        let best = priceHistory[0]
+        let bestDiff = Math.abs(priceHistory[0][0] - bucket.ts)
+        for (const pt of priceHistory) {
+          const diff = Math.abs(pt[0] - bucket.ts)
+          if (diff < bestDiff) { bestDiff = diff; best = pt }
+          if (pt[0] > bucket.ts) break
+        }
+        if (best[1] > 0) bucket.price = Math.round(best[1] * 100) / 100
+      }
+    }
     return result
-  }, [rangeAlerts, days])
+  }, [rangeAlerts, days, priceHistory])
 
   const tokenData = useMemo(() => {
     const m: Record<string, number> = {}
@@ -215,8 +274,32 @@ export default function EntityProfilePage() {
   const patternGroups = useMemo(() => detectPatternGroups(rangeAlerts), [rangeAlerts])
   const alertFlags = useMemo(() => detectAlertFlags(rangeAlerts), [rangeAlerts])
 
+  // Behavioral baseline: this week vs 3-week average (uses ALL alerts, not just range)
+  const baseline = useMemo(() => {
+    if (alerts.length < 5) return null
+    const now = Date.now()
+    const weekMs = 7 * 86400000
+    const weekVol = (w: number) => alerts
+      .filter(a => now - a.ts >= w * weekMs && now - a.ts < (w + 1) * weekMs)
+      .reduce((s, a) => s + (a.amount ?? 0), 0)
+    const weekTx = (w: number) => alerts
+      .filter(a => now - a.ts >= w * weekMs && now - a.ts < (w + 1) * weekMs).length
+
+    const curVol = weekVol(0)
+    const curTx = weekTx(0)
+    const avgVol = (weekVol(1) + weekVol(2) + weekVol(3)) / 3
+    const avgTx = (weekTx(1) + weekTx(2) + weekTx(3)) / 3
+
+    return {
+      curVol, curTx, avgVol, avgTx,
+      volPct: avgVol > 0 ? ((curVol - avgVol) / avgVol) * 100 : null,
+      txPct: avgTx > 0 ? ((curTx - avgTx) / avgTx) * 100 : null,
+    }
+  }, [alerts])
+
   const tokenTotal = tokenData.reduce((s, d) => s + d.value, 0)
   const destMax = destinations[0]?.[1] ?? 1
+  const hasPriceOverlay = priceHistory.length > 0 && primaryToken && !isStable(primaryToken)
 
   const sortedAlerts = useMemo(
     () => [...rangeAlerts].sort((a, b) => b.ts - a.ts),
@@ -226,10 +309,7 @@ export default function EntityProfilePage() {
   return (
     <div>
       <div style={{ marginBottom: 28 }}>
-        <Link
-          href="/whale-tracker"
-          style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)', textDecoration: 'none' }}
-        >
+        <Link href="/whale-tracker" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)', textDecoration: 'none' }}>
           ← Whale Tracker
         </Link>
       </div>
@@ -255,16 +335,14 @@ export default function EntityProfilePage() {
           {/* Range toggle */}
           <div className="ch-row" style={{ marginTop: 32 }}>
             {(['7d', '30d'] as const).map(r => (
-              <button key={r} className={`ch${range === r ? ' on' : ''}`} onClick={() => setRange(r)}>
-                {r}
-              </button>
+              <button key={r} className={`ch${range === r ? ' on' : ''}`} onClick={() => setRange(r)}>{r}</button>
             ))}
             <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', alignSelf: 'center', marginLeft: 4 }}>
-              {rangeAlerts.length} transactions · {alerts.length} total
+              {rangeAlerts.length} tx · {alerts.length} total stored
             </span>
           </div>
 
-          {/* Stats */}
+          {/* Stats row */}
           <div className="metrics-row metrics-4" style={{ marginTop: 24 }}>
             <div className="metric-cell">
               <div className="lbl">Total Volume</div>
@@ -284,51 +362,101 @@ export default function EntityProfilePage() {
             </div>
           </div>
 
-          {/* Net flow chart */}
+          {/* Behavioral baseline */}
+          {baseline && (
+            <div style={{ borderBottom: '1px solid var(--rule)', padding: '16px 0', display: 'flex', gap: 40, flexWrap: 'wrap', alignItems: 'baseline' }}>
+              <div>
+                <span style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginRight: 10 }}>
+                  This Week Vol
+                </span>
+                <span style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginRight: 8 }}>
+                  {fmtUSD(baseline.curVol)}
+                </span>
+                {baseline.volPct != null && (
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: Math.abs(baseline.volPct) > 100 ? 'var(--amber)' : 'var(--ink-mute)' }}>
+                    {baseline.volPct > 0 ? '+' : ''}{baseline.volPct.toFixed(0)}% vs 3w avg ({fmtUSD(baseline.avgVol)}/wk)
+                  </span>
+                )}
+              </div>
+              <div>
+                <span style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginRight: 10 }}>
+                  This Week Tx
+                </span>
+                <span style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginRight: 8 }}>
+                  {baseline.curTx}
+                </span>
+                {baseline.txPct != null && (
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: Math.abs(baseline.txPct) > 100 ? 'var(--amber)' : 'var(--ink-mute)' }}>
+                    {baseline.txPct > 0 ? '+' : ''}{baseline.txPct.toFixed(0)}% vs 3w avg ({baseline.avgTx.toFixed(1)}/wk)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Flow distribution chart with optional price overlay */}
           <div style={{ background: 'var(--paper)', padding: '24px 28px', marginTop: 32 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
               <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)' }}>
                 Flow Distribution — {range}
+                {hasPriceOverlay && (
+                  <span style={{ marginLeft: 10, fontWeight: 400, color: 'var(--blue)' }}>· {primaryToken} price overlay</span>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 16, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
-                <span>
-                  <span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--green)', marginRight: 4, borderRadius: 1, verticalAlign: 'middle' }} />
-                  DeFi / Other
-                </span>
-                <span>
-                  <span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--red)', marginRight: 4, borderRadius: 1, verticalAlign: 'middle' }} />
-                  CEX Outflow
-                </span>
+                <span><span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--green)', marginRight: 4, borderRadius: 1, verticalAlign: 'middle' }} />DeFi / Other</span>
+                <span><span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--red)', marginRight: 4, borderRadius: 1, verticalAlign: 'middle' }} />CEX Outflow</span>
+                {hasPriceOverlay && <span><span style={{ display: 'inline-block', width: 16, height: 2, background: 'var(--blue)', marginRight: 4, verticalAlign: 'middle' }} />{primaryToken}</span>}
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={netFlowData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                <XAxis
-                  dataKey="day"
-                  tick={{ fontFamily: 'var(--mono)', fontSize: 9, fill: 'var(--ink-mute)' }}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={range === '30d' ? 4 : 0}
-                />
-                <YAxis hide />
-                <Tooltip
-                  contentStyle={{ background: '#111', border: '1px solid #2a2a2a', fontFamily: 'monospace', fontSize: 11, color: '#ccc' }}
-                  labelStyle={{ color: '#ccc' }}
-                  itemStyle={{ color: '#ccc' }}
-                  formatter={(v: number, name: string) => [fmtUSD(v as number), name === 'deFi' ? 'DeFi / Other' : 'CEX Outflow']}
-                />
-                <Bar dataKey="deFi" stackId="a" fill="var(--green)" name="DeFi / Other" />
-                <Bar dataKey="cex" stackId="a" fill="var(--red)" radius={[2, 2, 0, 0]} name="CEX Outflow" />
-              </BarChart>
+            <ResponsiveContainer width="100%" height={180}>
+              {hasPriceOverlay ? (
+                <ComposedChart data={netFlowData} margin={{ top: 4, right: 48, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="day" tick={{ fontFamily: 'var(--mono)', fontSize: 9, fill: 'var(--ink-mute)' }} tickLine={false} axisLine={false} interval={range === '30d' ? 4 : 0} />
+                  <YAxis yAxisId="vol" hide />
+                  <YAxis
+                    yAxisId="price"
+                    orientation="right"
+                    tick={{ fontFamily: 'var(--mono)', fontSize: 9, fill: 'var(--ink-mute)' }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={44}
+                    tickFormatter={(v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v.toFixed(0)}`}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: '#111', border: '1px solid #2a2a2a', fontFamily: 'monospace', fontSize: 11, color: '#ccc' }}
+                    labelStyle={{ color: '#ccc' }}
+                    itemStyle={{ color: '#ccc' }}
+                    formatter={(v: number, name: string) => {
+                      if (name === 'price') return [fmtPrice(v), `${primaryToken} price`]
+                      return [fmtUSD(v), name === 'deFi' ? 'DeFi / Other' : 'CEX Outflow']
+                    }}
+                  />
+                  <Bar dataKey="deFi" stackId="a" yAxisId="vol" fill="var(--green)" name="DeFi / Other" />
+                  <Bar dataKey="cex" stackId="a" yAxisId="vol" fill="var(--red)" radius={[2, 2, 0, 0]} name="CEX Outflow" />
+                  <Line yAxisId="price" type="monotone" dataKey="price" stroke="var(--blue)" strokeWidth={1.5} dot={false} connectNulls />
+                </ComposedChart>
+              ) : (
+                <BarChart data={netFlowData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="day" tick={{ fontFamily: 'var(--mono)', fontSize: 9, fill: 'var(--ink-mute)' }} tickLine={false} axisLine={false} interval={range === '30d' ? 4 : 0} />
+                  <YAxis hide />
+                  <Tooltip
+                    contentStyle={{ background: '#111', border: '1px solid #2a2a2a', fontFamily: 'monospace', fontSize: 11, color: '#ccc' }}
+                    labelStyle={{ color: '#ccc' }}
+                    itemStyle={{ color: '#ccc' }}
+                    formatter={(v: number, name: string) => [fmtUSD(v), name === 'deFi' ? 'DeFi / Other' : 'CEX Outflow']}
+                  />
+                  <Bar dataKey="deFi" stackId="a" fill="var(--green)" name="DeFi / Other" />
+                  <Bar dataKey="cex" stackId="a" fill="var(--red)" radius={[2, 2, 0, 0]} name="CEX Outflow" />
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </div>
 
           {/* Token breakdown + Top destinations */}
           <div className="wt-analysis-grid" style={{ marginTop: 1 }}>
             <div style={{ background: 'var(--paper)', padding: '24px 28px' }}>
-              <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>
-                Volume by Token
-              </div>
+              <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>Volume by Token</div>
               {tokenData.length === 0 ? (
                 <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>No token data</p>
               ) : (
@@ -354,9 +482,7 @@ export default function EntityProfilePage() {
             </div>
 
             <div style={{ background: 'var(--paper)', padding: '24px 28px' }}>
-              <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>
-                Top Destinations
-              </div>
+              <div style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginBottom: 16 }}>Top Destinations</div>
               {destinations.length === 0 ? (
                 <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>No destination data</p>
               ) : (
@@ -367,13 +493,9 @@ export default function EntityProfilePage() {
                         <span style={{ fontFamily: 'var(--serif)', fontSize: 12, color: isCex(dest) ? 'var(--red)' : 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '65%' }}>
                           <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink-mute)', marginRight: 5 }}>#{i + 1}</span>
                           {dest}
-                          {isCex(dest) && (
-                            <span style={{ marginLeft: 5, fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--red)', letterSpacing: '0.05em' }}>CEX</span>
-                          )}
+                          {isCex(dest) && <span style={{ marginLeft: 5, fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--red)' }}>CEX</span>}
                         </span>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', flexShrink: 0, marginLeft: 8 }}>
-                          {fmtUSD(vol)}
-                        </span>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', flexShrink: 0, marginLeft: 8 }}>{fmtUSD(vol)}</span>
                       </div>
                       <div style={{ height: 2, borderRadius: 1, background: 'var(--rule)', overflow: 'hidden' }}>
                         <div style={{ height: '100%', width: `${(vol / destMax) * 100}%`, background: isCex(dest) ? 'var(--red)' : 'var(--blue)', borderRadius: 1 }} />
@@ -393,23 +515,11 @@ export default function EntityProfilePage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {patternGroups.map((g, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      alignItems: 'flex-start',
-                      padding: '10px 14px',
-                      border: `1px solid ${g.type === 'CEX_RUSH' ? 'rgba(192,57,43,0.25)' : 'rgba(178,116,13,0.25)'}`,
-                      background: g.type === 'CEX_RUSH' ? 'rgba(192,57,43,0.05)' : 'rgba(178,116,13,0.05)',
-                    }}
-                  >
+                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '10px 14px', border: `1px solid ${g.type === 'CEX_RUSH' ? 'rgba(192,57,43,0.25)' : 'rgba(178,116,13,0.25)'}`, background: g.type === 'CEX_RUSH' ? 'rgba(192,57,43,0.05)' : 'rgba(178,116,13,0.05)' }}>
                     <PatternBadge type={g.type} />
                     <div>
                       <div style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)', marginBottom: 3 }}>
-                        {g.type === 'CEX_RUSH'
-                          ? `${g.count} CEX transfers within 2 hours`
-                          : `${g.count} transfers to ${g.destination} within 1 hour`}
+                        {g.type === 'CEX_RUSH' ? `${g.count} CEX transfers within 2 hours` : `${g.count} transfers to ${g.destination} within 1 hour`}
                       </div>
                       <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
                         Total: {fmtUSD(g.totalAmount)} · {timeAgo(g.firstTs)}
@@ -427,9 +537,7 @@ export default function EntityProfilePage() {
               <span style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', flexShrink: 0 }}>
                 Biggest ({range})
               </span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--blue)' }}>
-                {biggestMove.amountFmt}
-              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--blue)' }}>{biggestMove.amountFmt}</span>
               {biggestMove.token && (
                 <span style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', padding: '1px 5px', border: '1px solid var(--rule)' }}>
                   {biggestMove.token}
@@ -440,9 +548,7 @@ export default function EntityProfilePage() {
                   {biggestMove.fromLabel}{biggestMove.fromLabel && biggestMove.toLabel ? ' → ' : ''}{biggestMove.toLabel}
                 </span>
               )}
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', marginLeft: 'auto' }}>
-                {timeAgo(biggestMove.ts)}
-              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', marginLeft: 'auto' }}>{timeAgo(biggestMove.ts)}</span>
             </div>
           )}
 
@@ -450,9 +556,7 @@ export default function EntityProfilePage() {
           <div style={{ marginTop: 32 }}>
             <div className="sec-h" style={{ marginBottom: 16 }}>
               <span className="h">Transaction History</span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
-                {rangeAlerts.length} tx · {range}
-              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{rangeAlerts.length} tx · {range}</span>
             </div>
             <div className="table-scroll-x">
               <table className="tab">
@@ -462,6 +566,8 @@ export default function EntityProfilePage() {
                     <th style={{ textAlign: 'left' }}>Token</th>
                     <th style={{ textAlign: 'left' }}>Chain</th>
                     <th style={{ textAlign: 'left' }}>Flow</th>
+                    {hasPriceOverlay && <th style={{ textAlign: 'right' }}>Price then</th>}
+                    {hasPriceOverlay && <th style={{ textAlign: 'right' }}>Δ now</th>}
                     <th style={{ textAlign: 'left' }}>Flags</th>
                     <th style={{ textAlign: 'right' }}>Time</th>
                     <th style={{ textAlign: 'right' }}>Tx</th>
@@ -470,6 +576,13 @@ export default function EntityProfilePage() {
                 <tbody>
                   {sortedAlerts.map(a => {
                     const flags = alertFlags.get(a.id) ?? []
+                    const priceAtTx = (!isStable(a.token) && a.token === primaryToken)
+                      ? getPriceAt(a.ts)
+                      : null
+                    const priceDelta = priceAtTx && currentPrice
+                      ? ((currentPrice - priceAtTx) / priceAtTx) * 100
+                      : null
+
                     return (
                       <tr key={a.id}>
                         <td className="pos" style={{ fontWeight: 600, textAlign: 'right' }}>{a.amountFmt ?? '—'}</td>
@@ -491,17 +604,23 @@ export default function EntityProfilePage() {
                           {a.fromLabel || a.toLabel ? (
                             <>
                               {a.fromLabel}
-                              {a.fromLabel && a.toLabel && (
-                                <span style={{ margin: '0 4px' }}>→</span>
-                              )}
+                              {a.fromLabel && a.toLabel && <span style={{ margin: '0 4px' }}>→</span>}
                               {a.toLabel && (
-                                <span style={{ color: isCex(a.toLabel) ? 'var(--red)' : 'inherit' }}>
-                                  {a.toLabel}
-                                </span>
+                                <span style={{ color: isCex(a.toLabel) ? 'var(--red)' : 'inherit' }}>{a.toLabel}</span>
                               )}
                             </>
                           ) : '—'}
                         </td>
+                        {hasPriceOverlay && (
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)' }}>
+                            {priceAtTx ? fmtPrice(priceAtTx) : '—'}
+                          </td>
+                        )}
+                        {hasPriceOverlay && (
+                          <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: priceDelta != null ? 600 : 400, color: priceDelta == null ? 'var(--ink-mute)' : priceDelta > 0 ? 'var(--green)' : 'var(--red)' }}>
+                            {priceDelta != null ? `${priceDelta > 0 ? '+' : ''}${priceDelta.toFixed(1)}%` : '—'}
+                          </td>
+                        )}
                         <td style={{ textAlign: 'left' }}>
                           {flags.length > 0 ? (
                             <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>

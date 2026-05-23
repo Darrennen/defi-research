@@ -11,6 +11,11 @@ import EntityIntelligence from './EntityIntelligence'
 
 const CHAINS = ['All', 'Ethereum', 'Arbitrum', 'Base', 'Polygon', 'Optimism', 'Solana', 'BSC']
 
+const STABLE_SYMBOLS = new Set([
+  'USDC', 'USDT', 'DAI', 'USDS', 'GHO', 'LUSD', 'FRAX', 'crvUSD',
+  'USDe', 'sUSDe', 'USD0', 'PYUSD', 'RLUSD', 'FDUSD', 'BUSD', 'TUSD',
+])
+
 const CEX_LABELS = [
   'binance', 'coinbase', 'kraken', 'okx', 'okex', 'bybit', 'kucoin', 'huobi', 'htx',
   'gate.io', 'gateio', 'bitfinex', 'gemini', 'bitget', 'mexc', 'crypto.com', 'upbit',
@@ -101,6 +106,118 @@ function detectAlertFlags(alerts: WhaleAlert[]): Map<string, Array<'RAPID' | 'CE
   }
 
   return flags
+}
+
+interface CorrelatedMove {
+  token: string
+  toCex: boolean
+  destination?: string
+  entities: string[]
+  totalAmount: number
+  firstTs: number
+  lastTs: number
+  count: number
+}
+
+function detectCorrelatedMoves(alerts: WhaleAlert[]): CorrelatedMove[] {
+  const WINDOW = 4 * 3600000
+  const sorted = [...alerts].sort((a, b) => a.ts - b.ts)
+  const results: CorrelatedMove[] = []
+  const usedKeys = new Set<string>()
+
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i]
+    if (!a.token || !a.amount || !a.entity || STABLE_SYMBOLS.has(a.token)) continue
+
+    const aIsCex = isCex(a.toLabel)
+    const group: WhaleAlert[] = [a]
+
+    for (let j = i + 1; j < sorted.length; j++) {
+      const b = sorted[j]
+      if (b.ts - a.ts > WINDOW) break
+      if (!b.entity || b.entity === a.entity || !b.amount || b.token !== a.token) continue
+      const bIsCex = isCex(b.toLabel)
+      const sameDest = a.toLabel && a.toLabel === b.toLabel
+      if ((aIsCex && bIsCex) || sameDest) group.push(b)
+    }
+
+    const uniqueEntities = [...new Set(group.map(g => g.entity!))]
+    if (uniqueEntities.length < 2) continue
+
+    const key = group.map(g => g.id).sort().join('|')
+    if (usedKeys.has(key)) continue
+    usedKeys.add(key)
+
+    results.push({
+      token: a.token,
+      toCex: aIsCex,
+      destination: a.toLabel,
+      entities: uniqueEntities,
+      totalAmount: group.reduce((s, g) => s + (g.amount ?? 0), 0),
+      firstTs: group[0].ts,
+      lastTs: group[group.length - 1].ts,
+      count: group.length,
+    })
+  }
+
+  return results.sort((a, b) => b.firstTs - a.firstTs).slice(0, 15)
+}
+
+function CorrelationPanel({ alerts }: { alerts: WhaleAlert[] }) {
+  const moves = useMemo(() => detectCorrelatedMoves(alerts), [alerts])
+
+  if (moves.length === 0) return (
+    <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
+      No correlated moves detected in the last 30 days.
+    </p>
+  )
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--rule)' }}>
+      {moves.map((m, i) => {
+        const windowH = Math.round((m.lastTs - m.firstTs) / 3600000)
+        return (
+          <div key={i} style={{ background: 'var(--paper)', padding: '14px 20px', display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start' }}>
+            <div>
+              {/* Entities row */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6, alignItems: 'center' }}>
+                {m.entities.map(e => (
+                  <Link
+                    key={e}
+                    href={`/whale-tracker/entity/${encodeURIComponent(e)}`}
+                    style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--blue)', textDecoration: 'none', padding: '1px 7px', border: '1px solid var(--blue)', opacity: 0.85 }}
+                  >
+                    {e}
+                  </Link>
+                ))}
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+                  · {m.count} txs · {windowH < 1 ? '<1h' : `${windowH}h`} window
+                </span>
+              </div>
+              {/* Signal line */}
+              <div style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-soft)' }}>
+                All moved{' '}
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink)', fontWeight: 700 }}>{m.token}</span>
+                {m.toCex ? (
+                  <span style={{ color: 'var(--red)' }}> → CEX <span style={{ fontSize: 11, color: 'var(--red)', opacity: 0.7 }}>(sell signal)</span></span>
+                ) : m.destination ? (
+                  <span> → <span style={{ color: 'var(--ink)' }}>{m.destination}</span></span>
+                ) : null}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--blue)' }}>
+                {fmtUSD(m.totalAmount)}
+              </div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>
+                {timeAgo(m.firstTs)}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function PatternBadge({ type }: { type: 'RAPID' | 'CEX_RUSH' }) {
@@ -611,6 +728,19 @@ export default function WhaleTrackerPage() {
 
             </div>
           )}
+        </div>
+      )}
+
+      {/* Correlated Moves */}
+      {!loading && !error && alerts.length > 0 && (
+        <div style={{ marginTop: 40 }}>
+          <div className="sec-h" style={{ marginBottom: 16 }}>
+            <span className="h">Correlated Moves</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
+              2+ whales · same token · same direction · within 4h
+            </span>
+          </div>
+          <CorrelationPanel alerts={alerts} />
         </div>
       )}
 
