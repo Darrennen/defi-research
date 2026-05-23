@@ -38,7 +38,14 @@ html[data-theme="dark"] {
   --red:       #e06c5a;
   --rule:      rgba(236,232,223,0.14);
   --rule-soft: rgba(236,232,223,0.07);
+  --border-bold: rgba(236,232,223,0.28);
 }
+
+/* Soften the bold ink-colored separators in dark mode */
+html[data-theme="dark"] .hero,
+html[data-theme="dark"] .page-header { border-bottom-color: var(--border-bold); }
+html[data-theme="dark"] .indices { border-bottom-color: var(--border-bold); }
+html[data-theme="dark"] .dash-grid { border-top-color: var(--border-bold); }
 
 html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
