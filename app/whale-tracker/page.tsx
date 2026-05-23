@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import Link from 'next/link'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie,
@@ -59,6 +60,67 @@ function dayLabel(ts: number): string {
 }
 
 const PIE_COLORS = ['#4a90d9', '#e8a838', '#48bb78', '#f56565', '#9f7aea', '#ed8936', '#38b2ac']
+
+// ── Pattern detection ─────────────────────────────────────────────────────────
+
+function detectAlertFlags(alerts: WhaleAlert[]): Map<string, Array<'RAPID' | 'CEX_RUSH'>> {
+  const ONE_HOUR = 3600000
+  const TWO_HOURS = 7200000
+  const sorted = [...alerts].sort((a, b) => a.ts - b.ts)
+  const flags = new Map<string, Array<'RAPID' | 'CEX_RUSH'>>()
+
+  const addFlag = (id: string, type: 'RAPID' | 'CEX_RUSH') => {
+    if (!flags.has(id)) flags.set(id, [])
+    const arr = flags.get(id)!
+    if (!arr.includes(type)) arr.push(type)
+  }
+
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i]
+    if (!a.entity) continue
+
+    // RAPID: same entity + same destination, 3+ within 1h
+    if (a.toLabel) {
+      const group = [i]
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (sorted[j].ts - a.ts > ONE_HOUR) break
+        if (sorted[j].entity === a.entity && sorted[j].toLabel === a.toLabel) group.push(j)
+      }
+      if (group.length >= 3) group.forEach(idx => addFlag(sorted[idx].id, 'RAPID'))
+    }
+
+    // CEX RUSH: same entity sends to CEX 3+ times within 2h
+    if (isCex(a.toLabel)) {
+      const group = [i]
+      for (let j = i + 1; j < sorted.length; j++) {
+        if (sorted[j].ts - a.ts > TWO_HOURS) break
+        if (sorted[j].entity === a.entity && isCex(sorted[j].toLabel)) group.push(j)
+      }
+      if (group.length >= 3) group.forEach(idx => addFlag(sorted[idx].id, 'CEX_RUSH'))
+    }
+  }
+
+  return flags
+}
+
+function PatternBadge({ type }: { type: 'RAPID' | 'CEX_RUSH' }) {
+  const isCexRush = type === 'CEX_RUSH'
+  return (
+    <span style={{
+      fontFamily: 'var(--mono)',
+      fontSize: 9,
+      fontWeight: 700,
+      padding: '1px 5px',
+      letterSpacing: '0.08em',
+      background: isCexRush ? 'rgba(192,57,43,0.12)' : 'rgba(178,116,13,0.12)',
+      color: isCexRush ? 'var(--red)' : 'var(--amber)',
+      border: `1px solid ${isCexRush ? 'var(--red)' : 'var(--amber)'}`,
+      whiteSpace: 'nowrap' as const,
+    }}>
+      {isCexRush ? 'CEX RUSH' : 'RAPID'}
+    </span>
+  )
+}
 
 // ── Analysis components ──────────────────────────────────────────────────────
 
@@ -309,10 +371,10 @@ function EntityLeaderboard({ alerts }: { alerts: WhaleAlert[] }) {
       {rows.map(([entity, { volume, count }], i) => (
         <div key={entity}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)' }}>
+            <Link href={`/whale-tracker/entity/${encodeURIComponent(entity)}`} style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink)', textDecoration: 'none' }}>
               <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', marginRight: 8 }}>#{i + 1}</span>
               {entity}
-            </span>
+            </Link>
             <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)', marginLeft: 12, whiteSpace: 'nowrap' }}>
               {fmtUSD(volume)} · {count}tx
             </span>
@@ -429,6 +491,9 @@ export default function WhaleTrackerPage() {
   const updatedStr = updatedAt
     ? new Date(updatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null
+
+  // Compute pattern flags across ALL alerts (before any filter)
+  const patternFlags = useMemo(() => detectAlertFlags(alerts), [alerts])
 
   return (
     <div>
@@ -619,7 +684,11 @@ export default function WhaleTrackerPage() {
                   {/* Row 1: entity + amount */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <div className="name" style={{ fontSize: 15 }}>
-                      {alert.entity ?? (alert.address ? shortAddr(alert.address) : '—')}
+                      {alert.entity ? (
+                        <Link href={`/whale-tracker/entity/${encodeURIComponent(alert.entity)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                          {alert.entity}
+                        </Link>
+                      ) : (alert.address ? shortAddr(alert.address) : '—')}
                     </div>
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--blue)', flexShrink: 0, marginLeft: 12 }}>
                       {alert.amountFmt ?? '—'}
@@ -641,6 +710,14 @@ export default function WhaleTrackerPage() {
                       {timeAgo(alert.ts)}
                     </span>
                   </div>
+                  {/* Pattern flags */}
+                  {(patternFlags.get(alert.id) ?? []).length > 0 && (
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                      {(patternFlags.get(alert.id) ?? []).map(type => (
+                        <PatternBadge key={type} type={type} />
+                      ))}
+                    </div>
+                  )}
                   {/* Row 3: flow */}
                   {(alert.fromLabel || alert.toLabel) && (
                     <div style={{ fontFamily: 'var(--serif)', fontSize: 12, color: 'var(--ink-mute)', marginBottom: 8 }}>
@@ -683,6 +760,7 @@ export default function WhaleTrackerPage() {
                     <th style={{ textAlign: 'left' }}>Chain</th>
                     <th style={{ textAlign: 'left' }}>Direction</th>
                     <th style={{ textAlign: 'left' }}>Flow</th>
+                    <th style={{ textAlign: 'left' }}>Flags</th>
                     <th style={{ textAlign: 'right' }}>Time</th>
                     <th style={{ textAlign: 'right' }}>Tx</th>
                   </tr>
@@ -691,7 +769,11 @@ export default function WhaleTrackerPage() {
                   {filtered.map(alert => (
                     <tr key={alert.id}>
                       <td className="name">
-                        {alert.entity ?? (alert.address ? shortAddr(alert.address) : '—')}
+                        {alert.entity ? (
+                          <Link href={`/whale-tracker/entity/${encodeURIComponent(alert.entity)}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                            {alert.entity}
+                          </Link>
+                        ) : (alert.address ? shortAddr(alert.address) : '—')}
                         {alert.address && alert.entity && (
                           <span className="sym">{shortAddr(alert.address)}</span>
                         )}
@@ -722,6 +804,15 @@ export default function WhaleTrackerPage() {
                             {alert.toLabel}
                           </span>
                         ) : <span style={{ color: 'var(--ink-mute)' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'left' }}>
+                        {(patternFlags.get(alert.id) ?? []).length > 0 ? (
+                          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                            {(patternFlags.get(alert.id) ?? []).map(type => (
+                              <PatternBadge key={type} type={type} />
+                            ))}
+                          </div>
+                        ) : ''}
                       </td>
                       <td style={{ textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
                         {timeAgo(alert.ts)}

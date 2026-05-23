@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
+import Link from 'next/link'
 import type { WhaleAlert } from '@/app/api/slack-events/route'
 
 function useIsMobile() {
@@ -232,9 +233,12 @@ function EntityCard({ s, copyText, mobile }: { s: EntitySummary; copyText: strin
 
       {/* Header: entity + volume */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, minWidth: 0 }}>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: mobile ? 15 : 17, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2, minWidth: 0, wordBreak: 'break-word' }}>
+        <Link
+          href={`/whale-tracker/entity/${encodeURIComponent(s.entity)}`}
+          style={{ fontFamily: 'var(--serif)', fontSize: mobile ? 15 : 17, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.2, minWidth: 0, wordBreak: 'break-word', textDecoration: 'none' }}
+        >
           {s.entity}
-        </div>
+        </Link>
         <div style={{ flexShrink: 0, textAlign: 'right' }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: mobile ? 14 : 15, fontWeight: 700, color: 'var(--blue)' }}>
             {fmtUSD(s.volume)}
