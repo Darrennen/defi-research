@@ -13,6 +13,7 @@ const links = [
   { href: '/hyperlend',     label: 'HyperLend' },
   { href: '/yield-tracker', label: 'Yield Tracker' },
   { href: '/whale-tracker', label: 'Whale Tracker' },
+  { href: '/lighter',       label: 'Lighter DEX' },
 ]
 
 function Mark({ size = 56 }: { size?: number }) {

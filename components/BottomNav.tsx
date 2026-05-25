@@ -48,6 +48,11 @@ const items = [
     label: 'Whales',
     icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
   },
+  {
+    href: '/lighter',
+    label: 'Lighter',
+    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><line x1="16" y1="7" x2="22" y2="7"/><line x1="22" y1="7" x2="22" y2="13"/></svg>,
+  },
 ]
 
 export default function BottomNav() {

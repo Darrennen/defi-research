@@ -60,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <li><a href="/lending">DeFi Lending Risk</a></li>
                 <li><a href="/yield-tracker">Yield Tracker</a></li>
                 <li><a href="/whale-tracker">Whale Tracker</a></li>
+                <li><a href="/lighter">Lighter DEX</a></li>
               </ul>
             </div>
             <div>
