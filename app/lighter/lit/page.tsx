@@ -294,6 +294,9 @@ export default function LitTracker() {
   const [leaders, setLeaders] = useState<Leaders | null>(null)
   const [funding, setFunding] = useState<Record<string, number>>({})
   const [stakingStats, setStakingStats] = useState<StakingStats | null>(null)
+  const [stakingActivity, setStakingActivity] = useState<{ events: any[]; accounts_scanned: number } | null>(null)
+  const [buybacks, setBuybacks] = useState<{ stats: any[]; balances: any } | null>(null)
+  const [buybackPeriod, setBuybackPeriod] = useState(7)
   const [candles, setCandles] = useState<any[]>([])
   const [chartRes, setChartRes] = useState('1h')
 
@@ -383,12 +386,16 @@ export default function LitTracker() {
   // ── slow polls (funding, staking) ──
   const pollSlow = useCallback(async () => {
     try {
-      const [fRes, sRes] = await Promise.all([
+      const [fRes, sRes, saRes, bbRes] = await Promise.all([
         fetch('/api/lighter/lit/funding').then(r => r.json()),
         fetch('/api/lighter/lit/staking-stats').then(r => r.json()),
+        fetch('/api/lighter/lit/staking-activity').then(r => r.json()),
+        fetch('/api/lighter/lit/buybacks').then(r => r.json()),
       ])
       setFunding(fRes.by_exchange ?? {})
       setStakingStats(sRes)
+      setStakingActivity(saRes)
+      setBuybacks(bbRes)
     } catch {}
   }, [])
 
@@ -554,6 +561,7 @@ export default function LitTracker() {
         <Link href="/lighter" className="ch" style={{ padding: '6px 14px' }}>Overview</Link>
         <span className="ch on" style={{ padding: '6px 14px' }}>LIT Tracker</span>
         <Link href="/lighter/explorer" className="ch" style={{ padding: '6px 14px' }}>Explorer</Link>
+        <Link href="/lighter/watchlist" className="ch" style={{ padding: '6px 14px' }}>Watchlist</Link>
         <div style={{ flex: 1 }} />
         <span style={{ color: 'var(--ink-faint)', fontSize: 11 }}>
           <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: status === 'ok' ? 'var(--green)' : status === 'err' ? 'var(--red)' : 'var(--amber)', marginRight: 6 }} />
@@ -1028,6 +1036,151 @@ export default function LitTracker() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* protocol buybacks */}
+      <div className="panel" style={{ padding: 0, marginBottom: 16 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>Protocol Buybacks</div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            {[[7, '7d'], [30, '30d'], [0, 'All']].map(([v, l]) => (
+              <button key={v} className={`ch${buybackPeriod === v ? ' on' : ''}`}
+                onClick={() => setBuybackPeriod(Number(v))} style={{ padding: '3px 10px', fontSize: 11 }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: '12px 16px' }}>
+          {!buybacks ? (
+            <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>loading…</div>
+          ) : buybacks.stats?.length === 0 ? (
+            <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>buyback data unavailable — external feed may be offline</div>
+          ) : (() => {
+            const cutoffDate = buybackPeriod > 0
+              ? new Date(Date.now() - buybackPeriod * 86400000).toISOString().slice(0, 10)
+              : '2000-01-01'
+            const allStats: any[] = [...(buybacks.stats ?? [])].reverse()
+            const filtered = allStats.filter((s: any) => s.date >= cutoffDate)
+            const totalVol = filtered.reduce((s: number, r: any) => s + (r.volume ?? 0), 0)
+            const totalTrades = filtered.reduce((s: number, r: any) => s + (r.count ?? 0), 0)
+            const avgDaily = filtered.length > 0 ? totalVol / filtered.length : 0
+            const lit = buybacks.balances?.lit ?? {}; const usdc = buybacks.balances?.usdc ?? {}
+            const maxVol = Math.max(...filtered.map((s: any) => s.volume ?? 0)) || 1
+            const W = 800, H = 80
+            const bw = filtered.length > 0 ? W / filtered.length : W
+            const barsSvg = filtered.map((s: any, i: number) => {
+              const bh = ((s.volume ?? 0) / maxVol * H).toFixed(1)
+              const x = (i * bw).toFixed(1); const y = (H - parseFloat(bh)).toFixed(1)
+              return `<rect x="${x}" y="${y}" width="${(bw - 1).toFixed(1)}" height="${bh}" fill="rgba(111,224,137,0.6)" rx="1"><title>${s.date}: ${fmtUsd(s.volume)} · ${s.count} trades</title></rect>`
+            }).join('')
+            return (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 12 }}>
+                  {[
+                    { lbl: 'Total Bought', val: fmtUsd(totalVol), cls: 'pos' },
+                    { lbl: 'Avg / Day', val: fmtUsd(avgDaily), cls: '' },
+                    { lbl: 'Total Trades', val: Number(totalTrades).toLocaleString(), cls: '' },
+                    { lbl: 'LIT in Treasury', val: Number(lit.total ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), cls: '' },
+                    { lbl: 'USDC Available', val: fmtUsd(usdc.available ?? 0), cls: '' },
+                    { lbl: 'USDC Locked', val: fmtUsd(usdc.locked ?? 0), cls: '' },
+                  ].map(k => (
+                    <div key={k.lbl} style={{ background: 'var(--bg)', padding: '12px 14px' }}>
+                      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>{k.lbl}</div>
+                      <div className={k.cls} style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{k.val}</div>
+                    </div>
+                  ))}
+                </div>
+                {filtered.length >= 2 && (
+                  <>
+                    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: H, display: 'block', marginBottom: 2 }}
+                      dangerouslySetInnerHTML={{ __html: barsSvg }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--ink-faint)', marginBottom: 12 }}>
+                      <span>{filtered[0]?.date ?? ''}</span>
+                      <span style={{ color: 'var(--green)', fontWeight: 700 }}>avg {fmtUsd(avgDaily)}/day</span>
+                      <span>{filtered[filtered.length - 1]?.date ?? ''}</span>
+                    </div>
+                  </>
+                )}
+                <div className="table-scroll-x">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--paper)' }}>
+                        {['Date', 'Volume', 'Trades', 'Avg / Trade'].map(h => (
+                          <th key={h} style={{ padding: '7px 10px', textAlign: h === 'Date' ? 'left' : 'right', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...filtered].reverse().slice(0, 60).map((s: any, i: number) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
+                          <td style={{ padding: '6px 10px', color: 'var(--ink-dim)' }}>{s.date}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }} className="pos">{fmtUsd(s.volume)}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right' }}>{Number(s.count ?? 0).toLocaleString()}</td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--ink-dim)' }}>{s.count > 0 ? fmtUsd(s.volume / s.count) : '—'}</td>
+                        </tr>
+                      ))}
+                      {!filtered.length && (
+                        <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no data for this period</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )
+          })()}
+        </div>
+      </div>
+
+      {/* staking activity feed */}
+      <div className="panel" style={{ padding: 0, marginBottom: 16 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>LIT Staking Activity</div>
+          {stakingActivity && (
+            <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>
+              · {stakingActivity.events.length} events · {stakingActivity.accounts_scanned} accounts scanned
+            </span>
+          )}
+        </div>
+        <div className="table-scroll-x">
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: 'var(--paper)' }}>
+                {['Time', 'Type', 'Account', 'Amount (USDC)'].map(h => (
+                  <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Amount (USDC)' ? 'right' : 'left', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {!stakingActivity ? (
+                <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>loading…</td></tr>
+              ) : !stakingActivity.events.length ? (
+                <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no recent stake / unstake events found among top traders</td></tr>
+              ) : stakingActivity.events.map((e: any, i: number) => {
+                const isStake = e.type === 'stake'
+                const rowBg = isStake ? 'rgba(111,224,137,0.04)' : 'rgba(255,90,90,0.04)'
+                const rowBorder = isStake ? 'inset 3px 0 0 var(--green)' : 'inset 3px 0 0 var(--red)'
+                const timeLbl = e.time ? new Date(e.time).toLocaleString('en-GB', { hour12: false, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+                return (
+                  <tr key={i} style={{ background: rowBg, boxShadow: rowBorder, borderBottom: '1px solid var(--line)' }}>
+                    <td style={{ padding: '7px 12px', color: 'var(--ink-dim)', fontSize: 11 }}>{timeLbl}</td>
+                    <td style={{ padding: '7px 12px' }}>
+                      <span className={isStake ? 'pos' : 'neg'} style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', background: isStake ? 'rgba(111,224,137,0.15)' : 'rgba(255,90,90,0.15)', borderRadius: 3 }}>
+                        {isStake ? 'STAKE' : 'UNSTAKE'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '7px 12px', color: 'var(--blue)' }}>
+                      {fmtAcct(e.account_id)}
+                      <Link href={`/lighter/explorer?q=${e.account_id}`} target="_blank"
+                        style={{ color: 'var(--blue)', fontSize: 9, marginLeft: 5, textDecoration: 'none' }}>↗</Link>
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }} className={isStake ? 'pos' : 'neg'}>
+                      {fmtUsd(e.amount)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
