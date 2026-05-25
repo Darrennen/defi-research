@@ -4227,36 +4227,38 @@ footer.site ul a:hover { color: var(--blue); }
     document.getElementById('aave-pos-wrap').style.display = 'none';
     document.getElementById('pt-bal-wrap').style.display = 'none';
     document.getElementById('maturity-summary-wrap').style.display = 'none';
+
+    // Fire both fetches concurrently but render Morpho immediately —
+    // wallet-positions (PT balance scan) can take 10-20 s and must not block Morpho.
+    const morphoFetch = fetch(`/api/morpho-positions?address=${addr}&chainId=${chainId}`);
+    const walletFetch = fetch(`/api/wallet-positions?address=${addr}`);
+
+    let morphoPositions = [];
     try {
-      const [morphoRes, walletRes] = await Promise.allSettled([
-        fetch(`/api/morpho-positions?address=${addr}&chainId=${chainId}`),
-        fetch(`/api/wallet-positions?address=${addr}`),
-      ]);
+      const json = await (await morphoFetch).json();
+      if (json.error) throw new Error(json.error);
+      morphoPositions = json.positions || [];
+      renderPositions(morphoPositions);
+    } catch (e) {
+      errEl.textContent = 'Failed to load Morpho positions: ' + (e.message || 'network error');
+      errEl.style.display = 'block';
+    } finally {
+      btn.textContent = 'Fetch';
+      btn.disabled = false;
+    }
 
-      let morphoPositions = [];
-      if (morphoRes.status === 'fulfilled') {
-        const json = await morphoRes.value.json();
-        if (json.error) throw new Error(json.error);
-        morphoPositions = json.positions || [];
-        renderPositions(morphoPositions);
-      }
-
-      if (walletRes.status === 'fulfilled') {
-        const w = await walletRes.value.json();
+    // Wallet data (Pendle + Aave + PT balances) fills in asynchronously
+    walletFetch
+      .then(r => r.json())
+      .then(w => {
         const pendleData = w.pendle || [];
         const ptBalData  = w.pt_balances || [];
         renderPendlePositions(pendleData);
         renderAavePosition(w.aave || null);
         renderPtBalances(ptBalData);
         renderMaturitySummary(pendleData, ptBalData, morphoPositions);
-      }
-    } catch (e) {
-      errEl.textContent = 'Failed to load positions: ' + (e.message || 'network error');
-      errEl.style.display = 'block';
-    } finally {
-      btn.textContent = 'Fetch';
-      btn.disabled = false;
-    }
+      })
+      .catch(() => {}); // silent — wallet data is supplementary
   }
 
   document.addEventListener('DOMContentLoaded', function() {

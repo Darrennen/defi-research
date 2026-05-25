@@ -123,6 +123,8 @@ async function fetchPtBalances(address: string): Promise<any[]> {
 
   const pts = (mktData.results ?? [])
     .filter((m: any) => m.pt?.address && m.isActive !== false)
+    .sort((a: any, b: any) => (parseFloat(b.liquidity?.usd ?? '0') - parseFloat(a.liquidity?.usd ?? '0')))
+    .slice(0, 50)
     .map((m: any) => ({
       address:     (m.pt.address as string).toLowerCase(),
       symbol:      m.pt.symbol ?? '?',
