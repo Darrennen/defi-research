@@ -47,9 +47,18 @@ function getSnapshotWindow(): { start: number; end: number; label: string } {
   const snapshotStart = snapshotEnd - 86400000
 
   const endMYT = new Date(snapshotEnd + MYT_MS)
-  const label = endMYT.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  const dateStr = endMYT.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
-  return { start: snapshotStart, end: snapshotEnd, label }
+  return { start: snapshotStart, end: snapshotEnd, label: `24h ending ${dateStr}` }
+}
+
+type RangeKey = '24h' | '48h' | '72h' | '30d'
+
+function getRangeWindow(range: RangeKey): { start: number; end: number; label: string } {
+  if (range === '24h') return getSnapshotWindow()
+  const hours = range === '48h' ? 48 : range === '72h' ? 72 : 720
+  const end = Date.now()
+  return { start: end - hours * 3600000, end, label: `last ${range}` }
 }
 
 interface EntitySummary {
@@ -130,7 +139,7 @@ function formatSummaryForClaude(s: EntitySummary, allAlerts: WhaleAlert[], start
 
   const lines: string[] = [
     `ENTITY INTELLIGENCE — ${s.entity.toUpperCase()}`,
-    `Snapshot: 24h ending ${label}`,
+    `Snapshot: ${label}`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
     `Volume:       ${fmtUSD(s.volume)}`,
     `Transactions: ${s.txCount}`,
@@ -164,7 +173,7 @@ function formatSummaryForClaude(s: EntitySummary, allAlerts: WhaleAlert[], start
 function formatAllForClaude(summaries: EntitySummary[], allAlerts: WhaleAlert[], start: number, end: number, label: string): string {
   const header = [
     `WHALE TRACKER — ENTITY INTELLIGENCE SNAPSHOT`,
-    `24h ending ${label}`,
+    `${label}`,
     `Entities: ${summaries.length} | Generated: ${new Date().toISOString().slice(0, 16)} UTC`,
     `${'═'.repeat(50)}`,
     '',
@@ -327,9 +336,17 @@ function EntityCard({ s, copyText, mobile }: { s: EntitySummary; copyText: strin
   )
 }
 
+const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
+  { key: '24h', label: '24h' },
+  { key: '48h', label: '48h' },
+  { key: '72h', label: '72h' },
+  { key: '30d', label: '30d' },
+]
+
 export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] }) {
   const mobile = useIsMobile()
-  const { start, end, label } = useMemo(getSnapshotWindow, [])
+  const [range, setRange] = useState<RangeKey>('24h')
+  const { start, end, label } = useMemo(() => getRangeWindow(range), [range])
   const summaries = useMemo(() => buildSummaries(alerts, start, end), [alerts, start, end])
   const allCopyText = useMemo(
     () => formatAllForClaude(summaries, alerts, start, end, label),
@@ -339,11 +356,15 @@ export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] })
   if (summaries.length === 0) {
     return (
       <div style={{ marginTop: 40 }}>
-        <div className="sec-h">
+        <div className="sec-h" style={{ marginBottom: 12 }}>
           <span className="h">Entity Intelligence</span>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
-            24h snapshot · {label}
-          </span>
+        </div>
+        <div className="ch-row" style={{ marginBottom: 16 }}>
+          {RANGE_OPTIONS.map(r => (
+            <button key={r.key} className={`ch${range === r.key ? ' on' : ''}`} onClick={() => setRange(r.key)}>
+              {r.label}
+            </button>
+          ))}
         </div>
         <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)', marginTop: 16 }}>
           No entity activity in this snapshot window yet.
@@ -354,12 +375,23 @@ export default function EntityIntelligence({ alerts }: { alerts: WhaleAlert[] })
 
   return (
     <div style={{ marginTop: 40 }}>
-      <div className="sec-h" style={{ marginBottom: 24 }}>
-        <span className="h">Entity Intelligence</span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
-          24h snapshot ending {label} · {summaries.length} active entities
-        </span>
-        <CopyButton text={allCopyText} label="Copy All →Claude" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <span className="h" style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>
+            Entity Intelligence
+          </span>
+          <div className="ch-row" style={{ margin: 0 }}>
+            {RANGE_OPTIONS.map(r => (
+              <button key={r.key} className={`ch${range === r.key ? ' on' : ''}`} onClick={() => setRange(r.key)}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
+            {label} · {summaries.length} entities
+          </span>
+        </div>
+        <CopyButton text={allCopyText} label={`Copy All (${range}) →Claude`} />
       </div>
 
       <div className="wt-entity-grid">
