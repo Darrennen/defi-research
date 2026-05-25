@@ -1,4 +1,4 @@
-const HL_API = 'https://api.hyperliquid.xyz/info'
+const HL_API = '/api/hl'
 
 async function post<T>(body: object): Promise<T> {
   const r = await fetch(HL_API, {
