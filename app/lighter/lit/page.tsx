@@ -125,7 +125,7 @@ function detectTwapSells(trades: LitTrade[], windowMs: number, minUsd: number, m
 // ── candle SVG ─────────────────────────────────────────────────
 
 function buildCandleSvg(rawCandles: any[]): string {
-  const W = 800, H = 200, VH = 36
+  const W = 800, H = 200, VH = 36, OIH = 50
   const pad = { t: 8, r: 56, b: 4, l: 4 }
   const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b
   if (!rawCandles.length) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-faint)" style="font-size:11px">no candle data</text>`
@@ -134,6 +134,7 @@ function buildCandleSvg(rawCandles: any[]): string {
     o: parseFloat(c.o ?? c.open ?? 0), h: parseFloat(c.h ?? c.high ?? 0),
     l: parseFloat(c.l ?? c.low ?? 0), c: parseFloat(c.c ?? c.close ?? 0),
     v: parseFloat(c.base_volume ?? c.quote_volume ?? c.volume ?? c.v ?? 0),
+    oi: parseFloat(c.i ?? 0),
   })).filter(c => c.o > 0).sort((a, b) => a.t - b.t)
   if (data.length < 2) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-faint)" style="font-size:11px">waiting for data…</text>`
   const prices = data.flatMap(c => [c.h, c.l]).filter(p => p > 0)
@@ -172,7 +173,28 @@ function buildCandleSvg(rawCandles: any[]): string {
     const lbl = new Date(ts).toLocaleString('en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     out += `<text x="${x}" y="${H - 2}" text-anchor="middle" fill="var(--ink-faint)" font-size="9" font-family="monospace">${lbl}</text>`
   }
-  return `__CANDLE__${out}__VOL__${volSvg}`
+  // OI chart — oi field is in LIT tokens; multiply by close for USD value
+  let oiSvg = ''
+  const oiUsd = data.map(c => c.oi * c.c)
+  const maxOi = Math.max(...oiUsd) || 1
+  if (oiUsd.some(v => v > 0)) {
+    const pts = oiUsd.map((v, i) => {
+      const x = (pad.l + (i + 0.5) * slotW).toFixed(1)
+      const y = (OIH - 4 - (v / maxOi) * (OIH - 8)).toFixed(1)
+      return `${x},${y}`
+    }).join(' ')
+    const x0 = (pad.l + 0.5 * slotW).toFixed(1), xN = (pad.l + (n - 0.5) * slotW).toFixed(1)
+    oiSvg += `<polygon points="${x0},${OIH} ${pts} ${xN},${OIH}" fill="rgba(100,160,255,0.15)"/>`
+    oiSvg += `<polyline points="${pts}" fill="none" stroke="var(--blue)" stroke-width="1.5" opacity="0.8"/>`
+    const cur = oiUsd[oiUsd.length - 1] ?? 0
+    const prev = oiUsd[0] ?? 0
+    const chgPct = prev > 0 ? ((cur - prev) / prev * 100) : 0
+    const oiLbl = cur >= 1e6 ? `$${(cur / 1e6).toFixed(2)}M` : cur >= 1e3 ? `$${(cur / 1e3).toFixed(1)}K` : `$${cur.toFixed(0)}`
+    const chgSign = chgPct >= 0 ? '+' : ''
+    oiSvg += `<text x="${W - pad.r + 4}" y="14" fill="var(--blue)" font-size="9" font-family="monospace">${oiLbl}</text>`
+    oiSvg += `<text x="${W - pad.r + 4}" y="26" fill="${chgPct >= 0 ? 'var(--green)' : 'var(--red)'}" font-size="9" font-family="monospace">${chgSign}${chgPct.toFixed(1)}%</text>`
+  }
+  return `__CANDLE__${out}__VOL__${volSvg}__OI__${oiSvg}`
 }
 
 // ── order book heatmap (canvas) ─────────────────────────────────
@@ -515,7 +537,7 @@ export default function LitTracker() {
   const svgResult = buildCandleSvg(candles)
   const candleParts = svgResult.split('__VOL__')
   const candleSvgBody = candleParts[0].replace('__CANDLE__', '')
-  const volSvgBody = candleParts[1] ?? ''
+  const [volSvgBody, oiSvgBody] = (candleParts[1] ?? '').split('__OI__')
 
   // ── flow data ──
   const perpFlow = summary?.perp_flow ?? { buy_usd: 0, sell_usd: 0, delta_usd: 0 }
@@ -942,6 +964,14 @@ export default function LitTracker() {
           <svg viewBox="0 0 800 36" preserveAspectRatio="none"
             style={{ width: '100%', height: 36, display: 'block', marginTop: 4 }}
             dangerouslySetInnerHTML={{ __html: volSvgBody }} />
+          {oiSvgBody && (
+            <>
+              <div style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 10, marginBottom: 2 }}>Open Interest (USD)</div>
+              <svg viewBox="0 0 800 50" preserveAspectRatio="none"
+                style={{ width: '100%', height: 50, display: 'block' }}
+                dangerouslySetInnerHTML={{ __html: oiSvgBody }} />
+            </>
+          )}
         </div>
       </div>
 

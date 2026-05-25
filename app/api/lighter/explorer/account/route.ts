@@ -36,6 +36,8 @@ export async function GET(request: Request) {
       available_balance: data.available_balance ?? '0',
       total_asset_value: data.total_asset_value ?? '0',
       cross_asset_value: data.cross_asset_value ?? '0',
+      cross_initial_margin_requirement: data.cross_initial_margin_requirement ?? '0',
+      cross_maintenance_margin_requirement: data.cross_maintenance_margin_requirement ?? '0',
       status: data.status ?? 0,
       pending_order_count: data.pending_order_count ?? 0,
       total_order_count: data.total_order_count ?? 0,

@@ -12,6 +12,9 @@ type AccountData = {
   collateral: string
   available_balance: string
   total_asset_value: string
+  cross_asset_value: string
+  cross_initial_margin_requirement: string
+  cross_maintenance_margin_requirement: string
   status: number
   pending_order_count: number
   total_order_count: number
@@ -25,7 +28,7 @@ type Position = {
   symbol: string; market_id: number
   position: string; position_value: string
   avg_entry_price: string; liquidation_price: string
-  unrealized_pnl: string; total_funding_paid_out: string
+  unrealized_pnl: string; realized_pnl: string; total_funding_paid_out: string
   sign: string
 }
 
@@ -262,15 +265,24 @@ function ExplorerInner() {
   const collateral = parseFloat(account?.collateral ?? '0')
   const available = parseFloat(account?.available_balance ?? '0')
   const totalVal = parseFloat(account?.total_asset_value ?? '0')
+  const crossAssetVal = parseFloat(account?.cross_asset_value ?? '0')
+  const initMarginReq = parseFloat(account?.cross_initial_margin_requirement ?? '0')
+  const maintMarginReq = parseFloat(account?.cross_maintenance_margin_requirement ?? '0')
   const positions = account?.positions ?? []
   const assets = account?.assets ?? []
   const staking = account?.lit_staking ?? { is_staking: false, staked_usdc_value: 0, shares_amount: 0, entry_usdc: 0, pending_unlocks: [], lit_free_balance: 0 }
 
   const totalPosVal = positions.reduce((s, p) => s + Math.abs(parseFloat(p.position_value || '0')), 0)
   const unrealPnl = positions.reduce((s, p) => s + parseFloat(p.unrealized_pnl || '0'), 0)
+  const realPnl = positions.reduce((s, p) => s + parseFloat(p.realized_pnl || '0'), 0)
+  const netPnl = unrealPnl + realPnl
   const leverage = collateral > 0 ? totalPosVal / collateral : 0
   const stakingVal = staking.staked_usdc_value ?? 0
   const portfolio = totalVal > 0 ? totalVal : collateral
+  // margin health: cross asset value vs initial margin requirement (>100% = safe, <100% = at risk)
+  const marginHealthPct = initMarginReq > 0 ? (crossAssetVal / initMarginReq) * 100 : null
+  const maintHealthPct = maintMarginReq > 0 ? (crossAssetVal / maintMarginReq) * 100 : null
+  const marginColor = marginHealthPct == null ? 'var(--ink-faint)' : marginHealthPct < 105 ? 'var(--red)' : marginHealthPct < 130 ? 'var(--amber)' : 'var(--green)'
 
   let longVal = 0, shortVal = 0
   positions.forEach(p => {
@@ -375,14 +387,15 @@ function ExplorerInner() {
               {/* KPI cards */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {[
-                  { lbl: 'Collateral', val: fmtUsd(collateral) },
-                  { lbl: 'Available', val: fmtUsd(available) },
-                  { lbl: 'Portfolio', val: fmtUsd(portfolio) },
-                  { lbl: 'Open Orders', val: account.pending_order_count.toLocaleString() },
+                  { lbl: 'Collateral', val: fmtUsd(collateral), color: '' },
+                  { lbl: 'Available', val: fmtUsd(available), color: '' },
+                  { lbl: 'Portfolio', val: fmtUsd(portfolio), color: '' },
+                  { lbl: 'Open Orders', val: account.pending_order_count.toLocaleString(), color: '' },
+                  ...(netPnl !== 0 ? [{ lbl: 'Net PnL', val: (netPnl >= 0 ? '+' : '') + fmtUsd(netPnl), color: netPnl >= 0 ? 'var(--green)' : 'var(--red)' }] : []),
                 ].map(k => (
                   <div key={k.lbl} style={{ background: 'var(--bg)', padding: '10px 16px', minWidth: 100, textAlign: 'center' }}>
                     <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>{k.lbl}</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{k.val}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: k.color || 'inherit' }}>{k.val}</div>
                   </div>
                 ))}
               </div>
@@ -420,6 +433,31 @@ function ExplorerInner() {
                   <div className={unrealPnl >= 0 ? 'pos' : 'neg'} style={{ fontSize: 18, fontWeight: 700 }}>
                     {unrealPnl >= 0 ? '+' : ''}{fmtUsd(unrealPnl)}
                   </div>
+                  {realPnl !== 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--ink-dim)', marginTop: 2 }}>
+                      Real: <span className={realPnl >= 0 ? 'pos' : 'neg'}>{realPnl >= 0 ? '+' : ''}{fmtUsd(realPnl)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {marginHealthPct != null && totalPosVal > 0 && (
+                <div style={{ minWidth: 160 }}>
+                  <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>Margin Health</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: marginColor, marginBottom: 4 }}>
+                    {marginHealthPct.toFixed(0)}%
+                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-faint)', marginLeft: 6 }}>
+                      {marginHealthPct < 105 ? '⚠ near liquidation' : marginHealthPct < 130 ? 'caution' : 'healthy'}
+                    </span>
+                  </div>
+                  <div style={{ width: 160, height: 5, background: 'var(--line)', borderRadius: 3, position: 'relative' }}>
+                    <div style={{ height: '100%', width: `${Math.min(marginHealthPct, 300) / 3}%`, background: marginColor, borderRadius: 3, transition: 'width .4s' }} />
+                    {maintHealthPct != null && (
+                      <div style={{ position: 'absolute', top: -1, left: `${Math.min(maintHealthPct, 300) / 3}%`, width: 1, height: 7, background: 'var(--red)', opacity: 0.8 }} title="Maintenance margin" />
+                    )}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--ink-faint)', marginTop: 3 }}>
+                    {fmtUsd(crossAssetVal)} / {fmtUsd(initMarginReq)} required
+                  </div>
                 </div>
               )}
             </div>
@@ -456,16 +494,17 @@ function ExplorerInner() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: 'var(--paper)' }}>
-                      {['Symbol', 'Side', 'Size', 'Entry', 'Value', 'Unreal PnL', 'Liq Price', 'Funding', 'Alloc'].map(h => (
-                        <th key={h} style={{ padding: '10px 12px', textAlign: ['Size', 'Entry', 'Value', 'Unreal PnL', 'Liq Price', 'Funding', 'Alloc'].includes(h) ? 'right' : 'left', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)', whiteSpace: 'nowrap' }}>{h}</th>
+                      {['Symbol', 'Side', 'Size', 'Entry', 'Value', 'Unreal PnL', 'Real PnL', 'Liq Price', 'Funding', 'Alloc'].map(h => (
+                        <th key={h} style={{ padding: '10px 12px', textAlign: ['Size', 'Entry', 'Value', 'Unreal PnL', 'Real PnL', 'Liq Price', 'Funding', 'Alloc'].includes(h) ? 'right' : 'left', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {[...positions].sort((a, b) => Math.abs(parseFloat(b.position_value)) - Math.abs(parseFloat(a.position_value))).map((p, i) => {
-                      const isLong = parseInt(p.sign || '0') >= 0
                       const size = parseFloat(p.position)
+                      const isLong = size >= 0
                       const pnl = parseFloat(p.unrealized_pnl || '0')
+                      const rpnl = parseFloat(p.realized_pnl || '0')
                       const posVal = Math.abs(parseFloat(p.position_value || '0'))
                       const funding = parseFloat(p.total_funding_paid_out || '0')
                       const liqPrice = parseFloat(p.liquidation_price || '0')
@@ -474,23 +513,30 @@ function ExplorerInner() {
                       const distColor = distPct == null ? '' : distPct < 8 ? 'var(--red)' : distPct < 18 ? 'var(--amber)' : 'var(--green)'
                       const allocPct = portfolio > 0 ? posVal / portfolio * 100 : 0
                       const roe = posVal > 0 ? pnl / posVal * 100 : 0
+                      const rowBg = distPct != null && distPct < 8 ? 'rgba(255,90,90,0.04)' : 'transparent'
                       return (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
+                        <tr key={i} style={{ borderBottom: '1px solid var(--line)', background: rowBg }}>
                           <td style={{ padding: '8px 12px', fontWeight: 600 }}>{p.symbol}</td>
                           <td style={{ padding: '8px 12px' }}>
                             <span className={isLong ? 'pos' : 'neg'} style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', background: isLong ? 'rgba(111,224,137,0.1)' : 'rgba(255,90,90,0.1)', borderRadius: 3 }}>
                               {isLong ? 'LONG' : 'SHORT'}
                             </span>
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} className={isLong ? 'pos' : 'neg'}>{fmtNum(size, 2)}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} className={isLong ? 'pos' : 'neg'}>{fmtNum(Math.abs(size), 2)}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${fmtNum(p.avg_entry_price, 4)}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right' }}>{fmtUsd(posVal)}</td>
                           <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                            <div className={pnl >= 0 ? 'pos' : 'neg'} style={{ fontWeight: 600 }}>{fmtUsd(pnl)}</div>
+                            <div className={pnl >= 0 ? 'pos' : 'neg'} style={{ fontWeight: 600 }}>{pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}</div>
                             {posVal > 0 && <div style={{ fontSize: 10, color: roe >= 0 ? 'var(--green)' : 'var(--red)' }}>{roe >= 0 ? '+' : ''}{roe.toFixed(1)}%</div>}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                            <div style={{ color: 'var(--red)' }}>{liqPrice > 0 ? '$' + liqPrice.toFixed(4) : '—'}</div>
+                            {rpnl !== 0
+                              ? <span className={rpnl >= 0 ? 'pos' : 'neg'} style={{ fontVariantNumeric: 'tabular-nums' }}>{rpnl >= 0 ? '+' : ''}{fmtUsd(rpnl)}</span>
+                              : <span style={{ color: 'var(--ink-faint)' }}>—</span>
+                            }
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                            <div style={{ color: distPct != null && distPct < 8 ? 'var(--red)' : 'var(--ink-dim)' }}>{liqPrice > 0 ? '$' + liqPrice.toFixed(4) : '—'}</div>
                             {distPct != null && (
                               <div style={{ fontSize: 9, color: distColor, marginTop: 2 }}>{distPct.toFixed(1)}% away</div>
                             )}
@@ -508,7 +554,7 @@ function ExplorerInner() {
                       )
                     })}
                     {!positions.length && (
-                      <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no open positions</td></tr>
+                      <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no open positions</td></tr>
                     )}
                   </tbody>
                 </table>
