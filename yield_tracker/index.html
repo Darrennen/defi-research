@@ -3965,6 +3965,12 @@ footer.site ul a:hover { color: var(--blue); }
 
     // Portfolio growth block
     const portHistory = portfolioHistory(positions);
+    // Pin the chart's right edge to live current equity so it always ends
+    // at today's real value rather than the last historical snapshot (which
+    // can be 12-24 h stale from Morpho's API).
+    if (portHistory.length > 0) {
+      portHistory.push({ ts: Math.floor(Date.now() / 1000), equity: equity });
+    }
 
     // Derive entry equity and date by summing individual position data —
     // much more reliable than the merged portfolio timeseries
@@ -4036,9 +4042,13 @@ footer.site ul a:hover { color: var(--blue); }
       const signCls = pnl >= 0 ? 'pos' : 'neg';
       const sparkColor = pnl >= 0 ? 'var(--blue)' : 'var(--red)';
 
-      // Update sparkline color
+      // Slice chart to start from the entry date if set, then recolor
       if (portHistory.length >= 2) {
-        sparkWrap.innerHTML = sparklineSVG(portHistory, sparkColor, 600, 64);
+        const cutTs = entryTs && isFinite(entryTs) && entryTs > 0 ? entryTs : null;
+        const visibleHistory = cutTs
+          ? portHistory.filter(pt => pt.ts >= cutTs - 86400)  // 1-day buffer before entry
+          : portHistory;
+        sparkWrap.innerHTML = sparklineSVG(visibleHistory.length >= 2 ? visibleHistory : portHistory, sparkColor, 600, 64);
         initSparklines();
       }
 
