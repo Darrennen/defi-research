@@ -1523,6 +1523,45 @@ footer.site ul a:hover { color: var(--blue); }
     font-family: var(--mono); font-size: 11px; color: var(--ink-soft);
   }
 
+  /* ---- HF adjuster ---- */
+  .pos-card .hf-adj {
+    border-top: 1px dashed var(--rule); padding-top: 12px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .pos-card .hf-adj .title {
+    font-family: var(--sans); font-size: 9px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute);
+  }
+  .pos-card .hf-adj .inp-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .pos-card .hf-adj .inp-row label {
+    font-family: var(--sans); font-size: 11px; color: var(--ink-mute); white-space: nowrap;
+  }
+  .pos-card .hf-adj input[type=number] {
+    font-family: var(--mono); font-size: 13px; padding: 4px 8px;
+    border: 1px solid var(--rule); background: transparent; color: var(--ink);
+    width: 75px; outline: none;
+  }
+  .pos-card .hf-adj .cur-hf {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-mute);
+  }
+  .pos-card .hf-adj .res-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .pos-card .hf-adj .res-item .rl {
+    font-family: var(--sans); font-size: 9px; color: var(--ink-mute);
+    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px;
+  }
+  .pos-card .hf-adj .res-item .rv {
+    font-family: var(--mono); font-size: 14px; font-weight: 700;
+  }
+  .pos-card .hf-adj .res-item .rs {
+    font-family: var(--mono); font-size: 10px; color: var(--ink-mute); margin-top: 2px;
+  }
+  .pos-card .hf-adj .res-item .rv.add  { color: var(--blue); }
+  .pos-card .hf-adj .res-item .rv.repay { color: var(--amber, #f59e0b); }
+
   /* ---- position growth ---- */
   .pos-growth {
     border-top: 1px solid var(--rule); padding-top: 14px;
@@ -4015,7 +4054,7 @@ footer.site ul a:hover { color: var(--blue); }
 
     // Position cards
     // (initSparklines called after innerHTML set below)
-    grid.innerHTML = positions.map(p => {
+    grid.innerHTML = positions.map((p, i) => {
       const eq = p.collUsd - p.borrowUsd;
       const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
       const netApyPct = (p.supplyApy) * lev - (p.borrowApy) * (lev - 1);
@@ -4075,9 +4114,64 @@ footer.site ul a:hover { color: var(--blue); }
       <div class="g-stat"><div class="gl">Current equity</div><div class="gv">${U(eq)}</div></div>
     </div>
   </div>` : ''}
+  <div class="hf-adj" id="hf-adj-${i}">
+    <div class="title">Loop HF Adjuster</div>
+    <div class="inp-row">
+      <label>Target HF</label>
+      <input type="number" class="hf-t" min="1.01" max="9.99" step="0.05" value="1.5">
+      <span class="cur-hf">Current: ${p.hf > 0 ? p.hf.toFixed(2) + '×' : '—'}</span>
+    </div>
+    <div class="res-grid" id="hf-res-${i}"></div>
+  </div>
 </div>`;
     }).join('');
     initSparklines();
+    initHfCalcs(positions);
+  }
+
+  function initHfCalcs(positions) {
+    positions.forEach((p, i) => {
+      const adjEl  = document.getElementById('hf-adj-' + i);
+      const resEl  = document.getElementById('hf-res-' + i);
+      if (!adjEl || !resEl) return;
+      const inp = adjEl.querySelector('.hf-t');
+      const lltv = p.lltv / 100;
+
+      function recalc() {
+        const t = parseFloat(inp.value);
+        if (!t || t <= 1 || !p.collUsd || !p.borrowUsd || !lltv) {
+          resEl.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--ink-mute);">Enter a target HF above 1.0</div>';
+          return;
+        }
+
+        // Borrow more without adding collateral
+        const borrowOnly = p.collUsd * lltv / t - p.borrowUsd;
+        const newHfB = p.collUsd * lltv / (p.borrowUsd + borrowOnly);
+
+        // Full loop: borrow ΔB, buy PT worth ΔB, deposit as collateral
+        // Derived from: (C + ΔB)×lltv / (B + ΔB) = t
+        const loopDelta = (t * p.borrowUsd - p.collUsd * lltv) / (lltv - t);
+        const newHfL = (p.collUsd + loopDelta) * lltv / (p.borrowUsd + loopDelta);
+
+        function fmt(d, newHf) {
+          const action = d >= 0 ? 'Borrow' : 'Repay';
+          const cls    = d >= 0 ? 'add' : 'repay';
+          const newLev = (p.collUsd + (d >= 0 ? d : 0)) / Math.max((p.collUsd + (d >= 0 ? d : 0)) - (p.borrowUsd + d), 1);
+          return `<div class="res-item">
+            <div class="rl">${action === 'Borrow' ? action + ' more' : action + ' debt'}</div>
+            <div class="rv ${cls}">${action} ${U(Math.abs(d))}</div>
+            <div class="rs">New HF ${newHf.toFixed(2)}× · ${newLev.toFixed(2)}× lev</div>
+          </div>`;
+        }
+
+        resEl.innerHTML = `
+          ${fmt(borrowOnly, newHfB)}
+          ${fmt(loopDelta, newHfL)}`;
+      }
+
+      inp.addEventListener('input', recalc);
+      recalc();
+    });
   }
 
   function ptMaturity(valueUsd, impliedApy, daysLeft) {
