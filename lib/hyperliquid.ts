@@ -97,6 +97,16 @@ export interface HLFill {
   feeToken: string
 }
 
+export type HLPortfolioPeriod = 'day' | 'week' | 'month' | 'allTime' | 'perpDay' | 'perpWeek' | 'perpMonth' | 'perpAllTime'
+
+export interface HLPortfolioSeries {
+  accountValueHistory: [number, string][]
+  pnlHistory: [number, string][]
+  vlm: string
+}
+
+export type HLPortfolio = Record<HLPortfolioPeriod, HLPortfolioSeries>
+
 export interface HLSpotToken {
   name: string
   szDecimals: number
@@ -147,6 +157,10 @@ export const getUserFills = (address: string) =>
 export const getSpotMeta = () =>
   post<HLSpotMeta>({ type: 'spotMeta' })
 
+export const getPortfolio = (address: string) =>
+  post<[HLPortfolioPeriod, HLPortfolioSeries][]>({ type: 'portfolio', user: address })
+    .then(arr => Object.fromEntries(arr) as HLPortfolio)
+
 export const getLedgerUpdates = (address: string) =>
   post<HLLedgerUpdate[]>({
     type: 'userNonFundingLedgerUpdates',
@@ -165,10 +179,11 @@ export interface HLWalletData {
   fills: HLFill[]
   ledger: HLLedgerUpdate[]
   spotTokenMap: Map<string, string>
+  portfolio: HLPortfolio
 }
 
 export async function fetchWallet(address: string): Promise<HLWalletData> {
-  const [role, subAccounts, perps, spot, orders, fills, ledger, spotMeta] = await Promise.all([
+  const [role, subAccounts, perps, spot, orders, fills, ledger, spotMeta, portfolio] = await Promise.all([
     getUserRole(address),
     getSubAccounts(address),
     getClearinghouseState(address),
@@ -177,6 +192,7 @@ export async function fetchWallet(address: string): Promise<HLWalletData> {
     getUserFills(address),
     getLedgerUpdates(address),
     getSpotMeta(),
+    getPortfolio(address),
   ])
 
   // Build @index → name map for resolving spot coin names in fills
@@ -185,7 +201,7 @@ export async function fetchWallet(address: string): Promise<HLWalletData> {
     spotTokenMap.set(`@${t.index}`, t.name)
   }
 
-  return { role, subAccounts, perps, spot, orders, fills, ledger, spotTokenMap }
+  return { role, subAccounts, perps, spot, orders, fills, ledger, spotTokenMap, portfolio }
 }
 
 export function resolveCoins(coin: string, map: Map<string, string>): string {

@@ -3,8 +3,11 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
+} from 'recharts'
+import {
   fetchWallet, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
-  type HLWalletData, type HLRole,
+  type HLWalletData, type HLRole, type HLPortfolioSeries,
 } from '@/lib/hyperliquid'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -114,6 +117,109 @@ function Table({ headers, rows, empty }: {
   )
 }
 
+// ── Portfolio chart ───────────────────────────────────────────────────────────
+
+type ChartRange = '24h' | '7d' | '30d' | 'All'
+
+function buildChartData(series: HLPortfolioSeries, mode: 'value' | 'pnl') {
+  const raw = mode === 'value' ? series.accountValueHistory : series.pnlHistory
+  return raw.map(([ts, v]) => ({
+    ts,
+    value: parseFloat(v),
+    label: new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }),
+  }))
+}
+
+function PortfolioChart({
+  title, series, color, range,
+}: {
+  title: string
+  series: HLPortfolioSeries | undefined
+  color: string
+  range: ChartRange
+}) {
+  const [mode, setMode] = useState<'value' | 'pnl'>('value')
+
+  if (!series) return null
+
+  const chartData = buildChartData(series, mode)
+  const values = chartData.map(d => d.value)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const first = values[0] ?? 0
+  const last = values[values.length - 1] ?? 0
+  const delta = last - first
+  const isUp = delta >= 0
+
+  const gradId = `grad-${title.replace(/\s/g, '')}`
+
+  return (
+    <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '18px 20px', flex: 1, minWidth: 280 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{title}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: 'var(--ink)' }}>{fmtUsd(last)}</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, color: isUp ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+              {isUp ? '+' : ''}{fmtUsd(delta)}
+            </span>
+          </div>
+        </div>
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['value', 'pnl'] as const).map(m => (
+            <button key={m} onClick={() => setMode(m)} style={{
+              background: mode === m ? 'var(--blue-soft)' : 'transparent',
+              border: '1px solid var(--rule)', borderRadius: 4,
+              color: mode === m ? 'var(--blue)' : 'var(--ink-soft)',
+              cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 600,
+              padding: '3px 8px', textTransform: 'capitalize',
+            }}>{m === 'value' ? 'Value' : 'PnL'}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      {chartData.length > 1 ? (
+        <ResponsiveContainer width="100%" height={160}>
+          <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.25} />
+                <stop offset="95%" stopColor={color} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="label" tick={false} axisLine={false} tickLine={false} />
+            <YAxis
+              domain={[min * 0.999, max * 1.001]}
+              tick={{ fontSize: 10, fill: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}
+              axisLine={false} tickLine={false} width={60}
+              tickFormatter={v => fmtUsd(v, 0)}
+            />
+            {mode === 'pnl' && <ReferenceLine y={0} stroke="var(--rule)" strokeDasharray="3 3" />}
+            <Tooltip
+              contentStyle={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 6, fontSize: 12, fontFamily: 'var(--mono)' }}
+              labelStyle={{ color: 'var(--ink-soft)', fontSize: 11, marginBottom: 4 }}
+              formatter={(v: number) => [fmtUsd(v), mode === 'value' ? 'Account Value' : 'PnL']}
+            />
+            <Area
+              type="monotone" dataKey="value"
+              stroke={color} strokeWidth={1.5}
+              fill={`url(#${gradId})`}
+              dot={false} activeDot={{ r: 3, fill: color }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-mute)', fontSize: 13 }}>
+          Not enough data for this period
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main dashboard (needs useSearchParams, wrapped in Suspense) ───────────────
 
 function HLTraderDashboard() {
@@ -127,6 +233,7 @@ function HLTraderDashboard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('positions')
+  const [range, setRange] = useState<ChartRange>('7d')
   const [history, setHistory] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -340,6 +447,43 @@ function HLTraderDashboard() {
               valueColor={pnlColor(totalFunding)}
               sub={`Withdrawable: ${fmtUsd(data.perps.withdrawable)}`}
             />
+          </div>
+
+          {/* Charts */}
+          <div style={{ marginBottom: 28 }}>
+            {/* Range toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
+                Performance
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['24h', '7d', '30d', 'All'] as ChartRange[]).map(r => (
+                  <button key={r} onClick={() => setRange(r)} style={{
+                    background: range === r ? 'var(--blue-soft)' : 'transparent',
+                    border: '1px solid var(--rule)', borderRadius: 4,
+                    color: range === r ? 'var(--blue)' : 'var(--ink-soft)',
+                    cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600,
+                    padding: '3px 10px',
+                  }}>{r}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Two charts side by side */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <PortfolioChart
+                title="Perp + Spot"
+                series={data.portfolio[range === '24h' ? 'day' : range === '7d' ? 'week' : range === '30d' ? 'month' : 'allTime']}
+                color="var(--blue)"
+                range={range}
+              />
+              <PortfolioChart
+                title="Perps Only"
+                series={data.portfolio[range === '24h' ? 'perpDay' : range === '7d' ? 'perpWeek' : range === '30d' ? 'perpMonth' : 'perpAllTime']}
+                color="#9333ea"
+                range={range}
+              />
+            </div>
           </div>
 
           {/* Tabs */}
