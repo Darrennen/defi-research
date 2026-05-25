@@ -1,0 +1,344 @@
+/* ── lighter cockpit theme ──────────────────────────────── */
+/* applied when [data-lighter] is present in the DOM */
+
+[data-lighter] {
+  --bg: #0a0b0c;
+  --paper: #0a0b0c;
+  --paper-2: #111315;
+  --ink: #e9efe8;
+  --ink-dim: #8b938a;
+  --ink-soft: #8b938a;
+  --ink-faint: #4a524c;
+  --ink-mute: #4a524c;
+  --line: #1d2124;
+  --rule: #1d2124;
+  --line-2: #2a3035;
+  --green: #6fe089;
+  --red: #ff6a77;
+  --amber: #f2c14e;
+  --blue: #7fb8ff;
+  --accent: #e0ff6b;
+  --card: #111315;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono), 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+/* body radial glow when cockpit is active */
+body:has([data-lighter]) {
+  background: #0a0b0c;
+  background-image:
+    radial-gradient(900px 500px at 85% -10%, rgba(224,255,107,0.04), transparent 60%),
+    radial-gradient(700px 400px at 0% 100%, rgba(127,184,255,0.03), transparent 60%);
+}
+
+/* hide Paragrine chrome */
+body:has([data-lighter]) .masthead { display: none !important }
+body:has([data-lighter]) .site-footer { display: none !important }
+body:has([data-lighter]) .colophon { display: none !important }
+body:has([data-lighter]) .bottom-nav { display: none !important }
+
+/* remove wrap max-width/padding constraints */
+body:has([data-lighter]) > div.wrap { max-width: none !important; padding: 0 !important }
+body:has([data-lighter]) > div.wrap > main { padding: 0 !important; max-width: none !important }
+
+/* ── pos / neg colors ─────────────────────────── */
+[data-lighter] .pos { color: var(--green) }
+[data-lighter] .neg { color: var(--red) }
+
+/* ── cockpit header ───────────────────────────── */
+.cockpit-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 13px 24px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  backdrop-filter: blur(10px);
+  flex-wrap: wrap;
+}
+.cockpit-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.cockpit-mark {
+  font-family: var(--font-serif), 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  font-style: italic;
+  text-decoration: none;
+  color: var(--ink);
+}
+.cockpit-mark .first { color: var(--accent) }
+.cockpit-sub {
+  color: var(--ink-faint);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.cockpit-nav {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cockpit-nav-pill {
+  padding: 4px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  color: var(--ink-dim);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.cockpit-nav-pill:hover { border-color: var(--accent); color: var(--ink) }
+.cockpit-nav-pill.active { background: rgba(224,255,107,0.12); border-color: var(--accent); color: var(--accent) }
+.cockpit-back {
+  margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  color: var(--ink-faint);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+.cockpit-back:hover { color: var(--ink-dim); border-color: var(--line) }
+
+/* ── KPI strip ────────────────────────────────── */
+[data-lighter] .cockpit-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border-bottom: 1px solid var(--line);
+}
+[data-lighter] .cockpit-kpi {
+  background: var(--bg);
+  padding: 18px 22px;
+  position: relative;
+  overflow: hidden;
+}
+[data-lighter] .cockpit-kpi::after {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.2s;
+}
+[data-lighter] .cockpit-kpi:hover::after { background: var(--accent) }
+[data-lighter] .cockpit-kpi .lbl {
+  color: var(--ink-faint);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+[data-lighter] .cockpit-kpi .val {
+  font-family: var(--font-serif), 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+[data-lighter] .cockpit-kpi .sub {
+  color: var(--ink-dim);
+  font-size: 11px;
+  margin-top: 6px;
+}
+[data-lighter] .cockpit-kpi .val.up { color: var(--green) }
+[data-lighter] .cockpit-kpi .val.down { color: var(--red) }
+
+/* ── layout grid ──────────────────────────────── */
+[data-lighter] .cockpit-body {
+  padding: 0;
+}
+[data-lighter] .cockpit-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+[data-lighter] .cockpit-grid > * { background: var(--bg) }
+[data-lighter] .cockpit-row {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+}
+[data-lighter] .cockpit-row > * { background: var(--bg) }
+[data-lighter] .cockpit-row.two { grid-template-columns: 1fr 1fr }
+[data-lighter] .cockpit-row.three { grid-template-columns: 1fr 1fr 1fr }
+
+/* ── panel ────────────────────────────────────── */
+[data-lighter] .panel {
+  background: var(--bg) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+/* ── cockpit panel header h2 ─────────────────── */
+[data-lighter] .cockpit-h2 {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+[data-lighter] .cockpit-h2::before {
+  content: "";
+  width: 18px;
+  height: 1px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+[data-lighter] .cockpit-h2 .count {
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+/* ── buttons ──────────────────────────────────── */
+[data-lighter] .ch {
+  background: transparent !important;
+  border-color: var(--line-2) !important;
+  color: var(--ink-dim) !important;
+  font-size: 10px !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 3px !important;
+  transition: all 0.12s !important;
+  min-height: unset !important;
+}
+[data-lighter] .ch:hover:not(.on) {
+  border-color: var(--accent) !important;
+  color: var(--ink) !important;
+}
+[data-lighter] .ch.on {
+  background: var(--accent) !important;
+  color: #0a0b0c !important;
+  border-color: var(--accent) !important;
+  font-weight: 700 !important;
+}
+
+/* ── table ────────────────────────────────────── */
+[data-lighter] table { font-size: 12px }
+[data-lighter] thead th {
+  background: var(--bg) !important;
+  color: var(--ink-faint) !important;
+  font-size: 10px !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line) !important;
+}
+[data-lighter] tbody tr:hover { background: rgba(224,255,107,0.025) !important }
+[data-lighter] .pill-buy {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(111,224,137,0.14);
+  color: var(--green);
+}
+[data-lighter] .pill-sell {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255,106,119,0.14);
+  color: var(--red);
+}
+
+/* ── status dot ────────────────────────────────── */
+[data-lighter] .status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  display: inline-block;
+}
+[data-lighter] .status-dot.err { background: var(--red); box-shadow: 0 0 8px var(--red) }
+[data-lighter] .status-dot.warn { background: var(--amber); box-shadow: 0 0 8px var(--amber) }
+
+/* ── flow panel ────────────────────────────────── */
+[data-lighter] .flow-bar {
+  height: 20px;
+  display: flex;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--line);
+}
+[data-lighter] .flow-bar > div { transition: width 0.4s }
+
+/* ── scrollbar ─────────────────────────────────── */
+[data-lighter] ::-webkit-scrollbar { width: 6px; height: 6px }
+[data-lighter] ::-webkit-scrollbar-track { background: transparent }
+[data-lighter] ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px }
+[data-lighter] ::-webkit-scrollbar-thumb:hover { background: var(--ink-faint) }
+
+/* ── flash animations ──────────────────────────── */
+[data-lighter] .flash-up { animation: flashUp 0.8s ease-out }
+[data-lighter] .flash-dn { animation: flashDn 0.8s ease-out }
+@keyframes flashUp { 0% { background: rgba(111,224,137,0.25) } 100% { background: transparent } }
+@keyframes flashDn { 0% { background: rgba(255,106,119,0.25) } 100% { background: transparent } }
+
+/* ── tier badges ────────────────────────────────── */
+[data-lighter] .tier { display: inline-block; padding: 0 4px; border-radius: 2px; font-size: 9px; font-weight: 700 }
+[data-lighter] .tier.t1 { background: var(--accent); color: #0a0b0c }
+[data-lighter] .tier.t2 { background: rgba(224,255,107,0.4); color: var(--accent) }
+[data-lighter] .tier.t3 { background: rgba(224,255,107,0.15); color: var(--accent) }
+
+/* ── input / select in cockpit ────────────────── */
+[data-lighter] input, [data-lighter] select {
+  font-family: var(--font-mono), monospace;
+  font-size: inherit;
+  color: var(--ink);
+  background: var(--paper-2);
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  outline: none;
+}
+[data-lighter] input:focus, [data-lighter] select:focus { border-color: var(--accent) }
+
+/* ── responsive ─────────────────────────────────── */
+@media (max-width: 1200px) {
+  [data-lighter] .cockpit-kpis { grid-template-columns: repeat(3, 1fr) }
+  [data-lighter] .cockpit-grid { grid-template-columns: 1fr }
+  [data-lighter] .cockpit-row.three { grid-template-columns: 1fr 1fr }
+}
+@media (max-width: 768px) {
+  .cockpit-header { padding: 10px 14px; gap: 8px }
+  .cockpit-mark { font-size: 18px }
+  [data-lighter] .cockpit-kpis { grid-template-columns: repeat(2, 1fr) }
+  [data-lighter] .cockpit-row.two, [data-lighter] .cockpit-row.three { grid-template-columns: 1fr }
+}
+@media (max-width: 480px) {
+  [data-lighter] .cockpit-kpis { grid-template-columns: repeat(2, 1fr) }
+  [data-lighter] .cockpit-kpi { padding: 10px 12px }
+  [data-lighter] .cockpit-kpi .val { font-size: 20px }
+  .cockpit-sub { display: none }
+}

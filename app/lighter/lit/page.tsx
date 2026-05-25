@@ -568,31 +568,9 @@ export default function LitTracker() {
   const periodLabel = hours === 24 ? '24h' : hours === 168 ? '7d' : hours === 720 ? '30d' : hours + 'h'
 
   return (
-    <div style={{ maxWidth: 1480, margin: '0 auto', padding: '24px 16px' }}>
-      {/* header */}
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <div className="kicker">Lighter DEX · LIT Token</div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: '4px 0 6px' }}>LIT Flow Tracker</h1>
-        <p style={{ color: 'var(--ink-dim)', fontSize: 13, margin: 0 }}>
-          Aggressive order flow, TWAP detection, leaders and staking for the LIT token.
-        </p>
-      </div>
-
-      {/* sub-nav */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Link href="/lighter" className="ch" style={{ padding: '6px 14px' }}>Overview</Link>
-        <span className="ch on" style={{ padding: '6px 14px' }}>LIT Tracker</span>
-        <Link href="/lighter/explorer" className="ch" style={{ padding: '6px 14px' }}>Explorer</Link>
-        <Link href="/lighter/watchlist" className="ch" style={{ padding: '6px 14px' }}>Watchlist</Link>
-        <div style={{ flex: 1 }} />
-        <span style={{ color: 'var(--ink-faint)', fontSize: 11 }}>
-          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: status === 'ok' ? 'var(--green)' : status === 'err' ? 'var(--red)' : 'var(--amber)', marginRight: 6 }} />
-          {status === 'ok' ? 'live' : status === 'err' ? 'error' : 'syncing'} · {lastSync} · {pollCount} polls
-        </span>
-      </div>
-
-      {/* controls */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div>
+      {/* controls bar */}
+      <div style={{ display: 'flex', gap: 8, padding: '10px 24px', borderBottom: '1px solid var(--line)', background: 'var(--paper-2)', flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ fontSize: 11, color: 'var(--ink-faint)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Market</span>
         {[['', 'All'], ['120', 'Perp'], ['2049', 'Spot']].map(([val, lbl]) => (
           <button key={val} className={`ch${market === val ? ' on' : ''}`}
@@ -613,50 +591,50 @@ export default function LitTracker() {
             onClick={() => setRefreshMs(Number(val) * 1000)}
             style={{ padding: '4px 12px', fontSize: 12 }}>{lbl}</button>
         ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className={`status-dot${status === 'err' ? ' err' : status === 'warn' ? ' warn' : ''}`} />
+          <span style={{ fontSize: 10, color: 'var(--ink-faint)', fontVariantNumeric: 'tabular-nums' }}>{lastSync}</span>
+        </div>
       </div>
 
-      {/* KPI row */}
-      <div className="metrics-row" style={{ marginBottom: 20 }}>
-        {[
-          {
-            lbl: 'LIT PERP', val: fmtPrice(summary?.perp?.last_price),
-            sub: summary?.perp ? fmtPct(summary.perp.price_change) + ' 24h' : ' ',
-            cls: summary?.perp && summary.perp.price_change >= 0 ? 'pos' : 'neg',
-          },
-          {
-            lbl: 'LIT SPOT', val: fmtPrice(summary?.spot?.last_price),
-            sub: summary?.spot ? fmtPct(summary.spot.price_change) + ' 24h' : ' ',
-            cls: summary?.spot && summary.spot.price_change >= 0 ? 'pos' : 'neg',
-          },
-          {
-            lbl: 'Funding Rate',
-            val: summary?.perp?.funding != null ? (summary.perp.funding * 100).toFixed(4) + '%' : '—',
-            sub: summary?.perp?.funding != null ? (summary.perp.funding * 3 * 365 * 100).toFixed(1) + '% APR' : ' ',
-            cls: summary?.perp?.funding != null ? (summary.perp.funding >= 0 ? 'pos' : 'neg') : '',
-          },
-          {
-            lbl: 'Perp Vol 24h', val: fmtUsd(summary?.perp?.volume_24h),
-            sub: summary?.perp ? summary.perp.trades_24h?.toLocaleString() + ' trades' : ' ', cls: '',
-          },
-          {
-            lbl: `Buy Flow (${periodLabel})`, val: fmtUsd(flowBuy), sub: fmtNum(flow?.trade_count, 0) + ' trades', cls: 'pos',
-          },
-          {
-            lbl: `Net Flow (${periodLabel})`, val: fmtUsd(flowDelta),
-            sub: insufficient ? `only ${fmtDuration(actualHoursMs)} data` : fmtDuration(actualHoursMs) + ' of data',
-            cls: flowDelta >= 0 ? 'pos' : 'neg',
-          },
-        ].map(k => (
-          <div key={k.lbl} className="panel" style={{ flex: 1, minWidth: 130, padding: '14px 16px' }}>
-            <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 6 }}>{k.lbl}</div>
-            <div className={k.cls} style={{ fontSize: 22, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{k.val}</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-dim)', marginTop: 3 }}>{k.sub}</div>
+      {/* KPI strip */}
+      <div className="cockpit-kpis">
+        <div className="cockpit-kpi">
+          <div className="lbl">LIT Perp</div>
+          <div className={`val ${summary?.perp && summary.perp.price_change >= 0 ? 'up' : 'down'}`}>{fmtPrice(summary?.perp?.last_price)}</div>
+          <div className="sub">{summary?.perp ? fmtPct(summary.perp.price_change) + ' 24h' : '—'}</div>
+        </div>
+        <div className="cockpit-kpi">
+          <div className="lbl">LIT Spot</div>
+          <div className={`val ${summary?.spot && summary.spot.price_change >= 0 ? 'up' : 'down'}`}>{fmtPrice(summary?.spot?.last_price)}</div>
+          <div className="sub">{summary?.spot ? fmtPct(summary.spot.price_change) + ' 24h' : '—'}</div>
+        </div>
+        <div className="cockpit-kpi">
+          <div className="lbl">Funding Rate</div>
+          <div className={`val ${summary?.perp?.funding != null ? (summary.perp.funding >= 0 ? 'up' : 'down') : ''}`}>
+            {summary?.perp?.funding != null ? (summary.perp.funding * 100).toFixed(4) + '%' : '—'}
           </div>
-        ))}
+          <div className="sub">{summary?.perp?.funding != null ? (summary.perp.funding * 3 * 365 * 100).toFixed(1) + '% APR' : '—'}</div>
+        </div>
+        <div className="cockpit-kpi">
+          <div className="lbl">Perp Vol 24h</div>
+          <div className="val">{fmtUsd(summary?.perp?.volume_24h)}</div>
+          <div className="sub">{summary?.perp ? summary.perp.trades_24h?.toLocaleString() + ' trades' : '—'}</div>
+        </div>
+        <div className="cockpit-kpi">
+          <div className="lbl">Buy Flow · {periodLabel}</div>
+          <div className="val up">{fmtUsd(flowBuy)}</div>
+          <div className="sub">{fmtNum(flow?.trade_count, 0)} trades</div>
+        </div>
+        <div className="cockpit-kpi">
+          <div className="lbl">Net Flow · {periodLabel}</div>
+          <div className={`val ${flowDelta >= 0 ? 'up' : 'down'}`}>{fmtUsd(flowDelta)}</div>
+          <div className="sub">{insufficient ? `⚠ only ${fmtDuration(actualHoursMs)}` : fmtDuration(actualHoursMs) + ' data'}</div>
+        </div>
       </div>
 
       {/* main grid — 2 col */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 16, marginBottom: 16 }}>
+      <div className="cockpit-grid" style={{ marginBottom: 1 }}>
         {/* trades table */}
         <div className="panel" style={{ padding: 0 }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -1240,7 +1218,7 @@ export default function LitTracker() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: 'var(--paper)' }}>
-                  {['Account', 'Label', 'Buy 24h', 'Sell 24h', 'Net 24h', 'Net 7d', 'Net 30d', ''].map(h => (
+                  {['Account', 'Label', 'Buy 24h', 'Sell 24h', '24h P&L', '7d P&L', '30d P&L', ''].map(h => (
                     <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Account' || h === 'Label' || h === '' ? 'left' : 'right', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)' }}>{h}</th>
                   ))}
                 </tr>
@@ -1249,6 +1227,28 @@ export default function LitTracker() {
                 {trackedWallets.map(w => {
                   const f = trackedFlows[w.account_id]
                   const d24 = f?.['24h'] ?? {}; const d7d = f?.['7d'] ?? {}; const d30d = f?.['30d'] ?? {}
+                  const currentPrice = summary?.perp?.last_price ?? summary?.spot?.last_price ?? 0
+                  const pnl24 = f ? (d24.sell_usd ?? 0) - (d24.buy_usd ?? 0) + (d24.net_size ?? 0) * currentPrice : null
+                  const pnl7d = f ? (d7d.sell_usd ?? 0) - (d7d.buy_usd ?? 0) + (d7d.net_size ?? 0) * currentPrice : null
+                  const pnl30d = f ? (d30d.sell_usd ?? 0) - (d30d.buy_usd ?? 0) + (d30d.net_size ?? 0) * currentPrice : null
+                  const PnlCell = ({ pnl, buy, sell }: { pnl: number | null; buy?: number; sell?: number }) => {
+                    if (pnl === null) return <span style={{ color: 'var(--ink-faint)' }}>…</span>
+                    const isWin = pnl >= 0
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span className={isWin ? 'pos' : 'neg'} style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(pnl)}</span>
+                          <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 2, background: isWin ? 'rgba(111,224,137,0.18)' : 'rgba(255,106,119,0.18)', color: isWin ? 'var(--green)' : 'var(--red)', letterSpacing: '0.06em' }}>{isWin ? 'W' : 'L'}</span>
+                        </div>
+                        {(buy != null || sell != null) && (
+                          <div style={{ fontSize: 10, color: 'var(--ink-faint)', display: 'flex', gap: 6 }}>
+                            <span style={{ color: 'var(--green)' }}>{fmtUsd(buy)}</span>
+                            <span style={{ color: 'var(--red)' }}>{fmtUsd(sell)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
                   return (
                     <tr key={w.account_id} style={{ borderBottom: '1px solid var(--line)' }}>
                       <td style={{ padding: '8px 10px' }}>
@@ -1266,9 +1266,9 @@ export default function LitTracker() {
                       </td>
                       <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--green)' }}>{f ? fmtUsd(d24.buy_usd) : '…'}</td>
                       <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--red)' }}>{f ? fmtUsd(d24.sell_usd) : '…'}</td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right' }} className={d24.net_usd >= 0 ? 'pos' : 'neg'}>{f ? fmtUsd(d24.net_usd) : '…'}</td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right' }} className={d7d.net_usd >= 0 ? 'pos' : 'neg'}>{f ? fmtUsd(d7d.net_usd) : '…'}</td>
-                      <td style={{ padding: '8px 10px', textAlign: 'right' }} className={d30d.net_usd >= 0 ? 'pos' : 'neg'}>{f ? fmtUsd(d30d.net_usd) : '…'}</td>
+                      <td style={{ padding: '10px 10px', textAlign: 'right' }}><PnlCell pnl={pnl24} /></td>
+                      <td style={{ padding: '10px 10px', textAlign: 'right' }}><PnlCell pnl={pnl7d} /></td>
+                      <td style={{ padding: '10px 10px', textAlign: 'right' }}><PnlCell pnl={pnl30d} /></td>
                       <td style={{ padding: '8px 10px' }}>
                         <button onClick={() => removeTracked(w.account_id)}
                           style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 4px' }} title="Remove">×</button>
