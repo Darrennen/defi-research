@@ -364,31 +364,23 @@ export default function EntityProfilePage() {
 
           {/* Behavioral baseline */}
           {baseline && (
-            <div style={{ borderBottom: '1px solid var(--rule)', padding: '16px 0', display: 'flex', gap: 40, flexWrap: 'wrap', alignItems: 'baseline' }}>
-              <div>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginRight: 10 }}>
-                  This Week Vol
-                </span>
-                <span style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginRight: 8 }}>
-                  {fmtUSD(baseline.curVol)}
-                </span>
+            <div className="metrics-row" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              <div className="metric-cell">
+                <div className="lbl">This Week Vol</div>
+                <div className="val" style={{ fontSize: 'clamp(20px, 2.5vw, 28px)' }}>{fmtUSD(baseline.curVol)}</div>
                 {baseline.volPct != null && (
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: Math.abs(baseline.volPct) > 100 ? 'var(--amber)' : 'var(--ink-mute)' }}>
-                    {baseline.volPct > 0 ? '+' : ''}{baseline.volPct.toFixed(0)}% vs 3w avg ({fmtUSD(baseline.avgVol)}/wk)
-                  </span>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: Math.abs(baseline.volPct) > 100 ? 'var(--amber)' : 'var(--ink-mute)', marginTop: 6 }}>
+                    {baseline.volPct > 0 ? '+' : ''}{baseline.volPct.toFixed(0)}% vs 3w avg · {fmtUSD(baseline.avgVol)}/wk
+                  </div>
                 )}
               </div>
-              <div>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-mute)', marginRight: 10 }}>
-                  This Week Tx
-                </span>
-                <span style={{ fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 500, color: 'var(--ink)', marginRight: 8 }}>
-                  {baseline.curTx}
-                </span>
+              <div className="metric-cell">
+                <div className="lbl">This Week Tx</div>
+                <div className="val" style={{ fontSize: 'clamp(20px, 2.5vw, 28px)' }}>{baseline.curTx}</div>
                 {baseline.txPct != null && (
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: Math.abs(baseline.txPct) > 100 ? 'var(--amber)' : 'var(--ink-mute)' }}>
-                    {baseline.txPct > 0 ? '+' : ''}{baseline.txPct.toFixed(0)}% vs 3w avg ({baseline.avgTx.toFixed(1)}/wk)
-                  </span>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: Math.abs(baseline.txPct) > 100 ? 'var(--amber)' : 'var(--ink-mute)', marginTop: 6 }}>
+                    {baseline.txPct > 0 ? '+' : ''}{baseline.txPct.toFixed(0)}% vs 3w avg · {baseline.avgTx.toFixed(1)}/wk
+                  </div>
                 )}
               </div>
             </div>

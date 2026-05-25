@@ -165,6 +165,7 @@ function detectCorrelatedMoves(alerts: WhaleAlert[]): CorrelatedMove[] {
 
 function CorrelationPanel({ alerts }: { alerts: WhaleAlert[] }) {
   const moves = useMemo(() => detectCorrelatedMoves(alerts), [alerts])
+  const maxAmount = moves[0]?.totalAmount ?? 1
 
   if (moves.length === 0) return (
     <p style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>
@@ -173,45 +174,43 @@ function CorrelationPanel({ alerts }: { alerts: WhaleAlert[] }) {
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--rule)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {moves.map((m, i) => {
         const windowH = Math.round((m.lastTs - m.firstTs) / 3600000)
         return (
-          <div key={i} style={{ background: 'var(--paper)', padding: '14px 20px', display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, alignItems: 'start' }}>
-            <div>
-              {/* Entities row */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6, alignItems: 'center' }}>
-                {m.entities.map(e => (
-                  <Link
-                    key={e}
-                    href={`/whale-tracker/entity/${encodeURIComponent(e)}`}
-                    style={{ fontFamily: 'var(--sans)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--blue)', textDecoration: 'none', padding: '1px 7px', border: '1px solid var(--blue)', opacity: 0.85 }}
-                  >
-                    {e}
-                  </Link>
-                ))}
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
-                  · {m.count} txs · {windowH < 1 ? '<1h' : `${windowH}h`} window
-                </span>
+          <div key={i}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginBottom: 5 }}>
+                  {m.entities.map(e => (
+                    <Link key={e} href={`/whale-tracker/entity/${encodeURIComponent(e)}`}
+                      style={{ fontFamily: 'var(--sans)', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--blue)', textDecoration: 'none', padding: '1px 6px', border: '1px solid var(--blue)', opacity: 0.85 }}>
+                      {e}
+                    </Link>
+                  ))}
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+                    {m.count}tx · {windowH < 1 ? '<1h' : `${windowH}h`}
+                  </span>
+                </div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-soft)' }}>
+                  Moved{' '}
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink)', fontWeight: 600 }}>{m.token}</span>
+                  {m.toCex
+                    ? <span style={{ color: 'var(--red)' }}> → CEX</span>
+                    : m.destination ? <span> → {m.destination}</span> : null}
+                </div>
               </div>
-              {/* Signal line */}
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 13, color: 'var(--ink-soft)' }}>
-                All moved{' '}
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink)', fontWeight: 700 }}>{m.token}</span>
-                {m.toCex ? (
-                  <span style={{ color: 'var(--red)' }}> → CEX <span style={{ fontSize: 11, color: 'var(--red)', opacity: 0.7 }}>(sell signal)</span></span>
-                ) : m.destination ? (
-                  <span> → <span style={{ color: 'var(--ink)' }}>{m.destination}</span></span>
-                ) : null}
+              <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: m.toCex ? 'var(--red)' : 'var(--blue)' }}>
+                  {fmtUSD(m.totalAmount)}
+                </div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>
+                  {timeAgo(m.firstTs)}
+                </div>
               </div>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--blue)' }}>
-                {fmtUSD(m.totalAmount)}
-              </div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>
-                {timeAgo(m.firstTs)}
-              </div>
+            <div style={{ height: 3, borderRadius: 2, background: 'var(--rule)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${(m.totalAmount / maxAmount) * 100}%`, background: m.toCex ? 'var(--red)' : 'var(--blue)', borderRadius: 2 }} />
             </div>
           </div>
         )
@@ -740,7 +739,9 @@ export default function WhaleTrackerPage() {
               2+ whales · same token · same direction · within 4h
             </span>
           </div>
-          <CorrelationPanel alerts={alerts} />
+          <div style={{ background: 'var(--paper)', padding: '24px 28px' }}>
+            <CorrelationPanel alerts={alerts} />
+          </div>
         </div>
       )}
 
