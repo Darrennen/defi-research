@@ -1,13 +1,14 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import {
   fetchWallet, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
-  type HLWalletData, type HLRole, type HLPortfolioSeries,
+  fmtFundingRate, annualizedFunding, fundingDirection,
+  type HLWalletData, type HLRole, type HLPortfolioSeries, type HLPredictedFundings,
 } from '@/lib/hyperliquid'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -32,6 +33,19 @@ function pnlColor(v: string | number): string {
   return 'var(--ink-soft)'
 }
 
+function fmtPct24h(mark: string | undefined, prev: string | undefined): string {
+  if (!mark || !prev) return '—'
+  const m = parseFloat(mark), p = parseFloat(prev)
+  if (!p) return '—'
+  const chg = (m - p) / p * 100
+  return `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`
+}
+
+const VENUE_LABELS: Record<string, string> = {
+  HlPerp: 'HL', BinPerp: 'Binance', BybPerp: 'Bybit', OkxPerp: 'OKX',
+}
+const VENUE_ORDER = ['HlPerp', 'BinPerp', 'BybPerp', 'OkxPerp']
+
 const ROLE_META: Record<HLRole, { label: string; color: string; bg: string }> = {
   user:       { label: 'Main Wallet', color: '#0d9488', bg: 'rgba(13,148,136,0.10)' },
   agent:      { label: 'API Wallet',  color: 'var(--blue)', bg: 'var(--blue-soft)' },
@@ -40,7 +54,7 @@ const ROLE_META: Record<HLRole, { label: string; color: string; bg: string }> = 
   missing:    { label: 'Unknown',     color: 'var(--ink-soft)', bg: 'var(--rule-soft)' },
 }
 
-type Tab = 'positions' | 'spot' | 'orders' | 'trades' | 'transactions' | 'subaccounts'
+type Tab = 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -77,10 +91,22 @@ function MetricCard({ label, value, sub, valueColor }: {
   )
 }
 
-function Table({ headers, rows, empty }: {
+function SectionHead({ title, right }: { title: string; right?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>
+        {title}
+      </div>
+      {right}
+    </div>
+  )
+}
+
+function Table({ headers, rows, empty, alignRight }: {
   headers: string[]
   rows: (string | React.ReactNode)[][]
   empty: string
+  alignRight?: number[]
 }) {
   if (rows.length === 0) {
     return <div style={{ textAlign: 'center', color: 'var(--ink-mute)', padding: '40px 0', fontSize: 14 }}>{empty}</div>
@@ -90,11 +116,13 @@ function Table({ headers, rows, empty }: {
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr>
-            {headers.map(h => (
+            {headers.map((h, i) => (
               <th key={h} style={{
-                textAlign: 'left', padding: '8px 12px',
+                textAlign: alignRight?.includes(i) ? 'right' : 'left',
+                padding: '8px 12px',
                 fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
                 color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)',
+                whiteSpace: 'nowrap',
               }}>
                 {h}
               </th>
@@ -105,7 +133,10 @@ function Table({ headers, rows, empty }: {
           {rows.map((row, i) => (
             <tr key={i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
               {row.map((cell, j) => (
-                <td key={j} style={{ padding: '10px 12px', fontFamily: 'var(--mono)', color: 'var(--ink)', verticalAlign: 'middle' }}>
+                <td key={j} style={{
+                  padding: '10px 12px', fontFamily: 'var(--mono)', color: 'var(--ink)',
+                  verticalAlign: 'middle', textAlign: alignRight?.includes(j) ? 'right' : 'left',
+                }}>
                   {cell}
                 </td>
               ))}
@@ -130,16 +161,10 @@ function buildChartData(series: HLPortfolioSeries, mode: 'value' | 'pnl') {
   }))
 }
 
-function PortfolioChart({
-  title, series, color, range,
-}: {
-  title: string
-  series: HLPortfolioSeries | undefined
-  color: string
-  range: ChartRange
+function PortfolioChart({ title, series, color, range }: {
+  title: string; series: HLPortfolioSeries | undefined; color: string; range: ChartRange
 }) {
   const [mode, setMode] = useState<'value' | 'pnl'>('value')
-
   if (!series) return null
 
   const chartData = buildChartData(series, mode)
@@ -150,12 +175,10 @@ function PortfolioChart({
   const last = values[values.length - 1] ?? 0
   const delta = last - first
   const isUp = delta >= 0
-
   const gradId = `grad-${title.replace(/\s/g, '')}`
 
   return (
     <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '18px 20px', flex: 1, minWidth: 280 }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{title}</div>
@@ -166,7 +189,6 @@ function PortfolioChart({
             </span>
           </div>
         </div>
-        {/* Mode toggle */}
         <div style={{ display: 'flex', gap: 4 }}>
           {(['value', 'pnl'] as const).map(m => (
             <button key={m} onClick={() => setMode(m)} style={{
@@ -179,8 +201,6 @@ function PortfolioChart({
           ))}
         </div>
       </div>
-
-      {/* Chart */}
       {chartData.length > 1 ? (
         <ResponsiveContainer width="100%" height={160}>
           <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
@@ -203,12 +223,7 @@ function PortfolioChart({
               labelStyle={{ color: 'var(--ink-soft)', fontSize: 11, marginBottom: 4 }}
               formatter={(v: number) => [fmtUsd(v), mode === 'value' ? 'Account Value' : 'PnL']}
             />
-            <Area
-              type="monotone" dataKey="value"
-              stroke={color} strokeWidth={1.5}
-              fill={`url(#${gradId})`}
-              dot={false} activeDot={{ r: 3, fill: color }}
-            />
+            <Area type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} fill={`url(#${gradId})`} dot={false} activeDot={{ r: 3, fill: color }} />
           </AreaChart>
         </ResponsiveContainer>
       ) : (
@@ -220,12 +235,182 @@ function PortfolioChart({
   )
 }
 
-// ── Main dashboard (needs useSearchParams, wrapped in Suspense) ───────────────
+// ── Funding Tab ───────────────────────────────────────────────────────────────
+
+function FundingTab({ data }: { data: HLWalletData }) {
+  const [showAll, setShowAll] = useState(false)
+
+  const positions = data.perps.assetPositions.map(ap => ap.position)
+  const positionCoins = new Set(positions.map(p => p.coin))
+
+  // Summarise payment history
+  const payments = data.userFunding
+  const totalReceived = payments.reduce((s, p) => {
+    const v = parseFloat(p.delta.usdc)
+    return s + (v > 0 ? v : 0)
+  }, 0)
+  const totalPaid = payments.reduce((s, p) => {
+    const v = parseFloat(p.delta.usdc)
+    return s + (v < 0 ? Math.abs(v) : 0)
+  }, 0)
+  const netFunding = totalReceived - totalPaid
+
+  // Compute current hourly funding cost from open positions
+  const hourlyFunding = positions.reduce((s, p) => {
+    const ctx = data.assetCtxMap.get(p.coin)
+    if (!ctx) return s
+    const rate = parseFloat(ctx.funding)
+    const sz = parseFloat(p.szi)
+    const markPx = parseFloat(ctx.markPx)
+    const notional = Math.abs(sz) * markPx
+    const dir = fundingDirection(p.szi, ctx.funding)
+    const hourlyRate = rate / 8
+    return s + (dir === 'paying' ? -notional * hourlyRate : notional * hourlyRate)
+  }, 0)
+
+  // Build predicted funding table
+  const fundingData = data.predictedFundings
+  const filteredFunding = showAll
+    ? fundingData
+    : fundingData.filter(([coin]) => positionCoins.has(coin))
+
+  const presentVenues = new Set<string>()
+  for (const [, venues] of fundingData.slice(0, 50)) {
+    for (const [v] of venues) presentVenues.add(v)
+  }
+  const venueOrder = VENUE_ORDER.filter(v => presentVenues.has(v))
+
+  return (
+    <div>
+      {/* Summary */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
+        <MetricCard
+          label="Net Funding (90d)"
+          value={fmtUsd(netFunding)}
+          valueColor={pnlColor(netFunding)}
+          sub={`${payments.length} payments`}
+        />
+        <MetricCard
+          label="Total Received"
+          value={fmtUsd(totalReceived)}
+          valueColor="var(--green)"
+          sub="90 days"
+        />
+        <MetricCard
+          label="Total Paid"
+          value={fmtUsd(totalPaid)}
+          valueColor="var(--red)"
+          sub="90 days"
+        />
+        <MetricCard
+          label="Current Hourly"
+          value={fmtUsd(hourlyFunding)}
+          valueColor={pnlColor(hourlyFunding)}
+          sub="Based on open positions"
+        />
+      </div>
+
+      {/* Cross-exchange predicted fundings */}
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 24 }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>Predicted Next Funding — Cross Exchange</div>
+          <button
+            onClick={() => setShowAll(v => !v)}
+            style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
+          >
+            {showAll ? 'Your Positions Only' : 'All Markets'}
+          </button>
+        </div>
+        {filteredFunding.length === 0 ? (
+          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--ink-mute)', fontSize: 13 }}>
+            {showAll ? 'No predicted funding data' : 'No open positions — click "All Markets" to see all coins'}
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '8px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)' }}>Coin</th>
+                  {venueOrder.map(v => (
+                    <th key={v} style={{ textAlign: 'right', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: v === 'HlPerp' ? 'var(--blue)' : 'var(--ink-soft)', borderBottom: '1px solid var(--rule)', whiteSpace: 'nowrap' }}>
+                      {VENUE_LABELS[v] ?? v}
+                    </th>
+                  ))}
+                  <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)' }}>HL Ann.</th>
+                  <th style={{ textAlign: 'right', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)' }}>Direction</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredFunding.map(([coin, venues]) => {
+                  const venueMap = Object.fromEntries(venues)
+                  const hlRate = parseFloat(venueMap['HlPerp']?.fundingRate ?? '0')
+                  const hlAnn = annualizedFunding(hlRate) * 100
+                  const pos = positions.find(p => p.coin === coin)
+                  const dir = pos ? fundingDirection(pos.szi, String(hlRate)) : null
+                  return (
+                    <tr key={coin} style={{ borderBottom: '1px solid var(--rule-soft)', background: positionCoins.has(coin) ? 'rgba(var(--blue-rgb, 59,130,246),0.03)' : 'transparent' }}>
+                      <td style={{ padding: '10px 16px', fontWeight: 600, fontFamily: 'var(--mono)' }}>
+                        {coin}
+                        {positionCoins.has(coin) && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 3, padding: '1px 5px' }}>open</span>}
+                      </td>
+                      {venueOrder.map(v => {
+                        const entry = venueMap[v]
+                        const rate = entry ? parseFloat(entry.fundingRate) * 100 : null
+                        return (
+                          <td key={v} style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: rate == null ? 'var(--ink-mute)' : rate > 0 ? 'var(--red)' : rate < 0 ? 'var(--green)' : 'var(--ink)' }}>
+                            {rate == null ? '—' : `${rate >= 0 ? '+' : ''}${rate.toFixed(4)}%`}
+                          </td>
+                        )
+                      })}
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 12, color: hlAnn > 0 ? 'var(--red)' : hlAnn < 0 ? 'var(--green)' : 'var(--ink)' }}>
+                        {hlAnn >= 0 ? '+' : ''}{hlAnn.toFixed(2)}%
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        {dir ? (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: dir === 'receiving' ? 'var(--green)' : 'var(--red)', background: dir === 'receiving' ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '2px 7px' }}>
+                            {dir === 'receiving' ? '↑ Receiving' : '↓ Paying'}
+                          </span>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Funding payment history */}
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>
+          Payment History (90 days) — {payments.length} events
+        </div>
+        <Table
+          headers={['Time', 'Coin', 'Position Size', 'Rate (8h)', 'Paid / Received']}
+          alignRight={[2, 3, 4]}
+          empty="No funding payments in last 90 days"
+          rows={payments.slice().reverse().map(p => [
+            fmtTime(p.time),
+            <span key="coin" style={{ fontWeight: 600 }}>{p.delta.coin}</span>,
+            fmtNum(p.delta.szi, 4),
+            <span key="rate" style={{ color: parseFloat(p.delta.fundingRate) > 0 ? 'var(--red)' : 'var(--green)' }}>
+              {(parseFloat(p.delta.fundingRate) * 100).toFixed(4)}%
+            </span>,
+            <span key="usdc" style={{ color: pnlColor(p.delta.usdc), fontWeight: 600 }}>
+              {parseFloat(p.delta.usdc) >= 0 ? '+' : ''}{fmtUsd(p.delta.usdc)}
+            </span>,
+          ])}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Main dashboard ────────────────────────────────────────────────────────────
 
 function HLTraderDashboard() {
-  const router = useRouter()
   const params = useSearchParams()
-  // support both ?a= and ?snoop= URL params
   const urlAddr = params.get('snoop') ?? params.get('a') ?? ''
 
   const [input, setInput] = useState(urlAddr)
@@ -260,11 +445,7 @@ function HLTraderDashboard() {
     }
     currentAddr.current = a
     if (!silent) {
-      setAddress(a)
-      setInput(a)
-      setLoading(true)
-      setError(null)
-      setData(null)
+      setAddress(a); setInput(a); setLoading(true); setError(null); setData(null)
     } else {
       setRefreshing(true)
     }
@@ -273,19 +454,14 @@ function HLTraderDashboard() {
       if (currentAddr.current !== a) return
       setData(result)
       setLastRefresh(new Date())
-      if (!silent) {
-        saveHistory(a)
-        setHistory(loadHistory())
-      }
+      if (!silent) { saveHistory(a); setHistory(loadHistory()) }
     } catch (e: unknown) {
       if (!silent) setError(e instanceof Error ? e.message : 'Failed to fetch wallet data.')
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      setLoading(false); setRefreshing(false)
     }
   }, [])
 
-  // auto-refresh positions every 15s in snoop mode
   useEffect(() => {
     if (!address) return
     const id = setInterval(() => {
@@ -303,7 +479,7 @@ function HLTraderDashboard() {
     setData(null); setAddress(''); setInput(''); setError(null); currentAddr.current = ''
   }
 
-  // ── Derived data ─────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
 
   const positions = data?.perps.assetPositions.map(ap => ap.position) ?? []
   const spotBalances = (data?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0)
@@ -311,30 +487,33 @@ function HLTraderDashboard() {
   const fills = data?.fills ?? []
   const ledger = data?.ledger ?? []
   const subs = data?.subAccounts ?? []
+  const fundingPayments = data?.userFunding ?? []
+  const historicalOrders = data?.historicalOrders ?? []
 
   const perpEquity = parseFloat(data?.perps.marginSummary.accountValue ?? '0')
   const spotEquity = spotBalances.reduce((s, b) => {
-    const notional = parseFloat(b.entryNtl)
-    return s + (isNaN(notional) ? 0 : notional)
+    const n = parseFloat(b.entryNtl)
+    return s + (isNaN(n) ? 0 : n)
   }, 0)
-  const totalEquity = perpEquity + spotEquity
-
   const totalPnl = positions.reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
   const totalFunding = positions.reduce((s, p) => s + parseFloat(p.cumFunding?.sinceOpen || '0'), 0)
 
   const role = (data?.role.role ?? 'user') as HLRole
   const masterAddr = data?.role.user
 
+  const netFunding90d = fundingPayments.reduce((s, p) => s + parseFloat(p.delta.usdc), 0)
+
   const TABS: { id: Tab; label: string; count?: number }[] = [
     { id: 'positions',    label: 'Positions',    count: positions.length },
     { id: 'spot',         label: 'Spot',         count: spotBalances.length },
     { id: 'orders',       label: 'Orders',       count: orders.length },
     { id: 'trades',       label: 'Trades',       count: fills.length },
+    { id: 'funding',      label: 'Funding',      count: fundingPayments.length },
     { id: 'transactions', label: 'Transactions', count: ledger.length },
     { id: 'subaccounts',  label: 'Sub-Accounts', count: subs.length },
   ]
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Normal page (no data loaded) ─────────────────────────────────────────
 
   return (
     <div>
@@ -348,7 +527,7 @@ function HLTraderDashboard() {
           Trader <em>Explorer</em>
         </h1>
         <p style={{ fontSize: 15, color: 'var(--ink-soft)', maxWidth: '56ch', lineHeight: 1.6 }}>
-          View any Hyperliquid wallet — positions, spot holdings, open orders, trade history, and account relationships.
+          View any Hyperliquid wallet — positions, spot holdings, orders, trades, funding analysis, and cross-exchange comparison.
         </p>
       </div>
 
@@ -367,12 +546,7 @@ function HLTraderDashboard() {
             fontSize: 14, padding: '10px 14px', outline: 'none',
           }}
         />
-        <button
-          onClick={() => lookup(input)}
-          disabled={loading}
-          className="btn primary"
-          style={{ padding: '10px 24px', fontSize: 12, letterSpacing: '0.08em' }}
-        >
+        <button onClick={() => lookup(input)} disabled={loading} className="btn primary" style={{ padding: '10px 24px', fontSize: 12, letterSpacing: '0.08em' }}>
           {loading ? 'Loading…' : 'Snoop →'}
         </button>
         {address && (
@@ -380,7 +554,6 @@ function HLTraderDashboard() {
             onClick={() => navigator.clipboard.writeText(`${window.location.origin}/hl-traders?snoop=${address}`)}
             className="btn ghost"
             style={{ padding: '10px 16px', fontSize: 12, letterSpacing: '0.08em' }}
-            title="Copy snoop link"
           >
             Share
           </button>
@@ -391,22 +564,11 @@ function HLTraderDashboard() {
       {history.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 32 }}>
           {history.map(a => (
-            <button
-              key={a}
-              onClick={() => lookup(a)}
-              style={{
-                background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 20,
-                color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'var(--mono)',
-                fontSize: 11, padding: '4px 12px',
-              }}
-            >
+            <button key={a} onClick={() => lookup(a)} style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 20, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, padding: '4px 12px' }}>
               {shortAddr(a)}
             </button>
           ))}
-          <button
-            onClick={() => { localStorage.removeItem(HISTORY_KEY); setHistory([]) }}
-            style={{ background: 'transparent', border: 'none', color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '4px 6px' }}
-          >
+          <button onClick={() => { localStorage.removeItem(HISTORY_KEY); setHistory([]) }} style={{ background: 'transparent', border: 'none', color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '4px 6px' }}>
             clear
           </button>
         </div>
@@ -414,23 +576,16 @@ function HLTraderDashboard() {
 
       {/* Error */}
       {error && (
-        <div style={{
-          background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)',
-          borderRadius: 8, color: 'var(--red)', fontSize: 14, padding: '12px 16px', marginBottom: 24,
-        }}>
+        <div style={{ background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, color: 'var(--red)', fontSize: 14, padding: '12px 16px', marginBottom: 24 }}>
           {error}
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading skeleton */}
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
           {[200, 160, 140].map((w, i) => (
-            <div key={i} style={{
-              height: 20, width: w, borderRadius: 4,
-              background: 'var(--rule)', animation: 'pulse 1.4s ease-in-out infinite',
-              animationDelay: `${i * 0.15}s`,
-            }} />
+            <div key={i} style={{ height: 20, width: w, borderRadius: 4, background: 'var(--rule)', animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.15}s` }} />
           ))}
         </div>
       )}
@@ -438,28 +593,15 @@ function HLTraderDashboard() {
       {/* Results */}
       {data && !loading && (
         <>
-          {/* Snoop mode banner */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.25)',
-            borderRadius: 8, padding: '10px 16px', marginBottom: 16,
-            flexWrap: 'wrap', gap: 8,
-          }}>
+          {/* Snoop banner */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.25)', borderRadius: 8, padding: '10px 16px', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ position: 'relative', display: 'inline-flex', width: 10, height: 10 }}>
-                <span style={{
-                  position: 'absolute', inset: 0, borderRadius: '50%',
-                  background: '#9333ea', opacity: 0.4,
-                  animation: 'ping 1.4s ease-in-out infinite',
-                }} />
+                <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#9333ea', opacity: 0.4, animation: 'ping 1.4s ease-in-out infinite' }} />
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#9333ea', display: 'block' }} />
               </span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#9333ea', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                Snooping
-              </span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
-                {address}
-              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#9333ea', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Snooping</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{address}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               {lastRefresh && (
@@ -467,252 +609,245 @@ function HLTraderDashboard() {
                   {refreshing ? 'Refreshing…' : `Updated ${lastRefresh.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`}
                 </span>
               )}
-              <button
-                onClick={() => lookup(address, true)}
-                disabled={refreshing}
-                style={{ background: 'transparent', border: '1px solid rgba(147,51,234,0.3)', borderRadius: 4, color: '#9333ea', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
-              >
+              <button onClick={() => lookup(address, true)} disabled={refreshing} style={{ background: 'transparent', border: '1px solid rgba(147,51,234,0.3)', borderRadius: 4, color: '#9333ea', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
                 ↻ Refresh
               </button>
-              <button
-                onClick={stopSnoop}
-                style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
-              >
-                Stop Snooping ✕
+              <button onClick={stopSnoop} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
+                Stop ✕
               </button>
             </div>
           </div>
 
           {/* Account header */}
-          <div style={{
-            background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10,
-            padding: '18px 20px', marginBottom: 20,
-            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-          }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '18px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <RoleBadge role={role} />
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--ink)', wordBreak: 'break-all' }}>
-              {address}
-            </span>
-            <button
-              onClick={() => navigator.clipboard.writeText(address)}
-              style={{ background: 'var(--rule-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, padding: '3px 8px', marginLeft: 'auto' }}
-            >
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--ink)', wordBreak: 'break-all' }}>{address}</span>
+            {data.fees && (
+              <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--ink-soft)', background: 'var(--rule-soft)', border: '1px solid var(--rule)', borderRadius: 4, padding: '2px 8px' }}>
+                Taker {(parseFloat(data.fees.userCrossRate) * 100).toFixed(3)}% · Maker {(parseFloat(data.fees.userAddRate) * 100).toFixed(3)}%
+              </span>
+            )}
+            <button onClick={() => navigator.clipboard.writeText(address)} style={{ background: 'var(--rule-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, padding: '3px 8px', marginLeft: 'auto' }}>
               copy
             </button>
             {masterAddr && (
               <div style={{ width: '100%', borderTop: '1px solid var(--rule-soft)', paddingTop: 10, marginTop: 4, fontSize: 13, color: 'var(--ink-soft)' }}>
-                {role === 'agent' ? 'API wallet for' : 'Sub-account of'}
-                {' '}
-                <button
-                  onClick={() => lookup(masterAddr)}
-                  style={{ background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 13, padding: 0, textDecoration: 'underline' }}
-                >
+                {role === 'agent' ? 'API wallet for' : 'Sub-account of'}{' '}
+                <button onClick={() => lookup(masterAddr)} style={{ background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 13, padding: 0, textDecoration: 'underline' }}>
                   {shortAddr(masterAddr)}
                 </button>
               </div>
             )}
           </div>
 
-          {/* Metrics row */}
+          {/* Metrics */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
-            <MetricCard
-              label="Perp Equity"
-              value={fmtUsd(perpEquity)}
-              sub={`Margin used: ${fmtUsd(data.perps.marginSummary.totalMarginUsed)}`}
-            />
-            <MetricCard
-              label="Spot Holdings"
-              value={fmtUsd(spotEquity || null)}
-              sub={`${spotBalances.length} token${spotBalances.length !== 1 ? 's' : ''}`}
-            />
-            <MetricCard
-              label="Unrealized PnL"
-              value={fmtUsd(totalPnl)}
-              valueColor={pnlColor(totalPnl)}
-              sub={`${positions.length} open position${positions.length !== 1 ? 's' : ''}`}
-            />
-            <MetricCard
-              label="Funding (open)"
-              value={fmtUsd(totalFunding)}
-              valueColor={pnlColor(totalFunding)}
-              sub={`Withdrawable: ${fmtUsd(data.perps.withdrawable)}`}
-            />
+            <MetricCard label="Perp Equity" value={fmtUsd(perpEquity)} sub={`Margin used: ${fmtUsd(data.perps.marginSummary.totalMarginUsed)}`} />
+            <MetricCard label="Spot Holdings" value={fmtUsd(spotEquity || null)} sub={`${spotBalances.length} token${spotBalances.length !== 1 ? 's' : ''}`} />
+            <MetricCard label="Unrealized PnL" value={fmtUsd(totalPnl)} valueColor={pnlColor(totalPnl)} sub={`${positions.length} position${positions.length !== 1 ? 's' : ''}`} />
+            <MetricCard label="Funding (open)" value={fmtUsd(totalFunding)} valueColor={pnlColor(totalFunding)} sub={`Net 90d: ${fmtUsd(netFunding90d)}`} />
           </div>
 
           {/* Charts */}
           <div style={{ marginBottom: 28 }}>
-            {/* Range toggle */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
-                Performance
-              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>Performance</div>
               <div style={{ display: 'flex', gap: 4 }}>
                 {(['24h', '7d', '30d', 'All'] as ChartRange[]).map(r => (
-                  <button key={r} onClick={() => setRange(r)} style={{
-                    background: range === r ? 'var(--blue-soft)' : 'transparent',
-                    border: '1px solid var(--rule)', borderRadius: 4,
-                    color: range === r ? 'var(--blue)' : 'var(--ink-soft)',
-                    cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600,
-                    padding: '3px 10px',
-                  }}>{r}</button>
+                  <button key={r} onClick={() => setRange(r)} style={{ background: range === r ? 'var(--blue-soft)' : 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: range === r ? 'var(--blue)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, padding: '3px 10px' }}>{r}</button>
                 ))}
               </div>
             </div>
-
-            {/* Two charts side by side */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <PortfolioChart
-                title="Perp + Spot"
-                series={data.portfolio[range === '24h' ? 'day' : range === '7d' ? 'week' : range === '30d' ? 'month' : 'allTime']}
-                color="var(--blue)"
-                range={range}
-              />
-              <PortfolioChart
-                title="Perps Only"
-                series={data.portfolio[range === '24h' ? 'perpDay' : range === '7d' ? 'perpWeek' : range === '30d' ? 'perpMonth' : 'perpAllTime']}
-                color="#9333ea"
-                range={range}
-              />
+              <PortfolioChart title="Perp + Spot" series={data.portfolio[range === '24h' ? 'day' : range === '7d' ? 'week' : range === '30d' ? 'month' : 'allTime']} color="var(--blue)" range={range} />
+              <PortfolioChart title="Perps Only" series={data.portfolio[range === '24h' ? 'perpDay' : range === '7d' ? 'perpWeek' : range === '30d' ? 'perpMonth' : 'perpAllTime']} color="#9333ea" range={range} />
             </div>
           </div>
 
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: 24 }}>
+          <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: 24, overflowX: 'auto' }}>
             {TABS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{
-                  background: 'none', border: 'none', borderBottom: tab === t.id ? '2px solid var(--blue)' : '2px solid transparent',
-                  color: tab === t.id ? 'var(--ink)' : 'var(--ink-soft)',
-                  cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 13, fontWeight: tab === t.id ? 600 : 400,
-                  padding: '10px 16px', marginBottom: -1, transition: 'color 120ms',
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}
-              >
+              <button key={t.id} onClick={() => setTab(t.id)} style={{ background: 'none', border: 'none', borderBottom: tab === t.id ? '2px solid var(--blue)' : '2px solid transparent', color: tab === t.id ? 'var(--ink)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 13, fontWeight: tab === t.id ? 600 : 400, padding: '10px 16px', marginBottom: -1, transition: 'color 120ms', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
                 {t.label}
                 {t.count !== undefined && t.count > 0 && (
-                  <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>
-                    {t.count}
-                  </span>
+                  <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>{t.count}</span>
                 )}
               </button>
             ))}
           </div>
 
           {/* Tab content */}
-          <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
 
-            {/* Positions */}
-            {tab === 'positions' && (
+          {/* Positions */}
+          {tab === 'positions' && (
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
               <Table
-                headers={['Symbol', 'Side', 'Size', 'Entry', 'Mark Value', 'Unr. PnL', 'ROE', 'Leverage', 'Liq. Price', 'Funding']}
+                headers={['Symbol', 'Side', 'Size', 'Entry', 'Mark Value', 'Unr. PnL / ROE', 'Leverage', 'Liq. Price', 'Fund Rate / Cum.', 'OI', '24h Vol']}
+                alignRight={[2, 3, 4, 5, 7, 8, 9, 10]}
                 empty="No open positions"
                 rows={positions.map(p => {
                   const size = parseFloat(p.szi)
-                  const side = size >= 0 ? 'Long' : 'Short'
+                  const isLong = size >= 0
+                  const ctx = data.assetCtxMap.get(p.coin)
+                  const fundingRate = ctx?.funding ?? '0'
+                  const dir = ctx ? fundingDirection(p.szi, fundingRate) : 'neutral'
+                  const rateNum = parseFloat(fundingRate) * 100
+                  const annNum = parseFloat(fundingRate) * 3 * 365 * 100
+                  const pxChange = ctx ? fmtPct24h(ctx.markPx, ctx.prevDayPx) : '—'
+                  const pxChgNum = ctx ? (parseFloat(ctx.markPx) - parseFloat(ctx.prevDayPx)) / parseFloat(ctx.prevDayPx) * 100 : 0
                   return [
-                    <span key="coin" style={{ fontWeight: 600 }}>{p.coin}</span>,
-                    <span key="side" style={{ color: size >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{side}</span>,
+                    <div key="sym">
+                      <div style={{ fontWeight: 600, fontFamily: 'var(--mono)' }}>{p.coin}</div>
+                      <div style={{ fontSize: 11, color: pxChgNum >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>{pxChange}</div>
+                    </div>,
+                    <span key="side" style={{ color: isLong ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{isLong ? 'Long' : 'Short'}</span>,
                     fmtNum(Math.abs(size)),
                     fmtUsd(p.entryPx),
                     fmtUsd(p.positionValue),
-                    <span key="pnl" style={{ color: pnlColor(p.unrealizedPnl) }}>{fmtUsd(p.unrealizedPnl)}</span>,
-                    <span key="roe" style={{ color: pnlColor(p.returnOnEquity) }}>{fmtPct(p.returnOnEquity)}</span>,
+                    <div key="pnl" style={{ textAlign: 'right' }}>
+                      <div style={{ color: pnlColor(p.unrealizedPnl) }}>{fmtUsd(p.unrealizedPnl)}</div>
+                      <div style={{ fontSize: 11, color: pnlColor(p.returnOnEquity), marginTop: 2 }}>{fmtPct(p.returnOnEquity)}</div>
+                    </div>,
                     `${p.leverage.value}× ${p.leverage.type}`,
                     p.liquidationPx ? fmtUsd(p.liquidationPx) : '—',
-                    <span key="fund" style={{ color: pnlColor(p.cumFunding.sinceOpen) }}>{fmtUsd(p.cumFunding.sinceOpen)}</span>,
+                    <div key="fund" style={{ textAlign: 'right' }}>
+                      <div style={{ color: dir === 'receiving' ? 'var(--green)' : dir === 'paying' ? 'var(--red)' : 'var(--ink)', fontSize: 12 }}>
+                        {rateNum >= 0 ? '+' : ''}{rateNum.toFixed(4)}% <span style={{ color: 'var(--ink-mute)', fontSize: 10 }}>({annNum >= 0 ? '+' : ''}{annNum.toFixed(1)}%yr)</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: pnlColor(p.cumFunding.sinceOpen), marginTop: 2 }}>{fmtUsd(p.cumFunding.sinceOpen)}</div>
+                    </div>,
+                    ctx ? fmtUsd(parseFloat(ctx.openInterest) * parseFloat(ctx.markPx)) : '—',
+                    ctx ? fmtUsd(ctx.dayNtlVlm) : '—',
                   ]
                 })}
               />
-            )}
+            </div>
+          )}
 
-            {/* Spot */}
-            {tab === 'spot' && (
+          {/* Spot */}
+          {tab === 'spot' && (
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
               <Table
-                headers={['Token', 'Balance', 'Hold', 'Entry Value']}
+                headers={['Token', 'Balance', 'Hold', 'Entry Value', 'Mark Price', '24h Change', '24h Volume']}
+                alignRight={[1, 2, 3, 4, 5, 6]}
                 empty="No spot holdings"
-                rows={spotBalances.map(b => [
-                  <span key="coin" style={{ fontWeight: 600 }}>{b.coin}</span>,
-                  fmtNum(b.total, 6),
-                  fmtNum(b.hold, 6),
-                  fmtUsd(b.entryNtl),
+                rows={spotBalances.map(b => {
+                  const ctx = data.spotAssetCtxMap.get(b.coin)
+                  const pxChange = ctx ? fmtPct24h(ctx.markPx, ctx.prevDayPx) : '—'
+                  const pxChgNum = ctx ? (parseFloat(ctx.markPx) - parseFloat(ctx.prevDayPx)) / parseFloat(ctx.prevDayPx) * 100 : 0
+                  return [
+                    <span key="coin" style={{ fontWeight: 600 }}>{b.coin}</span>,
+                    fmtNum(b.total, 6),
+                    fmtNum(b.hold, 6),
+                    fmtUsd(b.entryNtl),
+                    ctx ? fmtUsd(ctx.markPx) : '—',
+                    <span key="chg" style={{ color: pxChgNum >= 0 ? 'var(--green)' : 'var(--red)' }}>{pxChange}</span>,
+                    ctx ? fmtUsd(ctx.dayNtlVlm) : '—',
+                  ]
+                })}
+              />
+            </div>
+          )}
+
+          {/* Orders */}
+          {tab === 'orders' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Open Orders ({orders.length})</div>
+                <Table
+                  headers={['Symbol', 'Side', 'Size', 'Filled', 'Limit Price', 'Time']}
+                  alignRight={[2, 3, 4]}
+                  empty="No open orders"
+                  rows={orders.map(o => {
+                    const filled = parseFloat(o.origSz) - parseFloat(o.sz)
+                    return [
+                      <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
+                      <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{o.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                      fmtNum(o.sz),
+                      filled > 0 ? fmtNum(filled) : '—',
+                      fmtUsd(o.limitPx),
+                      fmtTime(o.timestamp),
+                    ]
+                  })}
+                />
+              </div>
+              {historicalOrders.length > 0 && (
+                <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Order History ({historicalOrders.length})</div>
+                  <Table
+                    headers={['Symbol', 'Side', 'Size', 'Limit Price', 'Status', 'Time']}
+                    alignRight={[2, 3]}
+                    empty="No historical orders"
+                    rows={historicalOrders.slice(0, 200).map(o => [
+                      <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
+                      <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{o.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                      fmtNum(o.origSz),
+                      fmtUsd(o.limitPx),
+                      <span key="status" style={{ fontSize: 11, fontWeight: 600, color: o.status === 'filled' ? 'var(--green)' : o.status === 'cancelled' ? 'var(--ink-mute)' : 'var(--ink-soft)', background: o.status === 'filled' ? 'rgba(34,197,94,0.08)' : 'var(--rule-soft)', borderRadius: 4, padding: '2px 7px', textTransform: 'capitalize' }}>
+                        {o.status}
+                      </span>,
+                      fmtTime(o.timestamp),
+                    ])}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Trades */}
+          {tab === 'trades' && (
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+              {fills.length > 200 && (
+                <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--ink-mute)', borderBottom: '1px solid var(--rule-soft)' }}>Showing 200 of {fills.length} fills</div>
+              )}
+              <Table
+                headers={['Symbol', 'Side', 'Size', 'Price', 'Direction', 'Closed PnL', 'Fee', 'Time']}
+                alignRight={[2, 3, 5, 6]}
+                empty="No trade history"
+                rows={fills.slice(0, 200).map(f => [
+                  <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(f.coin, data.spotTokenMap)}</span>,
+                  <span key="side" style={{ color: f.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{f.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                  fmtNum(f.sz),
+                  fmtUsd(f.px),
+                  <span key="dir" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>{f.dir}</span>,
+                  <span key="pnl" style={{ color: pnlColor(f.closedPnl) }}>{fmtUsd(f.closedPnl)}</span>,
+                  <span key="fee" style={{ color: 'var(--ink-mute)' }}>{fmtUsd(f.fee)} {f.feeToken}</span>,
+                  fmtTime(f.time),
                 ])}
               />
-            )}
+            </div>
+          )}
 
-            {/* Orders */}
-            {tab === 'orders' && (
-              <Table
-                headers={['Symbol', 'Side', 'Size', 'Filled', 'Limit Price', 'Time']}
-                empty="No open orders"
-                rows={orders.map(o => {
-                  const filled = parseFloat(o.origSz) - parseFloat(o.sz)
-                  return [
-                    <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
-                    <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-                      {o.side === 'B' ? 'Buy' : 'Sell'}
-                    </span>,
-                    fmtNum(o.sz),
-                    filled > 0 ? fmtNum(filled) : '—',
-                    fmtUsd(o.limitPx),
-                    fmtTime(o.timestamp),
-                  ]
-                })}
-              />
-            )}
+          {/* Funding */}
+          {tab === 'funding' && <FundingTab data={data} />}
 
-            {/* Trades */}
-            {tab === 'trades' && (
-              <>
-                {fills.length > 200 && (
-                  <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--ink-mute)', borderBottom: '1px solid var(--rule-soft)' }}>
-                    Showing {fills.length} most recent fills
-                  </div>
-                )}
-                <Table
-                  headers={['Symbol', 'Side', 'Size', 'Price', 'Direction', 'Closed PnL', 'Fee', 'Time']}
-                  empty="No trade history"
-                  rows={fills.slice(0, 200).map(f => [
-                    <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(f.coin, data.spotTokenMap)}</span>,
-                    <span key="side" style={{ color: f.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-                      {f.side === 'B' ? 'Buy' : 'Sell'}
-                    </span>,
-                    fmtNum(f.sz),
-                    fmtUsd(f.px),
-                    <span key="dir" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>{f.dir}</span>,
-                    <span key="pnl" style={{ color: pnlColor(f.closedPnl) }}>{fmtUsd(f.closedPnl)}</span>,
-                    <span key="fee" style={{ color: 'var(--ink-mute)' }}>{fmtUsd(f.fee)} {f.feeToken}</span>,
-                    fmtTime(f.time),
-                  ])}
-                />
-              </>
-            )}
-
-            {/* Transactions */}
-            {tab === 'transactions' && (
+          {/* Transactions */}
+          {tab === 'transactions' && (
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
               <Table
                 headers={['Type', 'Amount', 'Time', 'Hash']}
+                alignRight={[1]}
                 empty="No transactions in last 90 days"
                 rows={ledger.map(l => [
                   <span key="type" style={{ fontWeight: 600, textTransform: 'capitalize' }}>{l.delta.type.replace(/_/g, ' ')}</span>,
                   l.delta.usdc
                     ? <span key="amt" style={{ color: parseFloat(l.delta.usdc) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtUsd(l.delta.usdc)}</span>
-                    : l.delta.amount
-                      ? `${fmtNum(l.delta.amount)} ${l.delta.coin ?? ''}`
-                      : '—',
+                    : l.delta.amount ? `${fmtNum(l.delta.amount)} ${l.delta.coin ?? ''}` : '—',
                   fmtTime(l.time),
                   <a key="hash" href={`https://app.hyperliquid.xyz/explorer/tx/${l.hash}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', fontFamily: 'var(--mono)', fontSize: 12 }}>
                     {shortAddr(l.hash)}
                   </a>,
                 ])}
               />
-            )}
+            </div>
+          )}
 
-            {/* Sub-accounts */}
-            {tab === 'subaccounts' && (
+          {/* Sub-accounts */}
+          {tab === 'subaccounts' && (
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
               <Table
                 headers={['Name', 'Address', 'Perp Equity', 'Spot Balances', 'Open Pos.']}
+                alignRight={[2, 3, 4]}
                 empty="No sub-accounts linked to this address"
                 rows={subs.map(s => {
                   const equity = s.clearinghouseState?.marginSummary?.accountValue
@@ -720,11 +855,7 @@ function HLTraderDashboard() {
                   const posCount = s.clearinghouseState?.assetPositions?.length ?? 0
                   return [
                     <span key="name" style={{ fontWeight: 600 }}>{s.name || '—'}</span>,
-                    <button
-                      key="addr"
-                      onClick={() => lookup(s.subAccountUser)}
-                      style={{ background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 13, padding: 0, textDecoration: 'underline' }}
-                    >
+                    <button key="addr" onClick={() => lookup(s.subAccountUser)} style={{ background: 'none', border: 'none', color: 'var(--blue)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 13, padding: 0, textDecoration: 'underline' }}>
                       {shortAddr(s.subAccountUser)}
                     </button>,
                     fmtUsd(equity ?? null),
@@ -733,40 +864,30 @@ function HLTraderDashboard() {
                   ]
                 })}
               />
-            )}
-
-          </div>
+            </div>
+          )}
         </>
       )}
 
       {/* Empty state */}
       {!data && !loading && !error && (
-        <div style={{
-          border: '1px dashed var(--rule)', borderRadius: 10,
-          padding: '64px 32px', textAlign: 'center', color: 'var(--ink-mute)',
-        }}>
+        <div style={{ border: '1px dashed var(--rule)', borderRadius: 10, padding: '64px 32px', textAlign: 'center', color: 'var(--ink-mute)' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
           <div style={{ fontSize: 15, marginBottom: 8 }}>Enter any Hyperliquid address to explore their wallet</div>
-          <div style={{ fontSize: 13 }}>Positions · Spot · Orders · Trades · Transactions · Sub-accounts</div>
+          <div style={{ fontSize: 13 }}>Positions · Spot · Orders · Trades · Funding · Transactions · Sub-accounts</div>
         </div>
       )}
 
       <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 1; }
-        }
-        @keyframes ping {
-          0% { transform: scale(1); opacity: 0.4; }
-          75%, 100% { transform: scale(2.2); opacity: 0; }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+        @keyframes ping { 0% { transform: scale(1); opacity: 0.4; } 75%, 100% { transform: scale(2.2); opacity: 0; } }
         input:focus { border-color: var(--blue) !important; }
       `}</style>
     </div>
   )
 }
 
-// ── Export (wrapped in Suspense for useSearchParams) ──────────────────────────
+// ── Export ────────────────────────────────────────────────────────────────────
 
 export default function Page() {
   return (
