@@ -97,6 +97,20 @@ export interface HLFill {
   feeToken: string
 }
 
+export interface HLSpotToken {
+  name: string
+  szDecimals: number
+  weiDecimals: number
+  index: number
+  tokenId: string
+  isCanonical: boolean
+}
+
+export interface HLSpotMeta {
+  tokens: HLSpotToken[]
+  universe: Array<{ name: string; tokens: number[]; index: number }>
+}
+
 export interface HLLedgerUpdate {
   time: number
   hash: string
@@ -130,6 +144,9 @@ export const getOpenOrders = (address: string) =>
 export const getUserFills = (address: string) =>
   post<HLFill[]>({ type: 'userFills', user: address })
 
+export const getSpotMeta = () =>
+  post<HLSpotMeta>({ type: 'spotMeta' })
+
 export const getLedgerUpdates = (address: string) =>
   post<HLLedgerUpdate[]>({
     type: 'userNonFundingLedgerUpdates',
@@ -147,10 +164,11 @@ export interface HLWalletData {
   orders: HLOpenOrder[]
   fills: HLFill[]
   ledger: HLLedgerUpdate[]
+  spotTokenMap: Map<string, string>
 }
 
 export async function fetchWallet(address: string): Promise<HLWalletData> {
-  const [role, subAccounts, perps, spot, orders, fills, ledger] = await Promise.all([
+  const [role, subAccounts, perps, spot, orders, fills, ledger, spotMeta] = await Promise.all([
     getUserRole(address),
     getSubAccounts(address),
     getClearinghouseState(address),
@@ -158,8 +176,20 @@ export async function fetchWallet(address: string): Promise<HLWalletData> {
     getOpenOrders(address),
     getUserFills(address),
     getLedgerUpdates(address),
+    getSpotMeta(),
   ])
-  return { role, subAccounts, perps, spot, orders, fills, ledger }
+
+  // Build @index → name map for resolving spot coin names in fills
+  const spotTokenMap = new Map<string, string>()
+  for (const t of spotMeta.tokens) {
+    spotTokenMap.set(`@${t.index}`, t.name)
+  }
+
+  return { role, subAccounts, perps, spot, orders, fills, ledger, spotTokenMap }
+}
+
+export function resolveCoins(coin: string, map: Map<string, string>): string {
+  return map.get(coin) ?? coin
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────

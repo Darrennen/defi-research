@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
-  fetchWallet, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr,
+  fetchWallet, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
   type HLWalletData, type HLRole,
 } from '@/lib/hyperliquid'
 
@@ -415,7 +415,7 @@ function HLTraderDashboard() {
                 rows={orders.map(o => {
                   const filled = parseFloat(o.origSz) - parseFloat(o.sz)
                   return [
-                    <span key="coin" style={{ fontWeight: 600 }}>{o.coin}</span>,
+                    <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
                     <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
                       {o.side === 'B' ? 'Buy' : 'Sell'}
                     </span>,
@@ -440,7 +440,7 @@ function HLTraderDashboard() {
                   headers={['Symbol', 'Side', 'Size', 'Price', 'Direction', 'Closed PnL', 'Fee', 'Time']}
                   empty="No trade history"
                   rows={fills.slice(0, 200).map(f => [
-                    <span key="coin" style={{ fontWeight: 600 }}>{f.coin}</span>,
+                    <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(f.coin, data.spotTokenMap)}</span>,
                     <span key="side" style={{ color: f.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
                       {f.side === 'B' ? 'Buy' : 'Sell'}
                     </span>,
