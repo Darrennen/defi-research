@@ -13,7 +13,7 @@ export async function GET() {
     const markets = [120, 2049]
     const tradesByMarket = await Promise.allSettled(
       markets.map(mid =>
-        lighterGet('/recentTrades', { market_id: mid, limit: 200 }, 10).then(j => {
+        lighterGet('/recentTrades', { market_id: mid, limit: 100 }, 10).then(j => {
           const raw: any[] = j?.trades ?? j?.recent_trades ?? j?.data ?? []
           return raw.flatMap((t: any) => {
             const norm = normaliseLitTrade(t, mid)

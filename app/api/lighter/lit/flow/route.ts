@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   try {
     const results = await Promise.allSettled(
-      markets.map(mid => lighterGet('/recentTrades', { market_id: mid, limit: 500 }))
+      markets.map(mid => lighterGet('/recentTrades', { market_id: mid, limit: 100 }))
     )
 
     let allTrades: LitTrade[] = results.flatMap((r, i) => {

@@ -2,7 +2,7 @@ import { lighterGet, normaliseLitTrade, LIT_MARKETS } from '@/lib/lighter'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const limit = Math.min(500, Math.max(1, Number(searchParams.get('limit') ?? 100)))
+  const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit') ?? 100)))
   const marketIdParam = searchParams.get('market_id') ? Number(searchParams.get('market_id')) : null
   const marketIdFilter = marketIdParam != null && LIT_MARKETS.has(marketIdParam) ? marketIdParam : null
 
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   try {
     const results = await Promise.allSettled(
-      markets.map(mid => lighterGet('/recentTrades', { market_id: mid, limit: 500 }))
+      markets.map(mid => lighterGet('/recentTrades', { market_id: mid, limit: 100 }))
     )
 
     const trades = results.flatMap((r, i) => {
