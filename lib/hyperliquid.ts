@@ -50,6 +50,7 @@ export interface HLPosition {
 export interface HLClearinghouseState {
   marginSummary: HLMarginSummary
   crossMarginSummary: HLMarginSummary
+  crossMaintenanceMarginUsed: string
   withdrawable: string
   assetPositions: Array<{ position: HLPosition; type: string }>
   time: number
