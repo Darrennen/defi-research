@@ -2496,6 +2496,9 @@ footer.site ul a:hover { color: var(--blue); }
   <div id="pos-grid" class="pos-grid"></div>
   <div id="pos-empty" style="display:none;font-family:var(--mono);font-size:13px;color:var(--ink-mute);padding:32px 0;text-align:center;">No Morpho positions found for this address.</div>
 
+  <!-- Wallet scan status -->
+  <div id="wallet-status" style="display:none;font-family:var(--mono);font-size:12px;color:var(--ink-mute);padding:10px 0;border-top:1px solid var(--rule);margin-top:20px;"></div>
+
   <!-- Pendle positions -->
   <div id="pendle-pos-wrap" style="display:none;margin-top:28px;">
     <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;padding-top:16px;border-top:1px solid var(--rule);">Pendle Positions</div>
@@ -4186,8 +4189,11 @@ footer.site ul a:hover { color: var(--blue); }
   function renderPendlePositions(positions) {
     const wrap = document.getElementById('pendle-pos-wrap');
     const tbody = document.getElementById('pendle-pos-tbody');
-    if (!positions || positions.length === 0) { wrap.style.display = 'none'; return; }
     wrap.style.display = 'block';
+    if (!positions || positions.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:18px;color:var(--ink-mute);font-family:var(--mono);font-size:12px;">No Pendle positions found for this address</td></tr>`;
+      return;
+    }
     tbody.innerHTML = positions.map(p => {
       const daysStr = p.days_left != null ? p.days_left + 'd' : '—';
       const apyStr  = p.implied_apy != null ? p.implied_apy.toFixed(2) + '%' : '—';
@@ -4213,8 +4219,11 @@ footer.site ul a:hover { color: var(--blue); }
   function renderAavePosition(aave) {
     const wrap = document.getElementById('aave-pos-wrap');
     const kpis = document.getElementById('aave-pos-kpis');
-    if (!aave) { wrap.style.display = 'none'; return; }
     wrap.style.display = 'block';
+    if (!aave) {
+      kpis.innerHTML = `<div style="padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--ink-mute);">No Aave V3 position found</div>`;
+      return;
+    }
     const hfColor = aave.health_factor == null ? 'var(--ink-mute)' :
                     aave.health_factor < 1.2 ? '#f87171' :
                     aave.health_factor < 1.5 ? '#fb923c' : '#4ade80';
@@ -4231,8 +4240,11 @@ footer.site ul a:hover { color: var(--blue); }
   function renderPtBalances(ptBal) {
     const wrap = document.getElementById('pt-bal-wrap');
     const tbody = document.getElementById('pt-bal-tbody');
-    if (!ptBal || ptBal.length === 0) { wrap.style.display = 'none'; return; }
     wrap.style.display = 'block';
+    if (!ptBal || ptBal.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:18px;color:var(--ink-mute);font-family:var(--mono);font-size:12px;">No PT token balances found in wallet</td></tr>`;
+      return;
+    }
     tbody.innerHTML = ptBal.map(p => {
       const daysStr = p.days_left != null ? p.days_left + 'd' : '—';
       const valStr  = p.value_usd != null ? '$' + p.value_usd.toLocaleString() : '—';
@@ -4316,11 +4328,14 @@ footer.site ul a:hover { color: var(--blue); }
     }
     btn.textContent = 'Loading…';
     btn.disabled = true;
-    // Hide wallet sections while loading
+    const walletStatus = document.getElementById('wallet-status');
+    // Reset wallet sections to hidden while new fetch loads
     document.getElementById('pendle-pos-wrap').style.display = 'none';
     document.getElementById('aave-pos-wrap').style.display = 'none';
     document.getElementById('pt-bal-wrap').style.display = 'none';
     document.getElementById('maturity-summary-wrap').style.display = 'none';
+    walletStatus.style.display = 'block';
+    walletStatus.textContent = '⏳ Scanning wallet for Pendle / Aave / PT positions…';
 
     // Fire both fetches concurrently but render Morpho immediately —
     // wallet-positions (PT balance scan) can take 10-20 s and must not block Morpho.
@@ -4351,8 +4366,12 @@ footer.site ul a:hover { color: var(--blue); }
         renderAavePosition(w.aave || null);
         renderPtBalances(ptBalData);
         renderMaturitySummary(pendleData, ptBalData, morphoPositions);
+        walletStatus.style.display = 'none';
       })
-      .catch(() => {}); // silent — wallet data is supplementary
+      .catch(e => {
+        walletStatus.textContent = '⚠ Wallet scan failed: ' + (e.message || 'network error') + '. Pendle API may be temporarily down.';
+        walletStatus.style.color = 'var(--red)';
+      });
   }
 
   document.addEventListener('DOMContentLoaded', function() {
