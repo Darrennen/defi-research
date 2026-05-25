@@ -2469,6 +2469,9 @@ footer.site ul a:hover { color: var(--blue); }
         <th>LP Value</th>
         <th>Total</th>
         <th>Fixed APY</th>
+        <th title="Estimated value at maturity assuming underlying price constant">Maturity Val</th>
+        <th title="Locked profit = Maturity Val − Current Value">Locked $$$</th>
+        <th>Ret %</th>
       </tr></thead>
       <tbody id="pendle-pos-tbody"></tbody>
     </table></div>
@@ -2488,9 +2491,19 @@ footer.site ul a:hover { color: var(--blue); }
         <th style="text-align:left">PT Token</th>
         <th>Balance</th><th>Value USD</th>
         <th>Expiry</th><th>Days</th><th>Fixed APY</th>
+        <th title="Estimated value at maturity assuming underlying price constant">Maturity Val</th>
+        <th title="Locked profit = Maturity Val − Current Value">Locked $$$</th>
+        <th>Ret %</th>
       </tr></thead>
       <tbody id="pt-bal-tbody"></tbody>
     </table></div>
+  </div>
+
+  <!-- Maturity / Loop P&L summary -->
+  <div id="maturity-summary-wrap" style="display:none;margin-top:32px;">
+    <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;padding-top:16px;border-top:1px solid var(--rule);">Position Maturity Projection</div>
+    <div id="maturity-summary-kpis" class="pos-summary" style="grid-template-columns:repeat(5,1fr);margin-bottom:0;"></div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--ink-mute);margin-top:8px;line-height:1.5;" id="maturity-summary-note"></div>
   </div>
 </section>
 
@@ -4067,6 +4080,15 @@ footer.site ul a:hover { color: var(--blue); }
     initSparklines();
   }
 
+  function ptMaturity(valueUsd, impliedApy, daysLeft) {
+    if (!valueUsd || !impliedApy || !daysLeft) return null;
+    const yrs = daysLeft / 365;
+    const maturityVal = valueUsd * Math.pow(1 + impliedApy / 100, yrs);
+    const profit = maturityVal - valueUsd;
+    const retPct = (profit / valueUsd) * 100;
+    return { maturityVal, profit, retPct };
+  }
+
   function renderPendlePositions(positions) {
     const wrap = document.getElementById('pendle-pos-wrap');
     const tbody = document.getElementById('pendle-pos-tbody');
@@ -4075,6 +4097,7 @@ footer.site ul a:hover { color: var(--blue); }
     tbody.innerHTML = positions.map(p => {
       const daysStr = p.days_left != null ? p.days_left + 'd' : '—';
       const apyStr  = p.implied_apy != null ? p.implied_apy.toFixed(2) + '%' : '—';
+      const mat = ptMaturity(p.pt_value_usd, p.implied_apy, p.days_left);
       return `<tr>
         <td style="text-align:left;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.name || '—'}</td>
         <td>${p.expiry || '—'}</td>
@@ -4086,6 +4109,9 @@ footer.site ul a:hover { color: var(--blue); }
         <td>${p.lp_value_usd > 0 ? '$' + p.lp_value_usd.toLocaleString() : '—'}</td>
         <td style="font-weight:700;">$${p.total_value_usd.toLocaleString()}</td>
         <td>${apyStr}</td>
+        <td style="color:var(--blue);">${mat ? '$' + mat.maturityVal.toFixed(2) : '—'}</td>
+        <td style="color:var(--green,#22c55e);font-weight:700;">${mat ? '+$' + mat.profit.toFixed(2) : '—'}</td>
+        <td style="color:var(--green,#22c55e);">${mat ? '+' + mat.retPct.toFixed(2) + '%' : '—'}</td>
       </tr>`;
     }).join('');
   }
@@ -4116,15 +4142,71 @@ footer.site ul a:hover { color: var(--blue); }
     tbody.innerHTML = ptBal.map(p => {
       const daysStr = p.days_left != null ? p.days_left + 'd' : '—';
       const valStr  = p.value_usd != null ? '$' + p.value_usd.toLocaleString() : '—';
+      const mat = ptMaturity(p.value_usd, p.implied_apy, p.days_left);
       return `<tr>
         <td style="text-align:left;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.symbol}</td>
         <td>${p.balance.toLocaleString()}</td>
         <td>${valStr}</td>
         <td>${p.expiry || '—'}</td>
         <td>${daysStr}</td>
-        <td>—</td>
+        <td>${p.implied_apy != null ? p.implied_apy.toFixed(2) + '%' : '—'}</td>
+        <td style="color:var(--blue);">${mat ? '$' + mat.maturityVal.toFixed(2) : '—'}</td>
+        <td style="color:var(--green,#22c55e);font-weight:700;">${mat ? '+$' + mat.profit.toFixed(2) : '—'}</td>
+        <td style="color:var(--green,#22c55e);">${mat ? '+' + mat.retPct.toFixed(2) + '%' : '—'}</td>
       </tr>`;
     }).join('');
+  }
+
+  function renderMaturitySummary(pendle, ptBal, morpho) {
+    const wrap = document.getElementById('maturity-summary-wrap');
+    const kpis = document.getElementById('maturity-summary-kpis');
+    const note = document.getElementById('maturity-summary-note');
+
+    // Combine pendle positions (PT leg only) + standalone PT balances
+    const allPt = [
+      ...(pendle || []).filter(p => p.pt_value_usd > 0),
+      ...(ptBal  || []).filter(p => p.value_usd   > 0),
+    ];
+
+    if (allPt.length === 0) { wrap.style.display = 'none'; return; }
+
+    let totalCurrentUsd = 0, totalMaturityUsd = 0, totalProfitUsd = 0;
+    let weightedDays = 0, weightedDaysTotal = 0;
+    for (const p of allPt) {
+      const val = p.pt_value_usd ?? p.value_usd ?? 0;
+      const mat = ptMaturity(val, p.implied_apy, p.days_left);
+      totalCurrentUsd += val;
+      if (mat) {
+        totalMaturityUsd += mat.maturityVal;
+        totalProfitUsd   += mat.profit;
+      }
+      if (p.days_left) { weightedDays += p.days_left * val; weightedDaysTotal += val; }
+    }
+    const avgDays = weightedDaysTotal > 0 ? weightedDays / weightedDaysTotal : 0;
+
+    // Morpho borrow interest accrued to avg PT expiry
+    let totalBorrowCost = 0;
+    for (const m of (morpho || [])) {
+      if (!m.borrowUsd || !m.borrowApy) continue;
+      const yrs = avgDays / 365;
+      totalBorrowCost += m.borrowUsd * (Math.pow(1 + m.borrowApy / 100, yrs) - 1);
+    }
+
+    const netAtMaturity = totalProfitUsd - totalBorrowCost;
+    const netColor = netAtMaturity >= 0 ? 'var(--green,#22c55e)' : '#f87171';
+    const profitColor = totalProfitUsd >= 0 ? 'var(--green,#22c55e)' : '#f87171';
+
+    wrap.style.display = 'block';
+    kpis.innerHTML = `
+      <div class="b"><div class="l">PT Value Now</div><div class="v">$${totalCurrentUsd.toLocaleString(undefined,{maximumFractionDigits:2})}</div></div>
+      <div class="b"><div class="l">PT at Maturity</div><div class="v" style="color:var(--blue);">$${totalMaturityUsd.toLocaleString(undefined,{maximumFractionDigits:2})}</div></div>
+      <div class="b"><div class="l">Locked PT Profit</div><div class="v" style="color:${profitColor};">+$${totalProfitUsd.toFixed(2)}</div></div>
+      <div class="b"><div class="l">Borrow Interest Est.</div><div class="v" style="color:#f87171;">${totalBorrowCost > 0 ? '-$' + totalBorrowCost.toFixed(2) : '—'}</div></div>
+      <div class="b"><div class="l">Net at Maturity</div><div class="v" style="color:${netColor};font-size:22px;">${netAtMaturity >= 0 ? '+' : ''}$${netAtMaturity.toFixed(2)}</div></div>`;
+
+    note.textContent = avgDays > 0
+      ? `Borrow cost estimated over ${Math.round(avgDays)} days (weighted avg PT expiry). Assumes underlying asset prices remain constant. Stablecoin PTs (USDE, USDC, DAI) are near-certain; LST/LRT PTs carry asset price risk.`
+      : 'Assumes underlying asset prices remain constant at current levels.';
   }
 
   async function fetchPositions() {
@@ -4144,23 +4226,29 @@ footer.site ul a:hover { color: var(--blue); }
     document.getElementById('pendle-pos-wrap').style.display = 'none';
     document.getElementById('aave-pos-wrap').style.display = 'none';
     document.getElementById('pt-bal-wrap').style.display = 'none';
+    document.getElementById('maturity-summary-wrap').style.display = 'none';
     try {
       const [morphoRes, walletRes] = await Promise.allSettled([
         fetch(`/api/morpho-positions?address=${addr}&chainId=${chainId}`),
         fetch(`/api/wallet-positions?address=${addr}`),
       ]);
 
+      let morphoPositions = [];
       if (morphoRes.status === 'fulfilled') {
         const json = await morphoRes.value.json();
         if (json.error) throw new Error(json.error);
-        renderPositions(json.positions || []);
+        morphoPositions = json.positions || [];
+        renderPositions(morphoPositions);
       }
 
       if (walletRes.status === 'fulfilled') {
         const w = await walletRes.value.json();
-        renderPendlePositions(w.pendle || []);
+        const pendleData = w.pendle || [];
+        const ptBalData  = w.pt_balances || [];
+        renderPendlePositions(pendleData);
         renderAavePosition(w.aave || null);
-        renderPtBalances(w.pt_balances || []);
+        renderPtBalances(ptBalData);
+        renderMaturitySummary(pendleData, ptBalData, morphoPositions);
       }
     } catch (e) {
       errEl.textContent = 'Failed to load positions: ' + (e.message || 'network error');

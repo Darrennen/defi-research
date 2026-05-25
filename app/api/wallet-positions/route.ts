@@ -124,13 +124,14 @@ async function fetchPtBalances(address: string): Promise<any[]> {
   const pts = (mktData.results ?? [])
     .filter((m: any) => m.pt?.address && m.isActive !== false)
     .map((m: any) => ({
-      address:    (m.pt.address as string).toLowerCase(),
-      symbol:     m.pt.symbol ?? '?',
-      price_usd:  m.pt.price?.usd ?? null,
-      expiry:     (m.expiry ?? '').slice(0, 10),
-      days_left:  m.expiry
+      address:     (m.pt.address as string).toLowerCase(),
+      symbol:      m.pt.symbol ?? '?',
+      price_usd:   m.pt.price?.usd ?? null,
+      expiry:      (m.expiry ?? '').slice(0, 10),
+      days_left:   m.expiry
         ? Math.max(0, Math.floor((new Date(m.expiry).getTime() - Date.now()) / 86_400_000))
         : null,
+      implied_apy: m.impliedApy != null ? r2(m.impliedApy * 100) : null,
     }))
 
   // balanceOf(address) = 0x70a08231
