@@ -4101,6 +4101,23 @@ footer.site ul a:hover { color: var(--blue); }
       <div class="kv"><div class="l">Est. net/day</div><div class="v ${netDailyEst >= 0 ? 'blue' : 'bad'}">${netDailyEst >= 0 ? '+' : ''}${U(netDailyEst)}</div></div>
     </div>
   </div>` : ''}
+  ${p.pt_implied_apy != null ? `
+  <div class="returns-box" style="border-color:var(--blue);background:rgba(59,130,246,0.04);">
+    <div class="title" style="color:var(--blue);">PT Collateral — Pendle Fixed Yield</div>
+    <div class="kvs">
+      <div class="kv"><div class="l">PT Fixed APY</div><div class="v blue">+${p.pt_implied_apy.toFixed(2)}%</div></div>
+      <div class="kv"><div class="l">Expiry</div><div class="v">${p.pt_expiry || '—'}</div></div>
+      <div class="kv"><div class="l">Days left</div><div class="v">${p.pt_days_left != null ? p.pt_days_left + 'd' : '—'}</div></div>
+      ${p.pt_underlying_apy != null ? `<div class="kv"><div class="l">Underlying APY</div><div class="v">${p.pt_underlying_apy.toFixed(2)}%</div></div>` : ''}
+    </div>
+    ${p.pt_net_at_maturity != null ? `
+    <div class="kvs" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--rule);">
+      <div class="kv"><div class="l">Collateral at maturity</div><div class="v blue">${U(p.pt_maturity_value)}</div></div>
+      <div class="kv"><div class="l">PT locked profit</div><div class="v blue">+${U(p.pt_locked_profit)}</div></div>
+      <div class="kv"><div class="l">Borrow cost to expiry</div><div class="v bad">-${U(p.pt_maturity_value - p.borrowUsd - p.pt_net_at_maturity)}</div></div>
+      <div class="kv"><div class="l" style="font-weight:700;">Net at maturity</div><div class="v ${p.pt_net_at_maturity >= 0 ? 'blue' : 'bad'}" style="font-weight:700;">${p.pt_net_at_maturity >= 0 ? '+' : ''}${U(p.pt_net_at_maturity)}</div></div>
+    </div>` : ''}
+  </div>` : ''}
   ${p.history && p.history.length >= 2 ? `
   <div class="pos-growth">
     <div class="g-title">
@@ -4191,7 +4208,7 @@ footer.site ul a:hover { color: var(--blue); }
     const tbody = document.getElementById('pendle-pos-tbody');
     wrap.style.display = 'block';
     if (!positions || positions.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:18px;color:var(--ink-mute);font-family:var(--mono);font-size:12px;">No Pendle positions found for this address</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:18px;color:var(--ink-mute);font-family:var(--mono);font-size:12px;">No open Pendle positions — if your PT is deposited as collateral in Morpho, see the PT details on each Morpho card above</td></tr>`;
       return;
     }
     tbody.innerHTML = positions.map(p => {

@@ -9,7 +9,7 @@ query UserPositions($address: String!, $chainId: Int!) {
       market {
         uniqueKey
         lltv
-        collateralAsset { symbol decimals priceUsd }
+        collateralAsset { address symbol decimals priceUsd }
         loanAsset { symbol decimals priceUsd }
         state { borrowApy supplyApy }
       }
@@ -117,6 +117,7 @@ export async function GET(req: Request) {
 
       return {
         market: p.market.uniqueKey,
+        collateralAddress: (p.market.collateralAsset?.address || '').toLowerCase(),
         collateralSymbol: p.market.collateralAsset?.symbol || '—',
         loanSymbol: p.market.loanAsset?.symbol || '—',
         lltv: Math.round(lltv * 10000) / 100,
@@ -144,6 +145,40 @@ export async function GET(req: Request) {
         history: sampled,
       }
     })
+
+  // Enrich any position whose collateral is a Pendle PT token
+  const ptPositions = parsed.filter((p: any) => p.collateralSymbol.startsWith('PT-'))
+  if (ptPositions.length > 0) {
+    try {
+      const mktResp = await fetch(
+        'https://api-v2.pendle.finance/core/v1/1/markets?skip=0&limit=100',
+        { headers: { 'User-Agent': 'Mozilla/5.0' } }
+      )
+      const mktData = await mktResp.json()
+      const ptMap: Record<string, any> = {}
+      for (const m of mktData.results ?? []) {
+        if (m.pt?.address) ptMap[(m.pt.address as string).toLowerCase()] = m
+      }
+      for (const p of ptPositions) {
+        const m = ptMap[p.collateralAddress] ?? null
+        if (!m) continue
+        const expiry = m.expiry ?? null
+        p.pt_implied_apy    = m.impliedApy    != null ? Math.round(m.impliedApy    * 10000) / 100 : null
+        p.pt_underlying_apy = m.underlyingApy != null ? Math.round(m.underlyingApy * 10000) / 100 : null
+        p.pt_expiry         = expiry ? (expiry as string).slice(0, 10) : null
+        p.pt_days_left      = expiry ? Math.max(0, Math.floor((new Date(expiry).getTime() - Date.now()) / 86_400_000)) : null
+        // Maturity projection: collateral grows to face value at expiry
+        if (p.pt_implied_apy != null && p.pt_days_left != null && p.collUsd > 0) {
+          const yrs = p.pt_days_left / 365
+          p.pt_maturity_value = Math.round(p.collUsd * Math.pow(1 + p.pt_implied_apy / 100, yrs) * 100) / 100
+          p.pt_locked_profit  = Math.round((p.pt_maturity_value - p.collUsd) * 100) / 100
+          // Net at maturity = PT matures to face value, repay borrow + accrued interest
+          const borrowAtExpiry = p.borrowUsd * Math.pow(1 + p.borrowApy / 100, yrs)
+          p.pt_net_at_maturity = Math.round((p.pt_maturity_value - borrowAtExpiry) * 100) / 100
+        }
+      }
+    } catch { /* non-critical enrichment */ }
+  }
 
   return NextResponse.json({ positions: parsed })
 }
