@@ -225,7 +225,9 @@ function PortfolioChart({
 function HLTraderDashboard() {
   const router = useRouter()
   const params = useSearchParams()
-  const urlAddr = params.get('a') ?? ''
+  // support both ?a= and ?snoop= URL params
+  const urlAddr = params.get('snoop') ?? params.get('a') ?? ''
+  const isSnoop = !!params.get('snoop')
 
   const [input, setInput] = useState(urlAddr)
   const [address, setAddress] = useState(urlAddr)
@@ -235,38 +237,75 @@ function HLTraderDashboard() {
   const [tab, setTab] = useState<Tab>('positions')
   const [range, setRange] = useState<ChartRange>('7d')
   const [history, setHistory] = useState<string[]>([])
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const currentAddr = useRef<string>('')
 
   useEffect(() => { setHistory(loadHistory()) }, [])
 
-  const lookup = useCallback(async (addr: string) => {
+  // update page title in snoop mode
+  useEffect(() => {
+    if (isSnoop && address) {
+      document.title = `Snooping ${shortAddr(address)} | Paragrine`
+    } else {
+      document.title = 'HL Trader Explorer | Paragrine'
+    }
+    return () => { document.title = 'Paragrine Research' }
+  }, [isSnoop, address])
+
+  const lookup = useCallback(async (addr: string, silent = false) => {
     const a = addr.trim().toLowerCase()
     if (!a.startsWith('0x') || a.length < 10) {
       setError('Enter a valid 0x Hyperliquid address.')
       return
     }
-    setAddress(a)
-    setInput(a)
-    setLoading(true)
-    setError(null)
-    setData(null)
-    router.replace(`/hl-traders?a=${a}`, { scroll: false })
+    currentAddr.current = a
+    if (!silent) {
+      setAddress(a)
+      setInput(a)
+      setLoading(true)
+      setError(null)
+      setData(null)
+      router.replace(`/hl-traders?snoop=${a}`, { scroll: false })
+    } else {
+      setRefreshing(true)
+    }
     try {
       const result = await fetchWallet(a)
+      if (currentAddr.current !== a) return
       setData(result)
-      saveHistory(a)
-      setHistory(loadHistory())
+      setLastRefresh(new Date())
+      if (!silent) {
+        saveHistory(a)
+        setHistory(loadHistory())
+      }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch wallet data.')
+      if (!silent) setError(e instanceof Error ? e.message : 'Failed to fetch wallet data.')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }, [router])
+
+  // auto-refresh positions every 15s in snoop mode
+  useEffect(() => {
+    if (!address) return
+    const id = setInterval(() => {
+      if (currentAddr.current) lookup(currentAddr.current, true)
+    }, 15000)
+    return () => clearInterval(id)
+  }, [address, lookup])
 
   useEffect(() => {
     if (urlAddr && urlAddr !== address) lookup(urlAddr)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlAddr])
+
+  function stopSnoop() {
+    router.replace('/hl-traders', { scroll: false })
+    document.title = 'HL Trader Explorer | Paragrine'
+  }
 
   // ── Derived data ─────────────────────────────────────────────────────────
 
@@ -338,8 +377,18 @@ function HLTraderDashboard() {
           className="btn primary"
           style={{ padding: '10px 24px', fontSize: 12, letterSpacing: '0.08em' }}
         >
-          {loading ? 'Loading…' : 'Lookup →'}
+          {loading ? 'Loading…' : 'Snoop →'}
         </button>
+        {address && (
+          <button
+            onClick={() => navigator.clipboard.writeText(`${window.location.origin}/hl-traders?snoop=${address}`)}
+            className="btn ghost"
+            style={{ padding: '10px 16px', fontSize: 12, letterSpacing: '0.08em' }}
+            title="Copy snoop link"
+          >
+            Share
+          </button>
+        )}
       </div>
 
       {/* History chips */}
@@ -393,6 +442,50 @@ function HLTraderDashboard() {
       {/* Results */}
       {data && !loading && (
         <>
+          {/* Snoop mode banner */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.25)',
+            borderRadius: 8, padding: '10px 16px', marginBottom: 16,
+            flexWrap: 'wrap', gap: 8,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ position: 'relative', display: 'inline-flex', width: 10, height: 10 }}>
+                <span style={{
+                  position: 'absolute', inset: 0, borderRadius: '50%',
+                  background: '#9333ea', opacity: 0.4,
+                  animation: 'ping 1.4s ease-in-out infinite',
+                }} />
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#9333ea', display: 'block' }} />
+              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: '#9333ea', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Snooping
+              </span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
+                {address}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {lastRefresh && (
+                <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
+                  {refreshing ? 'Refreshing…' : `Updated ${lastRefresh.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`}
+                </span>
+              )}
+              <button
+                onClick={() => lookup(address, true)}
+                disabled={refreshing}
+                style={{ background: 'transparent', border: '1px solid rgba(147,51,234,0.3)', borderRadius: 4, color: '#9333ea', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
+              >
+                ↻ Refresh
+              </button>
+              <button
+                onClick={stopSnoop}
+                style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
+              >
+                Stop Snooping ✕
+              </button>
+            </div>
+          </div>
           {/* Account header */}
           <div style={{
             background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10,
@@ -665,6 +758,10 @@ function HLTraderDashboard() {
         @keyframes pulse {
           0%, 100% { opacity: 0.4; }
           50% { opacity: 1; }
+        }
+        @keyframes ping {
+          0% { transform: scale(1); opacity: 0.4; }
+          75%, 100% { transform: scale(2.2); opacity: 0; }
         }
         input:focus { border-color: var(--blue) !important; }
       `}</style>
