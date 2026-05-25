@@ -4183,20 +4183,20 @@ footer.site ul a:hover { color: var(--blue); }
         const loopDelta = (t * p.borrowUsd - p.collUsd * lltv) / (lltv - t);
         const newHfL = (p.collUsd + loopDelta) * lltv / (p.borrowUsd + loopDelta);
 
-        function fmt(d, newHf) {
+        function fmt(d, newHf, label) {
           const action = d >= 0 ? 'Borrow' : 'Repay';
           const cls    = d >= 0 ? 'add' : 'repay';
           const newLev = (p.collUsd + (d >= 0 ? d : 0)) / Math.max((p.collUsd + (d >= 0 ? d : 0)) - (p.borrowUsd + d), 1);
           return `<div class="res-item">
-            <div class="rl">${action === 'Borrow' ? action + ' more' : action + ' debt'}</div>
+            <div class="rl">${label}</div>
             <div class="rv ${cls}">${action} ${U(Math.abs(d))}</div>
             <div class="rs">New HF ${newHf.toFixed(2)}× · ${newLev.toFixed(2)}× lev</div>
           </div>`;
         }
 
         resEl.innerHTML = `
-          ${fmt(borrowOnly, newHfB)}
-          ${fmt(loopDelta, newHfL)}`;
+          ${fmt(borrowOnly, newHfB, 'Borrow only (no new collateral)')}
+          ${fmt(loopDelta,  newHfL, 'Full loop (borrow + deposit PT)')}` ;
       }
 
       inp.addEventListener('input', recalc);
