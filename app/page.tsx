@@ -117,6 +117,15 @@ const dashboards = [
     chips: ['Positions', 'Sub-Accounts', 'Trade History'],
     status: 'live' as const,
   },
+  {
+    href: '/lighter',
+    category: 'Lighter Intelligence',
+    num: '10',
+    title: 'Lighter Analyst Cockpit',
+    desc: 'Live LIT token flow, order book heatmap, TWAP detection, staking activity, funding rates, and per-account P&L tracking across the Lighter exchange.',
+    chips: ['LIT Flow', 'Order Book', 'P&L Tracker'],
+    status: 'live' as const,
+  },
 ]
 
 const methods = [
@@ -170,7 +179,7 @@ export default async function Home() {
       <section id="dashboards" style={{ padding: '64px 0', borderBottom: '1px solid var(--rule)' }}>
         <div className="section-head">
           <h2><em>Research</em> Dashboards</h2>
-          <div className="vol">{dashboards.length} live</div>
+          <div className="vol">{dashboards.length} dashboards</div>
         </div>
 
         <div className="dash-grid">
