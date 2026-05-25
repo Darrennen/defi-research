@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
@@ -255,7 +255,6 @@ function DataTable({ headers, rows, empty }: { headers: string[]; rows: (string 
 // ── Main dashboard ────────────────────────────────────────────────────────────
 
 function HLTraderDashboard() {
-  const router = useRouter()
   const params = useSearchParams()
   const urlAddr = params.get('snoop') ?? params.get('a') ?? ''
 
@@ -284,7 +283,6 @@ function HLTraderDashboard() {
     currentAddr.current = a
     if (!silent) {
       setAddress(a); setInput(a); setLoading(true); setError(null); setData(null)
-      router.replace(`/hl-traders?snoop=${a}`, { scroll: false })
     } else {
       setRefreshing(true)
     }
@@ -298,7 +296,7 @@ function HLTraderDashboard() {
     } finally {
       setLoading(false); setRefreshing(false)
     }
-  }, [router])
+  }, [])
 
   useEffect(() => {
     if (!address) return
@@ -313,7 +311,6 @@ function HLTraderDashboard() {
 
   function stopSnoop() {
     setData(null); setAddress(''); setInput(''); setError(null); currentAddr.current = ''
-    router.replace('/hl-traders', { scroll: false })
   }
 
   // ── Derived ──────────────────────────────────────────────────────────────
