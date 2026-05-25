@@ -380,23 +380,95 @@ function HLTraderDashboard() {
     { id: 'subaccounts',  label: 'Sub-Accounts', count: subs.length },
   ]
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  function stopSnoop() {
+    setData(null)
+    setAddress('')
+    setInput('')
+    setError(null)
+    currentAddr.current = ''
+    router.replace('/hl-traders', { scroll: false })
+  }
 
-  return (
-    <div style={{ minHeight: '100vh', background: '#08080e', color: '#e5e7eb', fontFamily: 'var(--sans)' }}>
+  // ── Normal site layout (no active snoop) ─────────────────────────────────
 
-      {/* ── Top search bar ── */}
-      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        {/* Snoop indicator */}
-        {address && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 4 }}>
-            <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8 }}>
-              <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#9333ea', opacity: 0.5, animation: 'ping 1.4s ease-in-out infinite' }} />
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9333ea', display: 'block' }} />
-            </span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#9333ea', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Snooping</span>
+  if (!data && !loading) {
+    return (
+      <>
+        <div className="page-header" style={{ borderBottom: '3px solid var(--ink)', padding: '40px 0 32px', marginBottom: 40 }}>
+          <div className="kicker" style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--blue)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+            Hyperliquid Intelligence
+            <span style={{ flex: 1, height: 1, background: 'var(--rule)' }} />
+          </div>
+          <h1 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 'clamp(32px,4vw,56px)', lineHeight: 1, marginBottom: 12 }}>
+            Trader <em>Explorer</em>
+          </h1>
+          <p style={{ fontSize: 15, color: 'var(--ink-soft)', maxWidth: '52ch', lineHeight: 1.6 }}>
+            Enter any Hyperliquid address to open the live trading terminal — positions, spot, orders, trade history, and account relationships.
+          </p>
+        </div>
+
+        {/* Search */}
+        <div style={{ display: 'flex', gap: 8, maxWidth: 600, marginBottom: 16 }}>
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && lookup(input)}
+            placeholder="0x... paste any Hyperliquid address"
+            style={{
+              flex: 1, background: 'var(--card)', border: '1px solid var(--rule)',
+              borderRadius: 6, color: 'var(--ink)', fontFamily: 'var(--mono)',
+              fontSize: 14, padding: '10px 14px', outline: 'none',
+            }}
+          />
+          <button onClick={() => lookup(input)} disabled={loading} className="btn primary" style={{ padding: '10px 24px', fontSize: 12, letterSpacing: '0.08em' }}>
+            Snoop →
+          </button>
+        </div>
+
+        {/* History chips */}
+        {history.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 32 }}>
+            {history.map(a => (
+              <button key={a} onClick={() => lookup(a)} style={{
+                background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 20,
+                color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, padding: '4px 12px',
+              }}>
+                {shortAddr(a)}
+              </button>
+            ))}
+            <button onClick={() => { localStorage.removeItem(HISTORY_KEY); setHistory([]) }} style={{ background: 'transparent', border: 'none', color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '4px 6px' }}>
+              clear
+            </button>
           </div>
         )}
+
+        {error && (
+          <div style={{ background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, color: 'var(--red)', fontSize: 14, padding: '12px 16px', maxWidth: 600 }}>
+            {error}
+          </div>
+        )}
+
+        <style>{`input:focus { border-color: var(--blue) !important; }`}</style>
+      </>
+    )
+  }
+
+  // ── Terminal overlay (active snoop) ──────────────────────────────────────
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#08080e', color: '#e5e7eb', fontFamily: 'var(--sans)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {/* ── Top bar ── */}
+      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
+        {/* Live dot */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8 }}>
+            <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#9333ea', opacity: 0.5, animation: 'ping 1.4s ease-in-out infinite' }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9333ea', display: 'block' }} />
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#9333ea', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Snooping</span>
+        </div>
 
         {/* Address input */}
         <input
@@ -404,92 +476,72 @@ function HLTraderDashboard() {
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && lookup(input)}
-          placeholder="0x... paste any Hyperliquid address"
+          placeholder="0x..."
           style={{
-            flex: 1, minWidth: 220, maxWidth: 500,
+            flex: 1, minWidth: 180, maxWidth: 480,
             background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 6, color: '#e5e7eb', fontFamily: 'var(--mono)',
-            fontSize: 13, padding: '7px 12px', outline: 'none',
+            fontSize: 13, padding: '6px 12px', outline: 'none',
           }}
         />
-        <button
-          onClick={() => lookup(input)} disabled={loading}
-          style={{ background: '#7c3aed', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, padding: '7px 18px', letterSpacing: '0.06em', opacity: loading ? 0.5 : 1 }}
-        >
-          {loading ? '...' : 'Snoop →'}
+        <button onClick={() => lookup(input)} disabled={loading} style={{ background: '#7c3aed', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: '6px 14px', opacity: loading ? 0.5 : 1 }}>
+          {loading ? '...' : 'Go →'}
         </button>
-        {address && (
-          <>
-            <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/hl-traders?snoop=${address}`)}
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#9ca3af', cursor: 'pointer', fontSize: 11, padding: '7px 12px' }}
-            >
-              Share
-            </button>
-            <button
-              onClick={() => lookup(address, true)} disabled={refreshing}
-              style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#6b7280', cursor: 'pointer', fontSize: 11, padding: '7px 12px' }}
-            >
-              {refreshing ? '...' : '↻'}
-            </button>
-          </>
-        )}
+        <button onClick={() => navigator.clipboard.writeText(`${window.location.origin}/hl-traders?snoop=${address}`)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#6b7280', cursor: 'pointer', fontSize: 11, padding: '6px 12px' }}>
+          Share
+        </button>
+        <button onClick={() => lookup(address, true)} disabled={refreshing} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, color: '#4b5563', cursor: 'pointer', fontSize: 11, padding: '6px 10px' }}>
+          {refreshing ? '...' : '↻'}
+        </button>
 
         {/* History */}
         {history.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, marginLeft: 4 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
             {history.slice(0, 4).map(a => (
-              <button key={a} onClick={() => lookup(a)} style={{
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 20, color: '#6b7280', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, padding: '4px 10px',
-              }}>
+              <button key={a} onClick={() => lookup(a)} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 20, color: '#4b5563', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 10, padding: '3px 9px' }}>
                 {shortAddr(a)}
               </button>
             ))}
           </div>
         )}
 
-        {lastRefresh && (
-          <span style={{ fontSize: 10, color: '#374151', fontFamily: 'var(--mono)', marginLeft: 'auto' }}>
-            {lastRefresh.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
-          </span>
-        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {lastRefresh && (
+            <span style={{ fontSize: 10, color: '#374151', fontFamily: 'var(--mono)' }}>
+              {lastRefresh.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+            </span>
+          )}
+          <button onClick={stopSnoop} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6, color: '#4b5563', cursor: 'pointer', fontSize: 11, padding: '6px 12px' }}>
+            ✕ Exit
+          </button>
+        </div>
       </div>
 
       {/* ── Error ── */}
       {error && (
-        <div style={{ margin: '16px 20px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, color: '#f87171', fontSize: 13, padding: '10px 14px' }}>
+        <div style={{ margin: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, color: '#f87171', fontSize: 13, padding: '9px 14px' }}>
           {error}
         </div>
       )}
 
-      {/* ── Loading skeleton ── */}
+      {/* ── Loading ── */}
       {loading && (
         <div style={{ padding: 20 }}>
           {[300, 220, 180, 260].map((w, i) => (
-            <div key={i} style={{ height: 16, width: w, borderRadius: 4, background: 'rgba(255,255,255,0.05)', marginBottom: 12, animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.1}s` }} />
+            <div key={i} style={{ height: 14, width: w, borderRadius: 4, background: 'rgba(255,255,255,0.05)', marginBottom: 10, animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.1}s` }} />
           ))}
-        </div>
-      )}
-
-      {/* ── Empty state ── */}
-      {!data && !loading && !error && (
-        <div style={{ padding: '80px 20px', textAlign: 'center', color: '#374151' }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>👁</div>
-          <div style={{ fontSize: 15, marginBottom: 8, color: '#6b7280' }}>Paste any Hyperliquid address to start snooping</div>
-          <div style={{ fontSize: 12 }}>Positions · Spot · Orders · Trades · Sub-accounts · Live auto-refresh</div>
         </div>
       )}
 
       {/* ── Main layout ── */}
       {data && !loading && (
-        <div style={{ display: 'flex', minHeight: 'calc(100vh - 57px)', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, alignItems: 'flex-start', overflow: 'hidden' }}>
 
           {/* ── LEFT SIDEBAR ── */}
           <div style={{
             width: 240, flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.07)',
-            padding: '20px 16px', position: 'sticky', top: 57,
-            maxHeight: 'calc(100vh - 57px)', overflowY: 'auto',
+            padding: '20px 16px',
+            height: '100%', overflowY: 'auto',
           }}>
 
             {/* Address + role */}
@@ -557,7 +609,7 @@ function HLTraderDashboard() {
           </div>
 
           {/* ── MAIN PANEL ── */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
 
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.07)', padding: '0 16px' }}>
