@@ -12,7 +12,8 @@ const links = [
   { href: '/morpho',        label: 'Morpho Blue' },
   { href: '/hyperlend',     label: 'HyperLend' },
   { href: '/yield-tracker', label: 'Yield Tracker' },
-  { href: '/whale-tracker', label: 'Whale Tracker' },
+  { href: '/whale-tracker',  label: 'Whale Tracker' },
+  { href: '/hl-traders',    label: 'HL Traders' },
   { href: '/lighter',       label: 'Lighter DEX' },
 ]
 

@@ -108,6 +108,15 @@ const dashboards = [
     chips: ['Arkham', 'Live Feed', 'Multi-chain'],
     status: 'live' as const,
   },
+  {
+    href: '/hl-traders',
+    category: 'Hyperliquid Intelligence',
+    num: '09',
+    title: 'HL Trader Explorer',
+    desc: 'View any Hyperliquid wallet — positions, spot holdings, open orders, trade history, and account relationships including sub-accounts and API wallets.',
+    chips: ['Positions', 'Sub-Accounts', 'Trade History'],
+    status: 'live' as const,
+  },
 ]
 
 const methods = [
