@@ -4052,12 +4052,13 @@ footer.site ul a:hover { color: var(--blue); }
         initSparklines();
       }
 
+      const tooEarly = daysHeld != null && daysHeld < 3;
       statsEl.innerHTML = `
         <div class="pp-stat"><div class="pl">P&amp;L</div><div class="pv ${signCls}">${pnl >= 0 ? '+' : ''}${U(pnl)}</div></div>
         <div class="pp-stat"><div class="pl">Return</div><div class="pv ${signCls}">${pnl >= 0 ? '+' : ''}${retPct.toFixed(2)}%</div></div>
-        <div class="pp-stat"><div class="pl">APR (realized)</div><div class="pv ${signCls}">${apr != null ? (apr >= 0 ? '+' : '') + apr.toFixed(2) + '%' : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">APR (realized)</div><div class="pv ${tooEarly ? '' : signCls}">${tooEarly ? '<span title="Position open < 3d — APR not meaningful yet">— &lt;3d</span>' : apr != null ? (apr >= 0 ? '+' : '') + apr.toFixed(2) + '%' : '—'}</div></div>
         <div class="pp-stat"><div class="pl">Days held</div><div class="pv">${daysHeld != null ? daysHeld.toFixed(1) + 'd' : '—'}</div></div>
-        <div class="pp-stat"><div class="pl">Avg / day</div><div class="pv ${signCls}">${avgDaily != null ? (avgDaily >= 0 ? '+' : '') + U(avgDaily) : '—'}</div></div>
+        <div class="pp-stat"><div class="pl">Avg / day</div><div class="pv ${tooEarly ? '' : signCls}">${tooEarly ? '—' : avgDaily != null ? (avgDaily >= 0 ? '+' : '') + U(avgDaily) : '—'}</div></div>
       `;
     }
 
@@ -4139,7 +4140,7 @@ footer.site ul a:hover { color: var(--blue); }
       <div class="g-stat"><div class="gl">Entry equity</div><div class="gv">${p.entryEquity != null ? U(p.entryEquity) : '—'}</div></div>
       <div class="g-stat"><div class="gl">P&amp;L</div><div class="gv ${pnlCls}">${p.pnlUsd != null ? (p.pnlUsd >= 0 ? '+' : '') + U(p.pnlUsd) : '—'}</div></div>
       <div class="g-stat"><div class="gl">Return</div><div class="gv ${pnlCls}">${p.returnPct != null ? (p.returnPct >= 0 ? '+' : '') + p.returnPct.toFixed(2) + '%' : '—'}</div></div>
-      <div class="g-stat"><div class="gl">Realized APR</div><div class="gv ${pnlCls}">${p.apr != null ? (p.apr >= 0 ? '+' : '') + p.apr.toFixed(2) + '%' : '—'}</div></div>
+      <div class="g-stat"><div class="gl">Realized APR</div><div class="gv">${p.daysHeld != null && p.daysHeld < 3 ? '<span title="< 3d held">— &lt;3d</span>' : p.apr != null ? `<span class="${pnlCls}">${(p.apr >= 0 ? '+' : '') + p.apr.toFixed(2) + '%'}</span>` : '—'}</div></div>
       <div class="g-stat"><div class="gl">Avg/day</div><div class="gv ${pnlCls}">${p.pnlUsd != null && p.daysHeld > 0 ? (p.pnlUsd >= 0 ? '+' : '') + U(p.pnlUsd / p.daysHeld) : '—'}</div></div>
       <div class="g-stat"><div class="gl">Current equity</div><div class="gv">${U(eq)}</div></div>
     </div>
