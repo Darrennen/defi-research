@@ -1028,51 +1028,61 @@ function ExplorerInner() {
                   {(['24h', '7d', '30d'] as const).map(w => {
                     const wData = litFlow[w]
                     if (!wData) return null
-                    const net = wData.net_usd
-                    const flowPnl = wData.sell_usd - wData.buy_usd
-                    const isWin = flowPnl >= 0
+                    const markPrice = litFlow.lit_mark_price ?? 0
+                    const netSize = wData.net_size ?? 0
+                    const pnl = (wData.sell_usd - wData.buy_usd) + netSize * markPrice
+                    const isProfit = pnl >= 0
                     const total = wData.buy_usd + wData.sell_usd || 1
                     const pctBuy = wData.buy_usd / total * 100
+                    const hasTrades = wData.buy_trades + wData.sell_trades > 0
                     return (
-                      <div key={w} style={{ background: 'var(--bg)', padding: '20px 24px' }}>
-                        <div style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 14 }}>{w}</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                          <div>
-                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Bought</div>
-                            <div className="pos" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>{fmtUsd(wData.buy_usd)}</div>
-                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.buy_trades} trades</div>
-                            {wData.buy_avg_price != null && <div style={{ fontSize: 10, color: 'var(--ink-dim)', marginTop: 1 }}>avg ${wData.buy_avg_price.toFixed(4)}</div>}
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Sold</div>
-                            <div className="neg" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>{fmtUsd(wData.sell_usd)}</div>
-                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.sell_trades} trades</div>
-                            {wData.sell_avg_price != null && <div style={{ fontSize: 10, color: 'var(--ink-dim)', marginTop: 1 }}>avg ${wData.sell_avg_price.toFixed(4)}</div>}
-                          </div>
+                      <div key={w} style={{ background: 'var(--bg)', padding: '20px 24px', borderTop: `2px solid ${hasTrades ? (isProfit ? 'var(--green)' : 'var(--red)') : 'var(--line)'}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                          <span style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink-faint)' }}>{w}</span>
+                          {hasTrades && (
+                            <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 2, background: isProfit ? 'rgba(111,224,137,0.18)' : 'rgba(255,106,119,0.18)', color: isProfit ? 'var(--green)' : 'var(--red)', letterSpacing: '0.1em' }}>
+                              {isProfit ? 'PROFIT' : 'LOSS'}
+                            </span>
+                          )}
                         </div>
-                        <div style={{ display: 'flex', height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--line)', marginBottom: 14 }}>
-                          <div style={{ width: pctBuy.toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
-                          <div style={{ flex: 1, background: 'var(--red)' }} />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div>
-                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Flow P&amp;L</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span className={isWin ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-serif)', fontSize: 22, fontWeight: 500 }}>
-                                {flowPnl >= 0 ? '+' : ''}{fmtUsd(flowPnl)}
-                              </span>
-                              <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 2, background: isWin ? 'rgba(111,224,137,0.18)' : 'rgba(255,106,119,0.18)', color: isWin ? 'var(--green)' : 'var(--red)', letterSpacing: '0.06em' }}>
-                                {isWin ? 'W' : 'L'}
-                              </span>
+                        {hasTrades ? (
+                          <>
+                            {/* P&L hero */}
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 4 }}>P&amp;L</div>
+                              <div className={isProfit ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-serif)', fontSize: 28, fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1 }}>
+                                {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
+                              </div>
+                              {markPrice > 0 && netSize !== 0 && (
+                                <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 4 }}>
+                                  incl. {netSize > 0 ? '+' : ''}{netSize >= 1000 ? (netSize/1000).toFixed(1)+'K' : netSize.toFixed(0)} LIT @ ${markPrice.toFixed(4)} mark
+                                </div>
+                              )}
                             </div>
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Net</div>
-                            <div className={net <= 0 ? 'pos' : 'neg'} style={{ fontSize: 13, fontWeight: 600 }}>
-                              {net > 0 ? '+' : ''}{fmtUsd(-net)} {net > 0 ? 'holding' : 'took'}
+                            {/* buy/sell grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                              <div>
+                                <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Bought</div>
+                                <div className="pos" style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 500 }}>{fmtUsd(wData.buy_usd)}</div>
+                                <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.buy_trades} trades</div>
+                                {wData.buy_avg_price != null && <div style={{ fontSize: 10, color: 'var(--ink-dim)', marginTop: 1 }}>avg ${wData.buy_avg_price.toFixed(4)}</div>}
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Sold</div>
+                                <div className="neg" style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 500 }}>{fmtUsd(wData.sell_usd)}</div>
+                                <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.sell_trades} trades</div>
+                                {wData.sell_avg_price != null && <div style={{ fontSize: 10, color: 'var(--ink-dim)', marginTop: 1 }}>avg ${wData.sell_avg_price.toFixed(4)}</div>}
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                            {/* buy/sell bar */}
+                            <div style={{ display: 'flex', height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--line)' }}>
+                              <div style={{ width: pctBuy.toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
+                              <div style={{ flex: 1, background: 'var(--red)' }} />
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>no LIT trades in this window</div>
+                        )}
                       </div>
                     )
                   })}
