@@ -596,34 +596,122 @@ function OverviewPanel({
   const totalNetWorth = hyperCoreValue + hyperEvmValue
   const showEvmTotal  = evmData && !evmLoading
 
+  // ── Derived account stats ──────────────────────────────
+  const marginUsed   = parseFloat(data.perps.marginSummary.totalMarginUsed ?? '0')
+  const marginUsedPct = perpEquity > 0 ? marginUsed / perpEquity * 100 : 0
+  const freeMargin   = perpEquity - marginUsed
+  const longNtl      = positions.filter(p => parseFloat(p.szi) > 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
+  const shortNtl     = positions.filter(p => parseFloat(p.szi) < 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
+  const totalNtl     = longNtl + shortNtl
+  const acctLeverage = perpEquity > 0 ? totalNtl / perpEquity : 0
+
+  // All-time PnL from portfolio series
+  const allTimeSeries = data.portfolio?.allTime?.pnlHistory ?? []
+  const allTimePnl = allTimeSeries.length > 0 ? parseFloat(allTimeSeries[allTimeSeries.length - 1][1]) : null
+
+  // Portfolio-level liquidation distance (worst position)
+  const liqDistances = positions
+    .filter(p => p.liquidationPx)
+    .map(p => {
+      const ctx = data.assetCtxMap.get(p.coin)
+      if (!ctx) return null
+      const mark = parseFloat(ctx.markPx), liq = parseFloat(p.liquidationPx!)
+      const isLong = parseFloat(p.szi) > 0
+      return isLong ? (mark - liq) / mark * 100 : (liq - mark) / mark * 100
+    })
+    .filter((v): v is number => v !== null)
+  const minLiqDist = liqDistances.length > 0 ? Math.min(...liqDistances) : null
+
+  // EVM staked value
+  const stakedValue = evmData
+    ? evmData.protocolPositions.filter(p => p.type !== 'borrow').reduce((s, p) => {
+        const v = tokenUsd(p.asset, p.amount)
+        return s + (v ?? 0)
+      }, 0) +
+      evmData.tokens.filter(t => ['StakedHYPE','Kinetiq','Hyperbeat'].includes(t.protocol)).reduce((s, t) => {
+        const v = tokenUsd(t.symbol, t.formatted)
+        return s + (v ?? 0)
+      }, 0)
+    : null
+
+  // ── Analysis from fills ────────────────────────────────
+  const fills = data.fills ?? []
+  const totalVolume = fills.reduce((s, f) => s + parseFloat(f.px) * parseFloat(f.sz), 0)
+  const closingFills = fills.filter(f => parseFloat(f.closedPnl ?? '0') !== 0)
+  const winCount = closingFills.filter(f => parseFloat(f.closedPnl) > 0).length
+  const winRate  = closingFills.length > 0 ? winCount / closingFills.length * 100 : null
+
+  // Longest win streak
+  let maxStreak = 0, streak = 0
+  for (const f of [...closingFills].reverse()) {
+    if (parseFloat(f.closedPnl) > 0) { streak++; maxStreak = Math.max(maxStreak, streak) }
+    else streak = 0
+  }
+
+  // Trading style from fills frequency
+  const tradingStyle = (() => {
+    if (fills.length < 3) return 'Unknown'
+    const times = fills.map(f => f.time).sort((a, b) => a - b)
+    const spanDays = (times[times.length - 1] - times[0]) / 86400000
+    const fillsPerDay = fills.length / Math.max(spanDays, 1)
+    if (fillsPerDay > 50)  return 'HFT'
+    if (fillsPerDay > 10)  return 'Scalper'
+    if (fillsPerDay > 1)   return 'Day Trader'
+    if (fillsPerDay > 0.2) return 'Swing Trader'
+    return 'Position Trader'
+  })()
+
+  // PnL cohort
+  const pnlCohort = (() => {
+    const p = allTimePnl ?? 0
+    if (p >= 1_000_000) return 'Extremely Profitable'
+    if (p >= 100_000)   return 'Very Profitable'
+    if (p >= 10_000)    return 'Profitable'
+    if (p >= 0)         return 'Break Even'
+    return 'Unprofitable'
+  })()
+
+  // Size cohort
+  const sizeCohort = (() => {
+    if (perpEquity >= 10_000_000) return 'Apex'
+    if (perpEquity >= 1_000_000)  return 'Institutional'
+    if (perpEquity >= 100_000)    return 'Pro'
+    if (perpEquity >= 10_000)     return 'Intermediate'
+    return 'Retail'
+  })()
+
+  function StatRow({ label, value, color }: { label: string; value: string; color?: string }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--rule-soft)' }}>
+        <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{label}</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: color ?? 'var(--ink)' }}>{value}</span>
+      </div>
+    )
+  }
+
   return (
     <div>
       {/* ── Net Worth Banner ──────────────────────────────── */}
-      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '22px 24px', marginBottom: 24 }}>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '22px 24px', marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: 6 }}>
           Total Net Worth
         </div>
-        <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 34, color: 'var(--ink)', lineHeight: 1, marginBottom: 18 }}>
+        <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 34, color: 'var(--ink)', lineHeight: 1, marginBottom: 16 }}>
           {showEvmTotal ? (evmApprox ? '~' : '') : ''}{fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0 }}>
-          {/* HyperCore */}
+        {/* Chain breakdown */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--rule-soft)' }}>
           <div style={{ paddingRight: 24, borderRight: '1px solid var(--rule)' }}>
             <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)', display: 'inline-block' }} />
               HyperCore L1
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>{fmtUsd(hyperCoreValue)}</div>
-            <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
-              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
-                Perps <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(perpEquity)}</span>
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
-                Spot <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(spotValue)}</span>
-              </span>
+            <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Perps <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(perpEquity)}</span></span>
+              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Spot <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(spotValue)}</span></span>
             </div>
           </div>
-          {/* HyperEVM */}
           <div style={{ paddingLeft: 24 }}>
             <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9333ea', display: 'inline-block' }} />
@@ -634,23 +722,51 @@ function OverviewPanel({
               <div style={{ fontSize: 13, color: 'var(--ink-mute)', fontFamily: 'var(--mono)', paddingTop: 4 }}>Loading…</div>
             ) : showEvmTotal ? (
               <>
-                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>
-                  {evmApprox ? '~' : ''}{fmtUsd(hyperEvmValue)}
-                </div>
-                <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
-                  <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
-                    Tokens <span style={{ color: 'var(--ink-soft)' }}>{evmData!.tokens.length}</span>
-                  </span>
-                  {evmData!.protocolPositions.length > 0 && (
-                    <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
-                      DeFi <span style={{ color: 'var(--ink-soft)' }}>{evmData!.protocolPositions.length} pos.</span>
-                    </span>
-                  )}
+                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>{evmApprox ? '~' : ''}{fmtUsd(hyperEvmValue)}</div>
+                <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {stakedValue !== null && stakedValue > 0 && <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Staked <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(stakedValue)}</span></span>}
+                  <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Tokens <span style={{ color: 'var(--ink-soft)' }}>{evmData!.tokens.length}</span></span>
+                  {evmData!.protocolPositions.length > 0 && <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>DeFi <span style={{ color: 'var(--ink-soft)' }}>{evmData!.protocolPositions.length} pos.</span></span>}
                 </div>
               </>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--ink-mute)', fontFamily: 'var(--mono)', paddingTop: 4 }}>—</div>
             )}
+          </div>
+        </div>
+        {/* Account stats grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '8px 24px' }}>
+          {[
+            { label: 'Account Leverage', value: `${acctLeverage.toFixed(2)}×` },
+            { label: 'Margin Usage', value: `${marginUsedPct.toFixed(2)}%`, color: marginUsedPct > 80 ? 'var(--red)' : marginUsedPct > 60 ? 'var(--amber)' : undefined },
+            { label: 'Free Margin', value: fmtUsd(freeMargin) },
+            { label: 'All Time PnL', value: allTimePnl !== null ? (allTimePnl >= 0 ? '+' : '') + fmtUsd(allTimePnl) : '—', color: allTimePnl !== null ? pnlColor(allTimePnl) : undefined },
+            { label: 'Long Exposure', value: fmtUsd(longNtl) },
+            { label: 'Short Exposure', value: fmtUsd(shortNtl) },
+            { label: 'Closest to Liq.', value: minLiqDist !== null ? `${minLiqDist.toFixed(1)}% away` : '—', color: minLiqDist !== null && minLiqDist < 10 ? 'var(--red)' : undefined },
+            { label: 'Volume (fills)', value: fmtUsd(totalVolume) },
+          ].map(({ label, value, color }) => (
+            <div key={label}>
+              <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>{label}</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: color ?? 'var(--ink)' }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Analysis ──────────────────────────────────────── */}
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 20px', marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 10 }}>Analysis</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+          <div>
+            <StatRow label="Trading Style"      value={tradingStyle} />
+            <StatRow label="PnL Cohort"         value={pnlCohort} color={allTimePnl !== null && allTimePnl > 0 ? 'var(--green)' : 'var(--red)'} />
+            <StatRow label="Size Cohort"        value={sizeCohort} />
+          </div>
+          <div>
+            <StatRow label="Longest Win Streak" value={maxStreak > 0 ? `${maxStreak} trades` : '—'} />
+            <StatRow label="Win Rate"           value={winRate !== null ? `${winRate.toFixed(1)}%` : '—'} color={winRate !== null ? (winRate >= 50 ? 'var(--green)' : 'var(--red)') : undefined} />
+            <StatRow label="Closing Trades"     value={closingFills.length.toLocaleString()} />
           </div>
         </div>
       </div>
