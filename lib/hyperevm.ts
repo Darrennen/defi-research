@@ -12,19 +12,28 @@ async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   return d.result
 }
 
-// Batch eth_call — single HTTP round-trip for many read calls, avoiding rate-limit drops
+// HyperEVM RPC enforces a max batch size of 20 items per request
+const BATCH_LIMIT = 20
+
+// Batch eth_call — chunks into ≤20 items per request to respect HyperEVM limit
 async function batchEthCall(calls: Array<{ to: string; data: string }>): Promise<string[]> {
   if (calls.length === 0) return []
-  const batch = calls.map((call, i) => ({ jsonrpc: '2.0', id: i, method: 'eth_call', params: [call, 'latest'] }))
-  const r = await fetch(HEVM_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(batch),
-  })
-  if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  const results: Array<{ id: number; result?: string }> = await r.json()
   const out = new Array<string>(calls.length).fill('0x0')
-  for (const res of results) { if (res.result) out[res.id] = res.result }
+  for (let offset = 0; offset < calls.length; offset += BATCH_LIMIT) {
+    const chunk = calls.slice(offset, offset + BATCH_LIMIT)
+    const batch = chunk.map((call, i) => ({ jsonrpc: '2.0', id: offset + i, method: 'eth_call', params: [call, 'latest'] }))
+    try {
+      const r = await fetch(HEVM_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batch),
+      })
+      if (!r.ok) continue
+      const results: Array<{ id: number; result?: string }> = await r.json()
+      if (!Array.isArray(results)) continue
+      for (const res of results) { if (res.result) out[res.id] = res.result }
+    } catch { /* leave chunk as 0x0 */ }
+  }
   return out
 }
 
