@@ -264,7 +264,7 @@ function ExplorerInner() {
   const [histOffset, setHistOffset] = useState(0)
   const [histLoading, setHistLoading] = useState(false)
   const [histHasMore, setHistHasMore] = useState(false)
-  const [litFlow, setLitFlow] = useState<{ '24h': FlowWindow; '7d': FlowWindow; '30d': FlowWindow } | null>(null)
+  const [litFlow, setLitFlow] = useState<{ '24h': FlowWindow; '7d': FlowWindow; '30d': FlowWindow; lit_mark_price?: number } | null>(null)
   const [litFlowLoading, setLitFlowLoading] = useState(false)
   const [flowPeriod, setFlowPeriod] = useState<'all' | '24h' | '7d' | '30d'>('all')
   const [allFills, setAllFills] = useState<HistTrade[]>([])
@@ -652,32 +652,63 @@ function ExplorerInner() {
                   <div className="cockpit-h2">LIT Flow</div>
                   {litFlowLoading && <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>loading…</div>}
                   {litFlow && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {(['24h', '7d', '30d'] as const).map(w => {
                         const wd = litFlow[w]
                         if (!wd) return null
-                        const flowPnl = wd.sell_usd - wd.buy_usd
-                        const isWin = flowPnl >= 0
+                        const markPrice = litFlow.lit_mark_price ?? 0
+                        // Full P&L: cash flow + unrealized value of net position
+                        // net_size > 0 = net buyer (holds LIT), < 0 = net seller
+                        const netSize = wd.net_size ?? 0
+                        const pnl = (wd.sell_usd - wd.buy_usd) + netSize * markPrice
+                        const isProfit = pnl >= 0
                         const total = wd.buy_usd + wd.sell_usd || 1
                         const hasTrades = wd.buy_trades + wd.sell_trades > 0
+                        const volume = wd.buy_usd + wd.sell_usd
+                        const pnlPct = volume > 0 ? pnl / (wd.buy_usd || 1) * 100 : 0
                         return (
-                          <div key={w}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
-                              <span style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', width: 28 }}>{w}</span>
+                          <div key={w} style={{ background: 'var(--paper-2)', borderRadius: 3, padding: '10px 12px', border: `1px solid ${hasTrades && isProfit ? 'rgba(111,224,137,0.12)' : hasTrades ? 'rgba(255,106,119,0.12)' : 'var(--line)'}` }}>
+                            {/* header row */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: hasTrades ? 8 : 0 }}>
+                              <span style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>{w}</span>
                               {hasTrades ? (
-                                <>
-                                  <div style={{ flex: 1, height: 3, background: 'var(--line)', borderRadius: 2, overflow: 'hidden' }}>
-                                    <div style={{ height: '100%', width: (wd.buy_usd / total * 100).toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
-                                  </div>
-                                  <span className="pos" style={{ fontSize: 11, width: 56, textAlign: 'right' }}>{fmtUsd(wd.buy_usd)}</span>
-                                  <span className="neg" style={{ fontSize: 11, width: 56, textAlign: 'right' }}>{fmtUsd(wd.sell_usd)}</span>
-                                  <span className={isWin ? 'pos' : 'neg'} style={{ fontSize: 13, fontWeight: 700, width: 64, textAlign: 'right' }}>{flowPnl >= 0 ? '+' : ''}{fmtUsd(flowPnl)}</span>
-                                  <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 2, background: isWin ? 'rgba(111,224,137,0.18)' : 'rgba(255,106,119,0.18)', color: isWin ? 'var(--green)' : 'var(--red)' }}>{isWin ? 'W' : 'L'}</span>
-                                </>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span className={isProfit ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-serif)', fontSize: 18, fontWeight: 500, letterSpacing: '-0.02em' }}>
+                                    {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
+                                  </span>
+                                  <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 6px', borderRadius: 2, background: isProfit ? 'rgba(111,224,137,0.18)' : 'rgba(255,106,119,0.18)', color: isProfit ? 'var(--green)' : 'var(--red)', letterSpacing: '0.08em' }}>
+                                    {isProfit ? 'PROFIT' : 'LOSS'}
+                                  </span>
+                                </div>
                               ) : (
                                 <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>no LIT trades</span>
                               )}
                             </div>
+                            {hasTrades && (
+                              <>
+                                {/* buy/sell bar */}
+                                <div style={{ height: 3, background: 'var(--line)', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
+                                  <div style={{ height: '100%', width: (wd.buy_usd / total * 100).toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
+                                </div>
+                                {/* stats row */}
+                                <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--ink-dim)' }}>
+                                  <span><span className="pos">▲</span> {fmtUsd(wd.buy_usd)} <span style={{ color: 'var(--ink-faint)' }}>({wd.buy_trades})</span></span>
+                                  <span><span className="neg">▼</span> {fmtUsd(wd.sell_usd)} <span style={{ color: 'var(--ink-faint)' }}>({wd.sell_trades})</span></span>
+                                  {netSize !== 0 && markPrice > 0 && (
+                                    <span style={{ marginLeft: 'auto', color: 'var(--ink-faint)' }}>
+                                      net {netSize > 0 ? '+' : ''}{netSize >= 1000 ? (netSize/1000).toFixed(1)+'K' : netSize.toFixed(0)} LIT
+                                    </span>
+                                  )}
+                                </div>
+                                {wd.buy_avg_price != null && wd.sell_avg_price != null && (
+                                  <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--ink-faint)', marginTop: 4 }}>
+                                    <span>avg buy ${wd.buy_avg_price.toFixed(4)}</span>
+                                    <span>avg sell ${wd.sell_avg_price.toFixed(4)}</span>
+                                    {markPrice > 0 && <span style={{ marginLeft: 'auto' }}>mark ${markPrice.toFixed(4)}</span>}
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                         )
                       })}

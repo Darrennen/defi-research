@@ -1,4 +1,4 @@
-import { lighterGet, explorerGet, num, LIT_MARKETS } from '@/lib/lighter'
+import { lighterGet, explorerGet, num, LIT_MARKETS, normaliseMarkets } from '@/lib/lighter'
 
 function parseExplorerLitTrade(entry: any): any | null {
   const pubdata = entry.pubdata ?? {}
@@ -65,6 +65,16 @@ export async function GET(request: Request) {
   }
   if (!address) return Response.json({ error: 'account address not found' }, { status: 404 })
 
+  // fetch current LIT price in parallel with the trade log scan
+  let litMarkPrice = 0
+  const pricePromise = lighterGet('/orderBookDetails', {}, 60).then((raw: any) => {
+    const markets = normaliseMarkets(raw, {})
+    // prefer LIT/USDC spot (2049), fall back to LIT-PERP (120)
+    const spot = markets.find(m => m.market_id === 2049)
+    const perp = markets.find(m => m.market_id === 120)
+    litMarkPrice = spot?.last_price ?? perp?.last_price ?? 0
+  }).catch(() => {})
+
   const nowMs = Date.now()
   const cutoffMs = nowMs - 30 * 24 * 3_600_000
   const trades: any[] = []
@@ -92,10 +102,13 @@ export async function GET(request: Request) {
     offset += BATCH * 100
   }
 
+  await pricePromise
+
   return Response.json({
     '24h': flowWindow(trades, accountId, nowMs - 86_400_000),
     '7d': flowWindow(trades, accountId, nowMs - 7 * 86_400_000),
     '30d': flowWindow(trades, accountId, nowMs - 30 * 86_400_000),
+    lit_mark_price: litMarkPrice,
     _address: address,
   })
 }
