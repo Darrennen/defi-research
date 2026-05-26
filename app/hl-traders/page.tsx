@@ -10,7 +10,7 @@ import {
   fmtFundingRate, annualizedFunding, fundingDirection,
   type HLWalletData, type HLRole, type HLPortfolioSeries, type HLPredictedFundings,
 } from '@/lib/hyperliquid'
-import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, type EvmWalletData } from '@/lib/hyperevm'
+import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, groupByProtocol, type EvmWalletData } from '@/lib/hyperevm'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ const ROLE_META: Record<HLRole, { label: string; color: string; bg: string }> = 
   missing:    { label: 'Unknown',     color: 'var(--ink-soft)', bg: 'var(--rule-soft)' },
 }
 
-type Tab = 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts' | 'evm'
+type Tab = 'overview' | 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts' | 'evm'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -439,6 +439,264 @@ function FundingTab({ data }: { data: HLWalletData }) {
   )
 }
 
+// ── Overview panel (DeBank-style) ─────────────────────────────────────────────
+
+function ChainBadge({ label, color }: { label: string; color: string }) {
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color, background: `${color}18`, border: `1px solid ${color}40`, borderRadius: 4, padding: '2px 7px', fontFamily: 'var(--mono)' }}>
+      {label}
+    </span>
+  )
+}
+
+function SectionDivider({ label, sub }: { label: string; sub: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 8 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>{label}</span>
+      <ChainBadge label={sub} color="var(--blue)" />
+      <div style={{ flex: 1, height: 1, background: 'var(--rule)' }} />
+    </div>
+  )
+}
+
+function ViewAllFooter({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{ padding: '10px 16px', borderTop: '1px solid var(--rule-soft)', cursor: 'pointer', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, color: 'var(--blue)', fontSize: 12, fontWeight: 600 }}
+    >
+      {label} →
+    </div>
+  )
+}
+
+function OverviewPanel({
+  data, evmData, evmLoading, evmError, setTab,
+}: {
+  data: HLWalletData
+  evmData: EvmWalletData | null
+  evmLoading: boolean
+  evmError: string | null
+  setTab: (t: Tab) => void
+}) {
+  const positions = data.perps.assetPositions.map(ap => ap.position)
+  const spotBalances = (data.spot.balances ?? []).filter(b => parseFloat(b.total) > 0)
+  const orders = data.orders ?? []
+  const fundingPayments = data.userFunding ?? []
+  const totalPnl = positions.reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
+  const totalFunding = positions.reduce((s, p) => s + parseFloat(p.cumFunding?.sinceOpen || '0'), 0)
+  const netFunding90d = fundingPayments.reduce((s, p) => s + parseFloat(p.delta.usdc), 0)
+  const protocolGroups = evmData ? groupByProtocol(evmData.protocolPositions) : new Map<string, ReturnType<typeof groupByProtocol> extends Map<string, infer V> ? V : never>()
+
+  return (
+    <div>
+      {/* ── HyperCore ──────────────────────────────────── */}
+      <SectionDivider label="HyperCore" sub="HL L1" />
+
+      {/* Perpetuals */}
+      {positions.length > 0 && (
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Perpetuals</span>
+              <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{positions.length}</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: pnlColor(totalPnl) }}>
+                {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>Unrealized PnL</div>
+            </div>
+          </div>
+          {positions.slice(0, 6).map((p, i) => {
+            const isLong = parseFloat(p.szi) >= 0
+            const ctx = data.assetCtxMap.get(p.coin)
+            return (
+              <div key={p.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(positions.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <CoinIcon symbol={p.coin} size={24} />
+                <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{p.coin}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)', background: isLong ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '1px 7px' }}>
+                  {isLong ? 'Long' : 'Short'}
+                </span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{fmtUsd(p.positionValue)}</span>
+                {ctx && (
+                  <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
+                    {p.leverage.value}×
+                  </span>
+                )}
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 13, color: pnlColor(p.unrealizedPnl), fontWeight: 600 }}>
+                  {parseFloat(p.unrealizedPnl) >= 0 ? '+' : ''}{fmtUsd(p.unrealizedPnl)}
+                </span>
+              </div>
+            )
+          })}
+          {positions.length > 6 && (
+            <div style={{ padding: '8px 16px', color: 'var(--ink-mute)', fontSize: 12, textAlign: 'center', borderTop: '1px solid var(--rule-soft)' }}>
+              +{positions.length - 6} more
+            </div>
+          )}
+          <ViewAllFooter label="View all positions" onClick={() => setTab('positions')} />
+        </div>
+      )}
+
+      {/* Spot */}
+      {spotBalances.length > 0 && (
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>Spot Holdings</span>
+              <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{spotBalances.length}</span>
+            </div>
+          </div>
+          {spotBalances.slice(0, 5).map((b, i) => (
+            <div key={b.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(spotBalances.length, 5) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <CoinIcon symbol={b.coin} size={24} />
+              <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{b.coin}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{fmtNum(b.total, 4)}</span>
+              {parseFloat(b.entryNtl) > 0 && (
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600 }}>{fmtUsd(b.entryNtl)}</span>
+              )}
+            </div>
+          ))}
+          {spotBalances.length > 5 && (
+            <div style={{ padding: '8px 16px', color: 'var(--ink-mute)', fontSize: 12, textAlign: 'center', borderTop: '1px solid var(--rule-soft)' }}>
+              +{spotBalances.length - 5} more
+            </div>
+          )}
+          <ViewAllFooter label="View spot holdings" onClick={() => setTab('spot')} />
+        </div>
+      )}
+
+      {/* Quick stats row: Orders · Funding */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+        {orders.length > 0 && (
+          <div
+            onClick={() => setTab('orders')}
+            style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Open Orders</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{orders.length}</div>
+            </div>
+            <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
+          </div>
+        )}
+        <div
+          onClick={() => setTab('funding')}
+          style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Net Funding (90d)</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: pnlColor(netFunding90d) }}>
+              {netFunding90d >= 0 ? '+' : ''}{fmtUsd(netFunding90d)}
+            </div>
+          </div>
+          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
+        </div>
+        <div
+          onClick={() => setTab('trades')}
+          style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Cum. Funding</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: pnlColor(totalFunding) }}>
+              {totalFunding >= 0 ? '+' : ''}{fmtUsd(totalFunding)}
+            </div>
+          </div>
+          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
+        </div>
+      </div>
+
+      {/* ── HyperEVM ──────────────────────────────────── */}
+      <SectionDivider label="HyperEVM" sub="Chain 999" />
+
+      {evmLoading && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {[300, 240, 180].map((w, i) => (
+            <div key={i} style={{ height: 16, width: w, borderRadius: 4, background: 'var(--rule)', animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.15}s` }} />
+          ))}
+        </div>
+      )}
+
+      {evmError && (
+        <div style={{ background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, color: 'var(--red)', fontSize: 13, padding: '10px 14px', marginBottom: 12 }}>
+          EVM: {evmError}
+        </div>
+      )}
+
+      {evmData && !evmLoading && (
+        <>
+          {/* Native HYPE + tx count quick row */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Native HYPE</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtEvmAmount(evmData.nativeFormatted, 4)}</div>
+            </div>
+            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>EVM Txns</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{evmData.txCount.toLocaleString()}</div>
+            </div>
+          </div>
+
+          {/* Protocol positions grouped by protocol */}
+          {Array.from(groupByProtocol(evmData.protocolPositions).entries()).map(([protocol, pos]) => (
+            <div key={protocol} style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{protocol}</span>
+                <span style={{ background: 'rgba(147,51,234,0.08)', color: '#9333ea', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{pos.length} position{pos.length !== 1 ? 's' : ''}</span>
+              </div>
+              {pos.map((p, i) => (
+                <div key={i} style={{ padding: '10px 16px', borderBottom: i < pos.length - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: p.type === 'borrow' ? 'var(--red)' : p.type === 'supply' ? 'var(--blue)' : 'var(--green)', background: p.type === 'borrow' ? 'rgba(244,63,94,0.08)' : p.type === 'supply' ? 'var(--blue-soft)' : 'rgba(34,197,94,0.08)', borderRadius: 4, padding: '2px 7px', textTransform: 'capitalize', minWidth: 52, textAlign: 'center' }}>
+                    {p.type}
+                  </span>
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{p.asset}</span>
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13 }}>
+                    {fmtEvmAmount(p.amount, p.decimals > 6 ? 4 : 2)}
+                  </span>
+                </div>
+              ))}
+              <ViewAllFooter label="View on HyperEVM" onClick={() => setTab('evm')} />
+            </div>
+          ))}
+
+          {/* ERC-20 tokens */}
+          {evmData.tokens.length > 0 && (
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Token Holdings</span>
+                <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{evmData.tokens.length}</span>
+              </div>
+              {evmData.tokens.slice(0, 6).map((t, i) => (
+                <div key={t.address} style={{ padding: '10px 16px', borderBottom: i < Math.min(evmData.tokens.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <CoinIcon symbol={t.symbol} size={22} />
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 64 }}>{t.symbol}</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>{t.protocol}</span>
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 13 }}>
+                    {fmtEvmAmount(t.formatted, t.decimals > 6 ? 4 : 2)}
+                  </span>
+                </div>
+              ))}
+              {evmData.tokens.length > 6 && (
+                <div style={{ padding: '8px 16px', color: 'var(--ink-mute)', fontSize: 12, textAlign: 'center', borderTop: '1px solid var(--rule-soft)' }}>
+                  +{evmData.tokens.length - 6} more
+                </div>
+              )}
+              <ViewAllFooter label="View all tokens" onClick={() => setTab('evm')} />
+            </div>
+          )}
+
+          {evmData.protocolPositions.length === 0 && evmData.tokens.length === 0 && (
+            <div style={{ textAlign: 'center', color: 'var(--ink-mute)', padding: '32px 0', fontSize: 13 }}>
+              No EVM activity detected
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 
 function HLTraderDashboard() {
@@ -450,7 +708,7 @@ function HLTraderDashboard() {
   const [data, setData] = useState<HLWalletData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('positions')
+  const [tab, setTab] = useState<Tab>('overview')
   const [range, setRange] = useState<ChartRange>('7d')
   const [history, setHistory] = useState<string[]>([])
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
@@ -510,20 +768,20 @@ function HLTraderDashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlAddr])
 
-  // Lazy-load EVM data when the EVM tab is first opened
+  // Load EVM data as soon as a wallet is snooped (powers the overview panel)
   useEffect(() => {
-    if (tab !== 'evm' || !address || evmData || evmLoading) return
+    if (!address || evmData || evmLoading) return
     setEvmLoading(true)
     setEvmError(null)
     fetchEvmWallet(address)
       .then(d => setEvmData(d))
       .catch(e => setEvmError(e instanceof Error ? e.message : 'Failed to fetch EVM data'))
       .finally(() => setEvmLoading(false))
-  }, [tab, address, evmData, evmLoading])
+  }, [address, evmData, evmLoading])
 
   function stopSnoop() {
     setData(null); setAddress(''); setInput(''); setError(null); currentAddr.current = ''
-    setEvmData(null); setEvmError(null); setEvmLoading(false)
+    setEvmData(null); setEvmError(null); setEvmLoading(false); setTab('overview')
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -551,6 +809,7 @@ function HLTraderDashboard() {
   const netFunding90d = fundingPayments.reduce((s, p) => s + parseFloat(p.delta.usdc), 0)
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
+    { id: 'overview',     label: 'Overview' },
     { id: 'positions',    label: 'Positions',    count: positions.length },
     { id: 'spot',         label: 'Spot',         count: spotBalances.length },
     { id: 'orders',       label: 'Orders',       count: orders.length },
@@ -725,6 +984,17 @@ function HLTraderDashboard() {
           </div>
 
           {/* Tab content */}
+
+          {/* Overview */}
+          {tab === 'overview' && (
+            <OverviewPanel
+              data={data}
+              evmData={evmData}
+              evmLoading={evmLoading}
+              evmError={evmError}
+              setTab={setTab}
+            />
+          )}
 
           {/* Positions */}
           {tab === 'positions' && (
