@@ -178,6 +178,7 @@ export const KNOWN_TOKENS: { address: string; symbol: string; name: string; deci
   { address: '0x07c57e32a3c29d5659bda1d3efc2e7bf004e3035', symbol: 'NEST',    name: 'Nest',                decimals: 18, protocol: 'Nest'       },
   // Kinetiq governance
   { address: '0x000000000000780555bd0bca3791f89f9542c2d6', symbol: 'KNTQ',    name: 'Kinetiq Token',       decimals: 18, protocol: 'Kinetiq'    },
+  { address: '0x696238e0ca31c94e24ca4cbe7921754e172e4d0f', symbol: 'sKNTQ',   name: 'Staked Kinetiq',      decimals: 18, protocol: 'Kinetiq'    },
   // Misc
   { address: '0xE6829d9a7eE3040e1276Fa75293Bde931859e8fA', symbol: 'cmETH',   name: 'cmETH',               decimals: 18, protocol: 'Native'     },
   { address: '0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a', symbol: 'thBILL',  name: 'T-Bill Token',        decimals: 18, protocol: 'TradFi'     },
@@ -353,15 +354,26 @@ export async function fetchEvmWallet(address: string): Promise<EvmWalletData> {
   }
 
   // Protocol positions — batch independent calls where possible
-  const kHypeToken  = tokens.find(t => t.symbol === 'kHYPE')
-  const kmHypeToken = tokens.find(t => t.symbol === 'kmHYPE')
+  const kHypeToken   = tokens.find(t => t.symbol === 'kHYPE')
+  const kmHypeToken  = tokens.find(t => t.symbol === 'kmHYPE')
   const wstHypeToken = tokens.find(t => t.symbol === 'wstHYPE')
+  const sKntqToken   = tokens.find(t => t.symbol === 'sKNTQ')
 
-  const [hyperLendPositions, kHypeUnderlying, kmHypeUnderlying, wstHypeUnderlying] = await Promise.all([
+  const sKntqConvertToAssets = async (bal: bigint) => {
+    if (bal === 0n) return 0
+    try {
+      const data = SEL_CONVERT_TO_ASSETS + bal.toString(16).padStart(64, '0')
+      const res = await rpc<string>('eth_call', [{ to: '0x696238e0ca31c94e24ca4cbe7921754e172e4d0f', data }, 'latest'])
+      return Number(decodeBigInt(res)) / 1e18
+    } catch { return Number(bal) / 1e18 }
+  }
+
+  const [hyperLendPositions, kHypeUnderlying, kmHypeUnderlying, wstHypeUnderlying, sKntqUnderlying] = await Promise.all([
     getHyperLendPositions(addr).catch(() => [] as EvmProtocolPosition[]),
-    kHypeToken  ? getKinetiqUnderlying(KHYPE_ACCOUNTANT,  kHypeToken.balance).catch(() => 0)  : Promise.resolve(0),
-    kmHypeToken ? getKinetiqUnderlying(KMHYPE_ACCOUNTANT, kmHypeToken.balance).catch(() => 0) : Promise.resolve(0),
+    kHypeToken   ? getKinetiqUnderlying(KHYPE_ACCOUNTANT,  kHypeToken.balance).catch(() => 0)   : Promise.resolve(0),
+    kmHypeToken  ? getKinetiqUnderlying(KMHYPE_ACCOUNTANT, kmHypeToken.balance).catch(() => 0)  : Promise.resolve(0),
     wstHypeToken ? getWstHypeUnderlying(addr, wstHypeToken.balance).catch(() => wstHypeToken.formatted) : Promise.resolve(0),
+    sKntqToken   ? sKntqConvertToAssets(sKntqToken.balance).catch(() => sKntqToken.formatted)   : Promise.resolve(0),
   ])
 
   const vaultPositions: EvmProtocolPosition[] = []
@@ -375,6 +387,12 @@ export async function fetchEvmWallet(address: string): Promise<EvmWalletData> {
     vaultPositions.push({
       protocol: 'Kinetiq', type: 'stake', asset: 'kmHYPE → HYPE',
       decimals: 18, amount: kmHypeUnderlying, raw: kmHypeToken.balance,
+    })
+  }
+  if (sKntqToken && sKntqToken.balance > 0n && sKntqUnderlying > 0) {
+    vaultPositions.push({
+      protocol: 'Kinetiq', type: 'stake', asset: 'sKNTQ → KNTQ',
+      decimals: 18, amount: sKntqUnderlying, raw: sKntqToken.balance,
     })
   }
   if (wstHypeToken && wstHypeToken.balance > 0n && wstHypeUnderlying > 0) {
