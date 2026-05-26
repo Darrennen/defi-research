@@ -55,7 +55,7 @@ const ROLE_META: Record<HLRole, { label: string; color: string; bg: string }> = 
   missing:    { label: 'Unknown',     color: 'var(--ink-soft)', bg: 'var(--rule-soft)' },
 }
 
-type Tab = 'overview' | 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts' | 'evm'
+type Tab = 'overview' | 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts' | 'evm' | 'hypeflow'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -455,6 +455,359 @@ function FundingTab({ data }: { data: HLWalletData }) {
             </span>,
           ])}
         />
+      </div>
+    </div>
+  )
+}
+
+// ── HYPE Flow tab ────────────────────────────────────────────────────────────
+
+type HypeTrade = {
+  coin: string; side: 'B' | 'A'; px: string; sz: string
+  time: number; hash: string; tid: number; users: [string, string]
+}
+
+type HypeCtx = {
+  funding: string; openInterest: string; prevDayPx: string
+  dayNtlVlm: string; markPx: string; midPx: string
+}
+
+function buildHypeCvdSvg(trades: HypeTrade[]): string {
+  const W = 600, H = 72
+  if (trades.length < 2) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-mute)" style="font-size:11px">collecting trades…</text>`
+  const sorted = [...trades].sort((a, b) => a.time - b.time)
+  let cvd = 0
+  const series = sorted.map(t => {
+    const usd = parseFloat(t.px) * parseFloat(t.sz)
+    cvd += t.side === 'B' ? usd : -usd
+    return { time: t.time, cvd }
+  })
+  const minCvd = Math.min(...series.map(p => p.cvd))
+  const maxCvd = Math.max(...series.map(p => p.cvd))
+  const range = maxCvd - minCvd || 1
+  const minTs = series[0].time, spanMs = series[series.length - 1].time - minTs || 1
+  const px = (ts: number) => ((ts - minTs) / spanMs * W).toFixed(1)
+  const py = (v: number) => (H - ((v - minCvd) / range * H)).toFixed(1)
+  const zeroY = py(Math.max(minCvd, Math.min(maxCvd, 0)))
+  const pts = series.map(p => `${px(p.time)},${py(p.cvd)}`).join(' ')
+  const lastCvd = series[series.length - 1].cvd
+  const lineColor = lastCvd >= 0 ? 'var(--green)' : 'var(--red)'
+  const fillPts = `0,${zeroY} ${pts} ${px(series[series.length - 1].time)},${zeroY}`
+  return (
+    `<polygon points="${fillPts}" fill="${lastCvd >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)'}"/>` +
+    `<line x1="0" y1="${zeroY}" x2="${W}" y2="${zeroY}" stroke="var(--rule)" stroke-width="1" stroke-dasharray="3,3"/>` +
+    `<polyline points="${pts}" fill="none" stroke="${lineColor}" stroke-width="1.5"/>`
+  )
+}
+
+function buildHypeFlowTimeSvg(trades: HypeTrade[], bucketMs: number): string {
+  const W = 800, H = 80
+  if (!trades.length) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-mute)" style="font-size:11px">no trades loaded</text>`
+  const buckets = new Map<number, { buy: number; sell: number }>()
+  for (const t of trades) {
+    const key = Math.floor(t.time / bucketMs) * bucketMs
+    if (!buckets.has(key)) buckets.set(key, { buy: 0, sell: 0 })
+    const b = buckets.get(key)!
+    const usd = parseFloat(t.px) * parseFloat(t.sz)
+    if (t.side === 'B') b.buy += usd; else b.sell += usd
+  }
+  const sorted = [...buckets.entries()].sort((a, b) => a[0] - b[0])
+  if (sorted.length < 2) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-mute)" style="font-size:11px">collecting data…</text>`
+  const maxVal = Math.max(...sorted.map(([, b]) => Math.max(b.buy, b.sell))) || 1
+  const mid = H / 2, n = sorted.length, slotW = W / n, bW = Math.max(1, slotW - 1)
+  let out = `<line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="var(--rule)" stroke-width="1" stroke-dasharray="3,3"/>`
+  sorted.forEach(([, b], i) => {
+    const x = (i * slotW + 0.5).toFixed(1)
+    const buyH = (b.buy / maxVal * (mid - 4)).toFixed(1)
+    const sellH = (b.sell / maxVal * (mid - 4)).toFixed(1)
+    out += `<rect x="${x}" y="${(mid - parseFloat(buyH)).toFixed(1)}" width="${(bW * 0.48).toFixed(1)}" height="${buyH}" fill="rgba(34,197,94,0.65)"/>`
+    out += `<rect x="${(parseFloat(x) + bW * 0.5).toFixed(1)}" y="${mid.toFixed(1)}" width="${(bW * 0.48).toFixed(1)}" height="${sellH}" fill="rgba(244,63,94,0.65)"/>`
+  })
+  const netPts = sorted.map(([, b], i) => {
+    const net = b.buy - b.sell
+    return `${(i * slotW + slotW / 2).toFixed(1)},${(mid - net / maxVal * (mid - 4)).toFixed(1)}`
+  }).join(' ')
+  out += `<polyline points="${netPts}" fill="none" stroke="rgba(234,179,8,0.8)" stroke-width="1.5"/>`
+  const step = Math.max(1, Math.floor(n / 5))
+  sorted.forEach(([ts], i) => {
+    if (i % step !== 0) return
+    const x = (i * slotW + slotW / 2).toFixed(1)
+    const lbl = new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    out += `<text x="${x}" y="${H - 2}" text-anchor="middle" fill="var(--ink-mute)" font-size="9" font-family="monospace">${lbl}</text>`
+  })
+  return out
+}
+
+function HypeFlowTab() {
+  const MAX_TRADES = 2000
+  const [trades, setTrades] = useState<HypeTrade[]>([])
+  const [ctx, setCtx] = useState<HypeCtx | null>(null)
+  const [whaleMin, setWhaleMin] = useState(50000)
+  const [window_, setWindow_] = useState(60) // minutes
+  const [lastSync, setLastSync] = useState('—')
+  const [status, setStatus] = useState<'ok' | 'loading' | 'err'>('loading')
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const poll = useCallback(async () => {
+    try {
+      const [tradesRes, ctxRes] = await Promise.all([
+        fetch('/api/hl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'recentTrades', coin: 'HYPE' }) }).then(r => r.json()),
+        fetch('/api/hl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'metaAndAssetCtxs' }) }).then(r => r.json()),
+      ])
+      const fresh: HypeTrade[] = Array.isArray(tradesRes) ? tradesRes : []
+      setTrades(prev => {
+        const seen = new Set(prev.map(t => t.tid))
+        const news = fresh.filter(t => !seen.has(t.tid))
+        return [...news, ...prev].slice(0, MAX_TRADES)
+      })
+      if (Array.isArray(ctxRes) && ctxRes.length >= 2) {
+        const meta = ctxRes[0]; const ctxs = ctxRes[1]
+        const idx = meta.universe?.findIndex((u: { name: string }) => u.name === 'HYPE') ?? -1
+        if (idx >= 0 && ctxs[idx]) setCtx(ctxs[idx] as HypeCtx)
+      }
+      setLastSync(new Date().toLocaleTimeString('en-GB', { hour12: false }))
+      setStatus('ok')
+    } catch { setStatus('err') }
+  }, [])
+
+  useEffect(() => {
+    poll()
+    timerRef.current = setInterval(poll, 5000)
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [poll])
+
+  // Filter to window
+  const cutoffMs = Date.now() - window_ * 60_000
+  const windowTrades = window_ === -1 ? trades : trades.filter(t => t.time >= cutoffMs)
+
+  // Flow metrics
+  const buyVol  = windowTrades.filter(t => t.side === 'B').reduce((s, t) => s + parseFloat(t.px) * parseFloat(t.sz), 0)
+  const sellVol = windowTrades.filter(t => t.side === 'A').reduce((s, t) => s + parseFloat(t.px) * parseFloat(t.sz), 0)
+  const netFlow = buyVol - sellVol
+  const totalVol = buyVol + sellVol || 1
+  const pctBuy = buyVol / totalVol * 100
+
+  // Mark price + 24h change
+  const markPx    = ctx ? parseFloat(ctx.markPx) : null
+  const prevDayPx = ctx ? parseFloat(ctx.prevDayPx) : null
+  const pct24h    = markPx && prevDayPx && prevDayPx > 0 ? (markPx - prevDayPx) / prevDayPx * 100 : null
+  const funding   = ctx ? parseFloat(ctx.funding) * 100 : null
+  const oi        = ctx ? parseFloat(ctx.openInterest) : null
+
+  // Top buyers/sellers by address
+  const buyerMap  = new Map<string, number>()
+  const sellerMap = new Map<string, number>()
+  for (const t of windowTrades) {
+    const usd = parseFloat(t.px) * parseFloat(t.sz)
+    if (t.side === 'B') buyerMap.set(t.users[0], (buyerMap.get(t.users[0]) ?? 0) + usd)
+    else sellerMap.set(t.users[1], (sellerMap.get(t.users[1]) ?? 0) + usd)
+  }
+  const topBuyers  = [...buyerMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+  const topSellers = [...sellerMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+
+  const cvdSvg      = buildHypeCvdSvg(windowTrades)
+  const bucketMs    = window_ <= 15 ? 60_000 : window_ <= 60 ? 300_000 : window_ <= 240 ? 900_000 : 1_800_000
+  const timelineSvg = buildHypeFlowTimeSvg(windowTrades, bucketMs)
+
+  const hlFmtUsd = (n: number) => {
+    const abs = Math.abs(n), s = n < 0 ? '-' : ''
+    if (abs >= 1e9) return s + '$' + (abs / 1e9).toFixed(2) + 'B'
+    if (abs >= 1e6) return s + '$' + (abs / 1e6).toFixed(2) + 'M'
+    if (abs >= 1e3) return s + '$' + (abs / 1e3).toFixed(1) + 'K'
+    return s + '$' + abs.toFixed(2)
+  }
+  const shortA = (addr: string) => addr ? addr.slice(0, 6) + '…' + addr.slice(-4) : '—'
+
+  return (
+    <div>
+      {/* Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Window</span>
+        {([[15, '15m'], [60, '1h'], [240, '4h'], [-1, 'All']] as [number, string][]).map(([val, lbl]) => (
+          <button key={val} onClick={() => setWindow_(val)} style={{
+            background: window_ === val ? 'var(--blue-soft)' : 'transparent',
+            border: '1px solid var(--rule)', borderRadius: 6,
+            color: window_ === val ? 'var(--blue)' : 'var(--ink-soft)',
+            cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 600, padding: '4px 12px',
+          }}>{lbl}</button>
+        ))}
+        <div style={{ width: 1, height: 20, background: 'var(--rule)', margin: '0 4px' }} />
+        <span style={{ fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Whale</span>
+        {([[10000, '$10K'], [50000, '$50K'], [100000, '$100K']] as [number, string][]).map(([val, lbl]) => (
+          <button key={val} onClick={() => setWhaleMin(val)} style={{
+            background: whaleMin === val ? 'var(--blue-soft)' : 'transparent',
+            border: '1px solid var(--rule)', borderRadius: 6,
+            color: whaleMin === val ? 'var(--blue)' : 'var(--ink-soft)',
+            cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 600, padding: '4px 12px',
+          }}>{lbl}</button>
+        ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: status === 'ok' ? 'var(--green)' : status === 'err' ? 'var(--red)' : 'var(--amber)', display: 'inline-block' }} />
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>{lastSync}</span>
+        </div>
+      </div>
+
+      {/* KPI strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
+        {[
+          { label: 'HYPE Price', value: markPx ? `$${markPx.toFixed(3)}` : '—', color: pct24h !== null ? (pct24h >= 0 ? 'var(--green)' : 'var(--red)') : undefined, sub: pct24h !== null ? `${pct24h >= 0 ? '+' : ''}${pct24h.toFixed(2)}% 24h` : undefined },
+          { label: 'Funding (8h)', value: funding !== null ? `${funding.toFixed(4)}%` : '—', color: funding !== null ? (funding >= 0 ? 'var(--red)' : 'var(--green)') : undefined, sub: funding !== null ? `${(funding * 3 * 365).toFixed(1)}% APR` : undefined },
+          { label: 'Open Interest', value: oi ? hlFmtUsd(oi * (markPx ?? 0)) : '—', sub: oi ? `${(oi / 1e6).toFixed(2)}M HYPE` : undefined },
+          { label: 'Buy Flow', value: hlFmtUsd(buyVol), color: 'var(--green)' },
+          { label: 'Sell Flow', value: hlFmtUsd(sellVol), color: 'var(--red)' },
+          { label: 'Net Flow', value: (netFlow >= 0 ? '+' : '') + hlFmtUsd(netFlow), color: netFlow >= 0 ? 'var(--green)' : 'var(--red)' },
+          { label: 'Trades', value: windowTrades.length.toLocaleString(), sub: `${window_ === -1 ? 'all' : window_ + 'm'} window` },
+        ].map(({ label, value, color, sub }) => (
+          <div key={label} style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 8, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: color ?? 'var(--ink)' }}>{value}</div>
+            {sub && <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 3 }}>{sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* Main grid: trades | flow + CVD */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 14, marginBottom: 14 }}>
+        {/* Live trades */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Live Trades</span>
+            <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>{trades.length} buffered</span>
+          </div>
+          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ position: 'sticky', top: 0, background: 'var(--card)', zIndex: 1 }}>
+                  {['Time', 'Side', 'Price', 'Size', 'USD', 'Buyer', 'Seller'].map(h => (
+                    <th key={h} style={{ padding: '7px 10px', textAlign: h === 'Time' || h === 'Side' ? 'left' : 'right', fontWeight: 600, fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--rule)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {windowTrades.slice(0, 150).map((t, idx) => {
+                  const isBuy = t.side === 'B'
+                  const usd = parseFloat(t.px) * parseFloat(t.sz)
+                  const isBig = usd >= whaleMin
+                  const isMega = usd >= 1_000_000
+                  const rowBg = isBig ? (isBuy ? 'rgba(34,197,94,0.06)' : 'rgba(244,63,94,0.05)') : ''
+                  const leftBorder = isBig ? (isBuy ? 'inset 3px 0 0 var(--green)' : 'inset 3px 0 0 var(--red)') : ''
+                  return (
+                    <tr key={t.tid ?? idx} style={{ background: rowBg, boxShadow: leftBorder, borderBottom: '1px solid var(--rule-soft)' }}>
+                      <td style={{ padding: '5px 10px', color: 'var(--ink-mute)', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                        {new Date(t.time).toLocaleTimeString('en-GB', { hour12: false })}
+                      </td>
+                      <td style={{ padding: '5px 10px' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', background: isBuy ? 'rgba(34,197,94,0.12)' : 'rgba(244,63,94,0.12)', color: isBuy ? 'var(--green)' : 'var(--red)', borderRadius: 3 }}>
+                          {isBuy ? 'BUY' : 'SELL'}
+                        </span>
+                        {isMega && <span style={{ marginLeft: 4, fontSize: 9, background: 'rgba(234,179,8,0.2)', color: '#eab308', padding: '1px 5px', borderRadius: 2 }}>MEGA</span>}
+                        {!isMega && isBig && <span style={{ marginLeft: 4, fontSize: 9, background: isBuy ? 'rgba(34,197,94,0.15)' : 'rgba(244,63,94,0.15)', color: isBuy ? 'var(--green)' : 'var(--red)', padding: '1px 5px', borderRadius: 2 }}>BIG</span>}
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'var(--mono)' }}>${parseFloat(t.px).toFixed(3)}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{parseFloat(t.sz).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: isBig ? 700 : 400, color: isBig ? (isBuy ? 'var(--green)' : 'var(--red)') : 'var(--ink)' }}>
+                        {hlFmtUsd(usd)}
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue)' }}>
+                        <a href={`/hl-traders?address=${t.users[0]}`} style={{ color: 'var(--blue)', textDecoration: 'none' }}>{shortA(t.users[0])}</a>
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue)' }}>
+                        <a href={`/hl-traders?address=${t.users[1]}`} style={{ color: 'var(--blue)', textDecoration: 'none' }}>{shortA(t.users[1])}</a>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {!windowTrades.length && (
+                  <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: 'var(--ink-mute)', fontSize: 12 }}>{status === 'loading' ? 'Loading trades…' : 'No trades in window'}</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Flow panel + CVD */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Flow */}
+          <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '16px' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>Flow · {window_ === -1 ? 'All' : window_ + 'm'}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div><div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2 }}>Buy</div><div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--green)' }}>{hlFmtUsd(buyVol)}</div></div>
+              <div style={{ textAlign: 'right' }}><div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2 }}>Sell</div><div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--red)' }}>{hlFmtUsd(sellVol)}</div></div>
+            </div>
+            <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--rule)', marginBottom: 6 }}>
+              <div style={{ width: pctBuy + '%', background: 'var(--green)', transition: 'width 0.4s' }} />
+              <div style={{ flex: 1, background: 'var(--red)' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ink-mute)', marginBottom: 16 }}>
+              <span>{pctBuy.toFixed(1)}% buy</span>
+              <span>{(100 - pctBuy).toFixed(1)}% sell</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>Net</span>
+              <span style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 20, color: netFlow >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                {netFlow >= 0 ? '+' : ''}{hlFmtUsd(netFlow)}
+              </span>
+            </div>
+          </div>
+
+          {/* CVD */}
+          <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>CVD · HYPE Perp</div>
+            <svg viewBox="0 0 600 72" preserveAspectRatio="none" style={{ width: '100%', height: 72, display: 'block' }}
+              dangerouslySetInnerHTML={{ __html: cvdSvg }} />
+            <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 4 }}>{windowTrades.length} trades</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Flow Timeline */}
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 14 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>Flow Timeline</span>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>buy ↑ · sell ↓ · <span style={{ color: '#eab308' }}>net line</span></span>
+        </div>
+        <div style={{ padding: '10px 16px 14px' }}>
+          <svg viewBox="0 0 800 80" preserveAspectRatio="none" style={{ width: '100%', height: 80, display: 'block' }}
+            dangerouslySetInnerHTML={{ __html: timelineSvg }} />
+          <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--ink-mute)', marginTop: 4 }}>
+            <span><span style={{ color: 'var(--green)' }}>■</span> buy</span>
+            <span><span style={{ color: 'var(--red)' }}>■</span> sell</span>
+            <span><span style={{ color: '#eab308' }}>—</span> net</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Top traders */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        {([['buyers', topBuyers, 'var(--green)'], ['sellers', topSellers, 'var(--red)']] as [string, [string, number][], string][]).map(([role, list, col]) => (
+          <div key={role} style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13, textTransform: 'capitalize' }}>
+              Top {role} · {window_ === -1 ? 'All' : window_ + 'm'}
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr>
+                  {['#', 'Address', 'Volume'].map(h => (
+                    <th key={h} style={{ padding: '7px 12px', textAlign: h === 'Volume' ? 'right' : 'left', fontWeight: 600, fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--rule)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {list.length === 0 ? (
+                  <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: 'var(--ink-mute)', fontSize: 12 }}>No data yet</td></tr>
+                ) : list.map(([addr, usd], i) => (
+                  <tr key={addr} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                    <td style={{ padding: '7px 12px', color: 'var(--ink-mute)', fontFamily: 'var(--mono)', fontSize: 11 }}>{i + 1}</td>
+                    <td style={{ padding: '7px 12px', fontFamily: 'var(--mono)', fontSize: 11 }}>
+                      <a href={`/hl-traders?address=${addr}`} style={{ color: 'var(--blue)', textDecoration: 'none' }}>{shortA(addr)}</a>
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700, color: col }}>{hlFmtUsd(usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -1102,6 +1455,7 @@ function HLTraderDashboard() {
     { id: 'transactions', label: 'Transactions', count: ledger.length },
     { id: 'subaccounts',  label: 'Sub-Accounts', count: subs.length },
     { id: 'evm',          label: '⬡ HyperEVM' },
+    { id: 'hypeflow',    label: '⚡ HYPE Flow' },
   ]
 
   // ── Normal page (no data loaded) ─────────────────────────────────────────
@@ -1684,6 +2038,13 @@ function HLTraderDashboard() {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* HYPE Flow */}
+          {tab === 'hypeflow' && (
+            <div>
+              <HypeFlowTab />
             </div>
           )}
         </>
