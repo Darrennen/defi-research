@@ -507,10 +507,115 @@ function OverviewPanel({
   const totalPnl = positions.reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
   const totalFunding = positions.reduce((s, p) => s + parseFloat(p.cumFunding?.sinceOpen || '0'), 0)
   const netFunding90d = fundingPayments.reduce((s, p) => s + parseFloat(p.delta.usdc), 0)
-  const protocolGroups = evmData ? groupByProtocol(evmData.protocolPositions) : new Map<string, ReturnType<typeof groupByProtocol> extends Map<string, infer V> ? V : never>()
+
+  // ── Net worth calculation ──────────────────────────────
+  const hypePrice = parseFloat(data.assetCtxMap.get('HYPE')?.markPx ?? '0')
+  const btcPrice  = parseFloat(data.assetCtxMap.get('BTC')?.markPx  ?? '0')
+  const ethPrice  = parseFloat(data.assetCtxMap.get('ETH')?.markPx  ?? '0')
+
+  const STABLES   = new Set(['USDC','USDT0','USDT','FEUSD','USH','USDHL','USDE','SUSDE','USR','USDH','USDH'])
+  const HYPE_LIKE = new Set(['WHYPE','KHYPE','STHYPE','WSTHYPE','LSTHYPE','BEHYPE','HBHYPE','FLOWHYPE','HIHYPE','KMHYPE'])
+
+  function tokenUsd(symbol: string, amount: number): number | null {
+    const s = symbol.split(/[\s→]/)[0].toUpperCase()
+    if (STABLES.has(s))   return amount
+    if (s === 'HYPE' || HYPE_LIKE.has(s)) return amount * hypePrice
+    if (s === 'UBTC')     return amount * btcPrice
+    if (s === 'UETH' || s === 'CMETH') return amount * ethPrice
+    const ctx = data.assetCtxMap.get(s) ?? data.spotAssetCtxMap.get(s)
+    if (ctx) return amount * parseFloat(ctx.markPx)
+    return null
+  }
+
+  // HyperCore: perp equity (includes unrealized PnL) + spot current value
+  const perpEquity = parseFloat(data.perps.marginSummary.accountValue ?? '0')
+  const spotValue  = spotBalances.reduce((s, b) => {
+    const ctx = data.spotAssetCtxMap.get(b.coin)
+    const px = ctx ? parseFloat(ctx.markPx) : 0
+    return s + parseFloat(b.total) * px
+  }, 0)
+  const hyperCoreValue = perpEquity + spotValue
+
+  // HyperEVM: native HYPE + wallet tokens + protocol positions (supply − borrow)
+  let hyperEvmValue = 0
+  let evmApprox = false
+  if (evmData) {
+    hyperEvmValue += evmData.nativeFormatted * hypePrice
+    for (const t of evmData.tokens) {
+      const v = tokenUsd(t.symbol, t.formatted)
+      if (v !== null) hyperEvmValue += v
+      else evmApprox = true
+    }
+    for (const p of evmData.protocolPositions) {
+      const sign = p.type === 'borrow' ? -1 : 1
+      const v = tokenUsd(p.asset, p.amount)
+      if (v !== null) hyperEvmValue += sign * v
+      else evmApprox = true
+    }
+  }
+
+  const totalNetWorth = hyperCoreValue + hyperEvmValue
+  const showEvmTotal  = evmData && !evmLoading
 
   return (
     <div>
+      {/* ── Net Worth Banner ──────────────────────────────── */}
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '22px 24px', marginBottom: 24 }}>
+        <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: 6 }}>
+          Total Net Worth
+        </div>
+        <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 34, color: 'var(--ink)', lineHeight: 1, marginBottom: 18 }}>
+          {showEvmTotal ? (evmApprox ? '~' : '') : ''}{fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0 }}>
+          {/* HyperCore */}
+          <div style={{ paddingRight: 24, borderRight: '1px solid var(--rule)' }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)', display: 'inline-block' }} />
+              HyperCore L1
+            </div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>{fmtUsd(hyperCoreValue)}</div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
+                Perps <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(perpEquity)}</span>
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
+                Spot <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(spotValue)}</span>
+              </span>
+            </div>
+          </div>
+          {/* HyperEVM */}
+          <div style={{ paddingLeft: 24 }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9333ea', display: 'inline-block' }} />
+              HyperEVM Chain 999
+              {evmApprox && <span style={{ color: 'var(--ink-mute)', fontSize: 10 }}>· approx.</span>}
+            </div>
+            {evmLoading ? (
+              <div style={{ fontSize: 13, color: 'var(--ink-mute)', fontFamily: 'var(--mono)', paddingTop: 4 }}>Loading…</div>
+            ) : showEvmTotal ? (
+              <>
+                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>
+                  {evmApprox ? '~' : ''}{fmtUsd(hyperEvmValue)}
+                </div>
+                <div style={{ marginTop: 6, display: 'flex', gap: 12 }}>
+                  <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
+                    Tokens <span style={{ color: 'var(--ink-soft)' }}>{evmData!.tokens.length}</span>
+                  </span>
+                  {evmData!.protocolPositions.length > 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
+                      DeFi <span style={{ color: 'var(--ink-soft)' }}>{evmData!.protocolPositions.length} pos.</span>
+                    </span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--ink-mute)', fontFamily: 'var(--mono)', paddingTop: 4 }}>—</div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* ── HyperCore ──────────────────────────────────── */}
       <SectionDivider label="HyperCore" sub="HL L1" />
 
