@@ -196,6 +196,24 @@ export interface HLHistoricalOrder {
   statusTimestamp?: number
 }
 
+export interface HLTwapOrder {
+  coin: string
+  side: 'B' | 'A'
+  sz: string
+  executedSz: string
+  executedNtl: string
+  minutes: number
+  randomize: boolean
+  timestamp: number
+  id: number
+}
+
+export interface HLTwapHistoryEntry {
+  state: HLTwapOrder
+  status: { status: string }
+  time: number
+}
+
 export interface HLUserFees {
   dailyUserVlm: [string, string, string][]
   feeSchedule: {
@@ -267,6 +285,12 @@ export const getUserFundingHistory = (address: string) =>
 export const getHistoricalOrders = (address: string) =>
   post<HLHistoricalOrder[]>({ type: 'historicalOrders', user: address })
 
+export const getTwapOrders = (address: string) =>
+  post<HLTwapOrder[]>({ type: 'twapOrders', user: address })
+
+export const getTwapHistory = (address: string) =>
+  post<HLTwapHistoryEntry[]>({ type: 'twapHistory', user: address })
+
 export const getUserFees = (address: string) =>
   post<HLUserFees>({ type: 'userFees', user: address })
 
@@ -287,13 +311,16 @@ export interface HLWalletData {
   predictedFundings: HLPredictedFundings
   userFunding: HLUserFunding[]
   historicalOrders: HLHistoricalOrder[]
+  twapOrders: HLTwapOrder[]
+  twapHistory: HLTwapHistoryEntry[]
   fees: HLUserFees | null
 }
 
 export async function fetchWallet(address: string): Promise<HLWalletData> {
   const [
     role, subAccounts, perps, spot, orders, fills, ledger, spotMeta, portfolio,
-    metaAndCtxs, spotMetaAndCtxs, predictedFundings, userFunding, historicalOrders, fees,
+    metaAndCtxs, spotMetaAndCtxs, predictedFundings, userFunding, historicalOrders,
+    twapOrders, twapHistory, fees,
   ] = await Promise.all([
     getUserRole(address),
     getSubAccounts(address),
@@ -309,6 +336,8 @@ export async function fetchWallet(address: string): Promise<HLWalletData> {
     safe(getPredictedFundings(), [] as HLPredictedFundings),
     safe(getUserFundingHistory(address), [] as HLUserFunding[]),
     safe(getHistoricalOrders(address), [] as HLHistoricalOrder[]),
+    safe(getTwapOrders(address), [] as HLTwapOrder[]),
+    safe(getTwapHistory(address), [] as HLTwapHistoryEntry[]),
     safe(getUserFees(address), null),
   ])
 
@@ -335,7 +364,8 @@ export async function fetchWallet(address: string): Promise<HLWalletData> {
 
   return {
     role, subAccounts, perps, spot, orders, fills, ledger, spotTokenMap, portfolio,
-    assetCtxMap, spotAssetCtxMap, predictedFundings, userFunding, historicalOrders, fees,
+    assetCtxMap, spotAssetCtxMap, predictedFundings, userFunding, historicalOrders,
+    twapOrders, twapHistory, fees,
   }
 }
 

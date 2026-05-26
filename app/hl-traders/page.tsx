@@ -9,6 +9,7 @@ import {
   fetchWallet, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
   fmtFundingRate, annualizedFunding, fundingDirection,
   type HLWalletData, type HLRole, type HLPortfolioSeries, type HLPredictedFundings, type HLFill,
+  type HLTwapOrder, type HLTwapHistoryEntry,
 } from '@/lib/hyperliquid'
 import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, groupByProtocol, type EvmWalletData } from '@/lib/hyperevm'
 
@@ -508,7 +509,6 @@ function buildHypeFlowSvg(fills: HLFill[]): string {
 }
 
 function HypeFlowTab({ data }: { data: HLWalletData }) {
-  // Spot HYPE fills: coin is '@{index}' where spotTokenMap maps index → 'HYPE'
   const hypeSpotKey = [...data.spotTokenMap.entries()].find(([, name]) => name === 'HYPE')?.[0]
   const allHypeFills = (data.fills ?? []).filter(f => hypeSpotKey ? f.coin === hypeSpotKey : false)
   const hypeMarkPx   = parseFloat(data.spotAssetCtxMap.get('HYPE')?.markPx ?? data.assetCtxMap.get('HYPE')?.markPx ?? '0')
@@ -516,11 +516,14 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
   const netOpenSize  = hypeSpotBal ? parseFloat(hypeSpotBal.total) : 0
 
   const WINDOWS = [
-    { key: '24h',  ms: 86_400_000 },
-    { key: '7d',   ms: 604_800_000 },
-    { key: '30d',  ms: 2_592_000_000 },
-    { key: 'All',  ms: Infinity },
+    { key: '24h', ms: 86_400_000 },
+    { key: '7d',  ms: 604_800_000 },
+    { key: '30d', ms: 2_592_000_000 },
+    { key: 'All', ms: Infinity },
   ] as const
+  type WKey = typeof WINDOWS[number]['key']
+
+  const [selectedRange, setSelectedRange] = useState<WKey>('7d')
 
   const computeWindow = (maxMs: number) => {
     const cutoff = maxMs === Infinity ? 0 : Date.now() - maxMs
@@ -557,6 +560,13 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
     return s + '$' + abs.toFixed(2)
   }
 
+  const activeWindow = WINDOWS.find(w => w.key === selectedRange)!
+  const w = computeWindow(activeWindow.ms)
+  const hasTrades = w.buys + w.sells > 0
+  const total = w.buyUsd + w.sellUsd || 1
+  const pctBuy = w.buyUsd / total * 100
+  const borderCol = !hasTrades ? 'var(--rule)' : w.realizedPnl >= 0 ? 'var(--green)' : 'var(--red)'
+
   return (
     <div>
       {/* spot holding banner */}
@@ -586,118 +596,128 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
         </div>
       )}
 
-      {/* 4-window grid: 24h / 7d / 30d / All */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+      {/* Range selector */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
         {WINDOWS.map(({ key, ms }) => {
-          const w = computeWindow(ms)
-          const hasTrades = w.buys + w.sells > 0
-          const total = w.buyUsd + w.sellUsd || 1
-          const pctBuy = w.buyUsd / total * 100
-          const borderCol = !hasTrades ? 'var(--rule)' : w.realizedPnl >= 0 ? 'var(--green)' : 'var(--red)'
+          const preview = computeWindow(ms)
+          const hasAny = preview.buys + preview.sells > 0
+          const isActive = selectedRange === key
           return (
-            <div key={key} style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderTop: `2px solid ${borderCol}`, borderRadius: 10, padding: '18px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>{key}</span>
-                {hasTrades && (
-                  <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 3, letterSpacing: '0.1em', background: w.realizedPnl >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(244,63,94,0.15)', color: w.realizedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                    {w.realizedPnl >= 0 ? 'PROFIT' : 'LOSS'}
-                  </span>
-                )}
-              </div>
-
-              {hasTrades ? (
-                <>
-                  {/* Realized PnL hero */}
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 4 }}>Realized PnL</div>
-                    <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, lineHeight: 1, color: pnlColor(w.realizedPnl) }}>
-                      {w.realizedPnl >= 0 ? '+' : ''}{sfmt(w.realizedPnl)}
-                    </div>
-                  </div>
-
-                  {/* Phase narrative */}
-                  {w.phases.length > 0 && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                        <span style={{ fontSize: 9, color: 'var(--ink-mute)', letterSpacing: '0.1em', textTransform: 'uppercase', marginRight: 2 }}>flow</span>
-                        {w.phases.map((ph, i) => (
-                          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {i > 0 && <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>→</span>}
-                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
-                                {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
-                              </span>
-                              {ph.avgPx !== null && (
-                                <span style={{ fontSize: 9, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
-                                  ${ph.avgPx.toFixed(3)}
-                                </span>
-                              )}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                      {/* Trade sequence dots */}
-                      <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                        {w.sequence.slice(0, 80).map((f, i) => (
-                          <div key={i} title={`${f.side === 'B' ? 'BUY' : 'SELL'} ${parseFloat(f.sz).toFixed(2)} HYPE @ $${parseFloat(f.px).toFixed(3)}\n${new Date(f.time).toLocaleString()}`}
-                            style={{ width: 7, height: 16, borderRadius: 2, background: f.side === 'B' ? 'var(--green)' : 'var(--red)', opacity: 0.8 }} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Buy/Sell stats */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2 }}>Bought</div>
-                      <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--green)', fontSize: 15 }}>{sfmt(w.buyUsd)}</div>
-                      <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 1 }}>{w.buys} trades</div>
-                      {w.avgBuyPx !== null && <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>avg ${w.avgBuyPx.toFixed(3)}</div>}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2 }}>Sold</div>
-                      <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--red)', fontSize: 15 }}>{sfmt(w.sellUsd)}</div>
-                      <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 1 }}>{w.sells} trades</div>
-                      {w.avgSellPx !== null && <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>avg ${w.avgSellPx.toFixed(3)}</div>}
-                    </div>
-                  </div>
-
-                  {/* Buy/sell bar */}
-                  <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', background: 'var(--rule)' }}>
-                    <div style={{ width: pctBuy.toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
-                    <div style={{ flex: 1, background: 'var(--red)' }} />
-                  </div>
-                </>
-              ) : (
-                <div style={{ color: 'var(--ink-mute)', fontSize: 13 }}>No HYPE trades in this window</div>
+            <button
+              key={key}
+              onClick={() => setSelectedRange(key)}
+              style={{
+                background: isActive ? 'var(--blue-soft)' : 'var(--card)',
+                border: `1px solid ${isActive ? 'var(--blue)' : 'var(--rule)'}`,
+                borderRadius: 6, cursor: 'pointer',
+                color: isActive ? 'var(--blue)' : 'var(--ink-soft)',
+                fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 700,
+                padding: '6px 16px', letterSpacing: '0.04em',
+              }}
+            >
+              {key}
+              {hasAny && (
+                <span style={{ marginLeft: 6, fontSize: 10, opacity: 0.7 }}>
+                  {preview.buys + preview.sells}
+                </span>
               )}
-            </div>
+            </button>
           )
         })}
       </div>
 
-      {/* Cumulative flow chart (all fills) */}
-      {allHypeFills.length >= 2 && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '16px 20px', marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12 }}>Cumulative Flow · All Time</div>
-          <svg viewBox="0 0 600 100" preserveAspectRatio="none" style={{ width: '100%', height: 100, display: 'block' }}
-            dangerouslySetInnerHTML={{ __html: buildHypeFlowSvg(allHypeFills) }} />
-          <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 6 }}>
-            {allHypeFills.length} fills — green = net bought, red = net sold
-          </div>
+      {/* Selected window detail */}
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderTop: `2px solid ${borderCol}`, borderRadius: 10, padding: '20px', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>{selectedRange} window</span>
+          {hasTrades && (
+            <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 4, letterSpacing: '0.08em', background: w.realizedPnl >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(244,63,94,0.15)', color: w.realizedPnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+              {w.realizedPnl >= 0 ? 'NET PROFIT' : 'NET LOSS'}
+            </span>
+          )}
         </div>
-      )}
+
+        {hasTrades ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 4 }}>Realized PnL</div>
+                <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 28, lineHeight: 1, color: pnlColor(w.realizedPnl) }}>
+                  {w.realizedPnl >= 0 ? '+' : ''}{sfmt(w.realizedPnl)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 4 }}>Bought</div>
+                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--green)', fontSize: 18 }}>{sfmt(w.buyUsd)}</div>
+                <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>{w.buys} trades{w.avgBuyPx !== null ? ` · avg $${w.avgBuyPx.toFixed(3)}` : ''}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 4 }}>Sold</div>
+                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--red)', fontSize: 18 }}>{sfmt(w.sellUsd)}</div>
+                <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>{w.sells} trades{w.avgSellPx !== null ? ` · avg $${w.avgSellPx.toFixed(3)}` : ''}</div>
+              </div>
+            </div>
+
+            {/* Buy/sell bar */}
+            <div style={{ display: 'flex', height: 5, borderRadius: 3, overflow: 'hidden', background: 'var(--rule)', marginBottom: 18 }}>
+              <div style={{ width: pctBuy.toFixed(1) + '%', background: 'var(--green)', transition: 'width .3s' }} />
+              <div style={{ flex: 1, background: 'var(--red)' }} />
+            </div>
+
+            {/* Phase narrative */}
+            {w.phases.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 9, color: 'var(--ink-mute)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>Trade flow</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {w.phases.map((ph, i) => (
+                    <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {i > 0 && <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>→</span>}
+                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                          {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
+                        </span>
+                        {ph.avgPx !== null && (
+                          <span style={{ fontSize: 9, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
+                            ${ph.avgPx.toFixed(3)}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  {w.sequence.slice(0, 120).map((f, i) => (
+                    <div key={i} title={`${f.side === 'B' ? 'BUY' : 'SELL'} ${parseFloat(f.sz).toFixed(2)} HYPE @ $${parseFloat(f.px).toFixed(3)}\n${new Date(f.time).toLocaleString()}`}
+                      style={{ width: 7, height: 16, borderRadius: 2, background: f.side === 'B' ? 'var(--green)' : 'var(--red)', opacity: 0.8 }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Cumulative flow chart for selected range */}
+            {w.fills.length >= 2 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 6 }}>Cumulative flow · {selectedRange}</div>
+                <svg viewBox="0 0 600 100" preserveAspectRatio="none" style={{ width: '100%', height: 80, display: 'block' }}
+                  dangerouslySetInnerHTML={{ __html: buildHypeFlowSvg(w.fills) }} />
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ color: 'var(--ink-mute)', fontSize: 13, padding: '20px 0' }}>No HYPE trades in this window</div>
+        )}
+      </div>
 
       {/* Fill history table */}
       <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>
-          Spot HYPE Trade History ({allHypeFills.length})
+          Spot HYPE Trades · {selectedRange} ({w.fills.length})
         </div>
         <Table
           headers={['Time', 'Side', 'Price', 'Size', 'USD', 'Direction', 'Closed PnL']}
           alignRight={[2, 3, 4, 6]}
-          empty="No fills"
-          rows={[...allHypeFills].sort((a, b) => b.time - a.time).slice(0, 200).map(f => {
+          empty="No fills in this range"
+          rows={[...w.fills].sort((a, b) => b.time - a.time).map(f => {
             const usd = parseFloat(f.px) * parseFloat(f.sz)
             const cpnl = parseFloat(f.closedPnl || '0')
             return [
@@ -1258,6 +1278,7 @@ function HLTraderDashboard() {
   const [evmLoading, setEvmLoading] = useState(false)
   const [evmError, setEvmError] = useState<string | null>(null)
   const [tradeFilter, setTradeFilter] = useState<'perps' | 'spot'>('perps')
+  const [showAllOrders, setShowAllOrders] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
 
@@ -1336,6 +1357,8 @@ function HLTraderDashboard() {
   const subs = data?.subAccounts ?? []
   const fundingPayments = data?.userFunding ?? []
   const historicalOrders = data?.historicalOrders ?? []
+  const twapOrders = data?.twapOrders ?? []
+  const twapHistory = data?.twapHistory ?? []
 
   const perpEquity = parseFloat(data?.perps.marginSummary.accountValue ?? '0')
   const spotEquity = spotBalances.reduce((s, b) => {
@@ -1354,7 +1377,7 @@ function HLTraderDashboard() {
     { id: 'overview',     label: 'Overview' },
     { id: 'positions',    label: 'Positions',    count: positions.length },
     { id: 'spot',         label: 'Spot',         count: spotBalances.length },
-    { id: 'orders',       label: 'Orders',       count: orders.length },
+    { id: 'orders',       label: 'Orders',       count: orders.length + twapOrders.length },
     { id: 'trades',       label: 'Trades',       count: fills.length },
     { id: 'funding',      label: 'Funding',      count: fundingPayments.length },
     { id: 'transactions', label: 'Transactions', count: ledger.length },
@@ -1643,13 +1666,43 @@ function HLTraderDashboard() {
           {/* Orders */}
           {tab === 'orders' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* Active TWAP orders */}
+              {twapOrders.length > 0 && (
+                <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>Active TWAP Orders</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: 'rgba(59,130,246,0.1)', color: 'var(--blue)', borderRadius: 4, padding: '2px 7px' }}>{twapOrders.length}</span>
+                  </div>
+                  <Table
+                    headers={['Symbol', 'Side', 'Total Size', 'Executed', 'Exec. Notional', 'Duration', 'Randomize', 'Time']}
+                    alignRight={[2, 3, 4]}
+                    empty="No active TWAP orders"
+                    rows={[...twapOrders].sort((a, b) => b.timestamp - a.timestamp).map(o => {
+                      const pct = parseFloat(o.sz) > 0 ? (parseFloat(o.executedSz) / parseFloat(o.sz) * 100) : 0
+                      return [
+                        <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
+                        <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{o.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                        fmtNum(o.sz),
+                        <span key="exec" style={{ color: 'var(--ink-soft)' }}>{fmtNum(o.executedSz)} <span style={{ fontSize: 11, opacity: 0.6 }}>({pct.toFixed(1)}%)</span></span>,
+                        fmtUsd(o.executedNtl),
+                        `${o.minutes}m`,
+                        o.randomize ? <span key="rand" style={{ color: 'var(--amber)', fontSize: 11 }}>Yes</span> : '—',
+                        fmtTime(o.timestamp),
+                      ]
+                    })}
+                  />
+                </div>
+              )}
+
+              {/* Open limit/stop orders */}
               <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Open Orders ({orders.length})</div>
                 <Table
                   headers={['Symbol', 'Side', 'Size', 'Filled', 'Limit Price', 'Time']}
                   alignRight={[2, 3, 4]}
                   empty="No open orders"
-                  rows={orders.map(o => {
+                  rows={[...orders].sort((a, b) => b.timestamp - a.timestamp).map(o => {
                     const filled = parseFloat(o.origSz) - parseFloat(o.sz)
                     return [
                       <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
@@ -1662,6 +1715,42 @@ function HLTraderDashboard() {
                   })}
                 />
               </div>
+
+              {/* Historical TWAP orders */}
+              {twapHistory.length > 0 && (
+                <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>TWAP History ({twapHistory.length})</div>
+                  <Table
+                    headers={['Symbol', 'Side', 'Total Size', 'Executed', 'Exec. Notional', 'Duration', 'Status', 'Time']}
+                    alignRight={[2, 3, 4]}
+                    empty="No TWAP history"
+                    rows={[...twapHistory].sort((a, b) => b.time - a.time).slice(0, showAllOrders ? undefined : 100).map(entry => {
+                      const o = entry.state
+                      const pct = parseFloat(o.sz) > 0 ? (parseFloat(o.executedSz) / parseFloat(o.sz) * 100) : 0
+                      const st = entry.status.status
+                      return [
+                        <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
+                        <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{o.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                        fmtNum(o.sz),
+                        <span key="exec">{fmtNum(o.executedSz)} <span style={{ fontSize: 11, opacity: 0.6 }}>({pct.toFixed(1)}%)</span></span>,
+                        fmtUsd(o.executedNtl),
+                        `${o.minutes}m`,
+                        <span key="st" style={{ fontSize: 11, fontWeight: 600, textTransform: 'capitalize', color: st === 'finished' ? 'var(--green)' : st === 'terminated' ? 'var(--red)' : 'var(--ink-soft)', background: st === 'finished' ? 'rgba(34,197,94,0.08)' : st === 'terminated' ? 'rgba(244,63,94,0.08)' : 'var(--rule-soft)', borderRadius: 4, padding: '2px 7px' }}>{st}</span>,
+                        fmtTime(entry.time),
+                      ]
+                    })}
+                  />
+                  {twapHistory.length > 100 && (
+                    <div style={{ padding: '10px 16px', borderTop: '1px solid var(--rule-soft)', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setShowAllOrders(v => !v)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 12px' }}>
+                        {showAllOrders ? 'Show less' : `Show all ${twapHistory.length}`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Order history */}
               {historicalOrders.length > 0 && (
                 <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Order History ({historicalOrders.length})</div>
@@ -1669,7 +1758,7 @@ function HLTraderDashboard() {
                     headers={['Symbol', 'Side', 'Size', 'Limit Price', 'Status', 'Time']}
                     alignRight={[2, 3]}
                     empty="No historical orders"
-                    rows={historicalOrders.slice(0, 200).map(o => [
+                    rows={[...historicalOrders].sort((a, b) => b.timestamp - a.timestamp).slice(0, showAllOrders ? undefined : 200).map(o => [
                       <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
                       <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{o.side === 'B' ? 'Buy' : 'Sell'}</span>,
                       fmtNum(o.origSz),
@@ -1680,6 +1769,13 @@ function HLTraderDashboard() {
                       fmtTime(o.timestamp),
                     ])}
                   />
+                  {historicalOrders.length > 200 && (
+                    <div style={{ padding: '10px 16px', borderTop: '1px solid var(--rule-soft)', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setShowAllOrders(v => !v)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 12px' }}>
+                        {showAllOrders ? 'Show less' : `Show all ${historicalOrders.length}`}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1687,8 +1783,8 @@ function HLTraderDashboard() {
 
           {/* Trades */}
           {tab === 'trades' && (() => {
-            const perpFills = fills.filter(f => !f.coin.startsWith('@'))
-            const spotFills = fills.filter(f => f.coin.startsWith('@'))
+            const perpFills = [...fills.filter(f => !f.coin.startsWith('@'))].sort((a, b) => b.time - a.time)
+            const spotFills = [...fills.filter(f => f.coin.startsWith('@'))].sort((a, b) => b.time - a.time)
             const shown = tradeFilter === 'perps' ? perpFills : spotFills
 
             return (
@@ -1769,7 +1865,7 @@ function HLTraderDashboard() {
                 headers={['Type', 'Amount', 'Time', 'Hash']}
                 alignRight={[1]}
                 empty="No transactions in last 90 days"
-                rows={ledger.map(l => [
+                rows={[...ledger].sort((a, b) => b.time - a.time).map(l => [
                   <span key="type" style={{ fontWeight: 600, textTransform: 'capitalize' }}>{l.delta.type.replace(/_/g, ' ')}</span>,
                   l.delta.usdc
                     ? <span key="amt" style={{ color: parseFloat(l.delta.usdc) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtUsd(l.delta.usdc)}</span>
@@ -1925,7 +2021,7 @@ function HLTraderDashboard() {
                       headers={['Dir', 'Token', 'Amount', 'From / To', 'Block', 'TX']}
                       alignRight={[2, 4]}
                       empty="No ERC-20 transfers found in recent blocks"
-                      rows={evmData.transfers.map(t => [
+                      rows={[...evmData.transfers].sort((a, b) => b.blockNumber - a.blockNumber).map(t => [
                         <span key="dir" style={{ fontSize: 11, fontWeight: 700, color: t.direction === 'in' ? 'var(--green)' : 'var(--red)', background: t.direction === 'in' ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '2px 8px' }}>
                           {t.direction === 'in' ? '↓ IN' : '↑ OUT'}
                         </span>,
