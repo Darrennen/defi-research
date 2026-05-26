@@ -480,6 +480,42 @@ function SectionDivider({ label, sub }: { label: string; sub: string }) {
   )
 }
 
+// ── Liquidation risk ──────────────────────────────────────────────────────────
+
+type LiqRisk = 'critical' | 'high' | 'medium' | 'safe' | 'none'
+
+function liqRisk(markPx: string | undefined, liqPx: string | undefined, isLong: boolean): LiqRisk {
+  if (!markPx || !liqPx) return 'none'
+  const mark = parseFloat(markPx)
+  const liq  = parseFloat(liqPx)
+  if (!mark || !liq || liq <= 0) return 'none'
+  const dist = isLong
+    ? (mark - liq) / mark * 100   // long liquidates below
+    : (liq - mark) / mark * 100   // short liquidates above
+  if (dist < 5)  return 'critical'
+  if (dist < 10) return 'high'
+  if (dist < 20) return 'medium'
+  return 'safe'
+}
+
+const LIQ_RISK_META: Record<LiqRisk, { label: string; color: string; bg: string } | null> = {
+  critical: { label: '⚠ DANGER',  color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  high:     { label: '▲ HIGH',    color: '#f97316', bg: 'rgba(249,115,22,0.10)' },
+  medium:   { label: '~ WATCH',   color: '#eab308', bg: 'rgba(234,179,8,0.10)'  },
+  safe:     { label: '✓ SAFE',    color: 'var(--green)', bg: 'rgba(34,197,94,0.08)' },
+  none:     null,
+}
+
+function LiqBadge({ risk }: { risk: LiqRisk }) {
+  const m = LIQ_RISK_META[risk]
+  if (!m) return <span style={{ color: 'var(--ink-mute)' }}>—</span>
+  return (
+    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: m.color, background: m.bg, borderRadius: 4, padding: '2px 7px', whiteSpace: 'nowrap' }}>
+      {m.label}
+    </span>
+  )
+}
+
 function ViewAllFooter({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <div
@@ -637,6 +673,7 @@ function OverviewPanel({
           {positions.slice(0, 6).map((p, i) => {
             const isLong = parseFloat(p.szi) >= 0
             const ctx = data.assetCtxMap.get(p.coin)
+            const risk = liqRisk(ctx?.markPx, p.liquidationPx ?? undefined, isLong)
             return (
               <div key={p.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(positions.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <CoinIcon symbol={p.coin} size={24} />
@@ -650,6 +687,7 @@ function OverviewPanel({
                     {p.leverage.value}×
                   </span>
                 )}
+                {(risk === 'critical' || risk === 'high') && <LiqBadge risk={risk} />}
                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 13, color: pnlColor(p.unrealizedPnl), fontWeight: 600 }}>
                   {parseFloat(p.unrealizedPnl) >= 0 ? '+' : ''}{fmtUsd(p.unrealizedPnl)}
                 </span>
@@ -1123,53 +1161,77 @@ function HLTraderDashboard() {
           )}
 
           {/* Positions */}
-          {tab === 'positions' && (
-            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
-              <Table
-                headers={['Symbol', 'Side', 'Size', 'Entry', 'Mark Value', 'Unr. PnL / ROE', 'Leverage', 'Liq. Price', 'Fund Rate / Cum.', 'OI', '24h Vol']}
-                alignRight={[2, 3, 4, 5, 7, 8, 9, 10]}
-                empty="No open positions"
-                rows={positions.map(p => {
-                  const size = parseFloat(p.szi)
-                  const isLong = size >= 0
-                  const ctx = data.assetCtxMap.get(p.coin)
-                  const fundingRate = ctx?.funding ?? '0'
-                  const dir = ctx ? fundingDirection(p.szi, fundingRate) : 'neutral'
-                  const rateNum = parseFloat(fundingRate) * 100
-                  const annNum = parseFloat(fundingRate) * 3 * 365 * 100
-                  const pxChange = ctx ? fmtPct24h(ctx.markPx, ctx.prevDayPx) : '—'
-                  const pxChgNum = ctx ? (parseFloat(ctx.markPx) - parseFloat(ctx.prevDayPx)) / parseFloat(ctx.prevDayPx) * 100 : 0
-                  return [
-                    <div key="sym" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <CoinIcon symbol={p.coin} />
-                      <div>
-                        <div style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>{p.coin}</div>
-                        <div style={{ fontSize: 11, color: pxChgNum >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>{pxChange}</div>
-                      </div>
-                    </div>,
-                    <span key="side" style={{ color: isLong ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{isLong ? 'Long' : 'Short'}</span>,
-                    fmtNum(Math.abs(size)),
-                    fmtUsd(p.entryPx),
-                    fmtUsd(p.positionValue),
-                    <div key="pnl" style={{ textAlign: 'right' }}>
-                      <div style={{ color: pnlColor(p.unrealizedPnl) }}>{fmtUsd(p.unrealizedPnl)}</div>
-                      <div style={{ fontSize: 11, color: pnlColor(p.returnOnEquity), marginTop: 2 }}>{fmtPct(p.returnOnEquity)}</div>
-                    </div>,
-                    `${p.leverage.value}× ${p.leverage.type}`,
-                    p.liquidationPx ? fmtUsd(p.liquidationPx) : '—',
-                    <div key="fund" style={{ textAlign: 'right' }}>
-                      <div style={{ color: dir === 'receiving' ? 'var(--green)' : dir === 'paying' ? 'var(--red)' : 'var(--ink)', fontSize: 12 }}>
-                        {rateNum >= 0 ? '+' : ''}{rateNum.toFixed(4)}% <span style={{ color: 'var(--ink-mute)', fontSize: 10 }}>({annNum >= 0 ? '+' : ''}{annNum.toFixed(1)}%yr)</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: pnlColor(p.cumFunding.sinceOpen), marginTop: 2 }}>{fmtUsd(p.cumFunding.sinceOpen)}</div>
-                    </div>,
-                    ctx ? fmtUsd(parseFloat(ctx.openInterest) * parseFloat(ctx.markPx)) : '—',
-                    ctx ? fmtUsd(ctx.dayNtlVlm) : '—',
-                  ]
-                })}
-              />
-            </div>
-          )}
+          {tab === 'positions' && (() => {
+            const atRisk = positions.filter(p => {
+              const ctx = data.assetCtxMap.get(p.coin)
+              const r = liqRisk(ctx?.markPx, p.liquidationPx ?? undefined, parseFloat(p.szi) >= 0)
+              return r === 'critical' || r === 'high'
+            })
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {atRisk.length > 0 && (
+                  <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 16 }}>⚠</span>
+                    <span style={{ fontWeight: 700, color: '#ef4444', fontSize: 13 }}>{atRisk.length} position{atRisk.length > 1 ? 's' : ''} near liquidation:</span>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{atRisk.map(p => p.coin).join(' · ')}</span>
+                  </div>
+                )}
+                <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                  <Table
+                    headers={['Symbol', 'Side', 'Size', 'Entry', 'Mark Value', 'Unr. PnL / ROE', 'Leverage', 'Liq. Price', 'Risk', 'Fund Rate / Cum.', 'OI', '24h Vol']}
+                    alignRight={[2, 3, 4, 5, 7, 9, 10, 11]}
+                    empty="No open positions"
+                    rows={positions.map(p => {
+                      const size = parseFloat(p.szi)
+                      const isLong = size >= 0
+                      const ctx = data.assetCtxMap.get(p.coin)
+                      const fundingRate = ctx?.funding ?? '0'
+                      const dir = ctx ? fundingDirection(p.szi, fundingRate) : 'neutral'
+                      const rateNum = parseFloat(fundingRate) * 100
+                      const annNum = parseFloat(fundingRate) * 3 * 365 * 100
+                      const pxChange = ctx ? fmtPct24h(ctx.markPx, ctx.prevDayPx) : '—'
+                      const pxChgNum = ctx ? (parseFloat(ctx.markPx) - parseFloat(ctx.prevDayPx)) / parseFloat(ctx.prevDayPx) * 100 : 0
+                      const risk = liqRisk(ctx?.markPx, p.liquidationPx ?? undefined, isLong)
+                      const liqDistPct = ctx && p.liquidationPx
+                        ? Math.abs(parseFloat(ctx.markPx) - parseFloat(p.liquidationPx)) / parseFloat(ctx.markPx) * 100
+                        : null
+                      return [
+                        <div key="sym" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <CoinIcon symbol={p.coin} />
+                          <div>
+                            <div style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>{p.coin}</div>
+                            <div style={{ fontSize: 11, color: pxChgNum >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>{pxChange}</div>
+                          </div>
+                        </div>,
+                        <span key="side" style={{ color: isLong ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{isLong ? 'Long' : 'Short'}</span>,
+                        fmtNum(Math.abs(size)),
+                        fmtUsd(p.entryPx),
+                        fmtUsd(p.positionValue),
+                        <div key="pnl" style={{ textAlign: 'right' }}>
+                          <div style={{ color: pnlColor(p.unrealizedPnl) }}>{fmtUsd(p.unrealizedPnl)}</div>
+                          <div style={{ fontSize: 11, color: pnlColor(p.returnOnEquity), marginTop: 2 }}>{fmtPct(p.returnOnEquity)}</div>
+                        </div>,
+                        `${p.leverage.value}× ${p.leverage.type}`,
+                        <div key="liq" style={{ textAlign: 'right' }}>
+                          <div>{p.liquidationPx ? fmtUsd(p.liquidationPx) : '—'}</div>
+                          {liqDistPct !== null && <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>{liqDistPct.toFixed(1)}% away</div>}
+                        </div>,
+                        <LiqBadge key="risk" risk={risk} />,
+                        <div key="fund" style={{ textAlign: 'right' }}>
+                          <div style={{ color: dir === 'receiving' ? 'var(--green)' : dir === 'paying' ? 'var(--red)' : 'var(--ink)', fontSize: 12 }}>
+                            {rateNum >= 0 ? '+' : ''}{rateNum.toFixed(4)}% <span style={{ color: 'var(--ink-mute)', fontSize: 10 }}>({annNum >= 0 ? '+' : ''}{annNum.toFixed(1)}%yr)</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: pnlColor(p.cumFunding.sinceOpen), marginTop: 2 }}>{fmtUsd(p.cumFunding.sinceOpen)}</div>
+                        </div>,
+                        ctx ? fmtUsd(parseFloat(ctx.openInterest) * parseFloat(ctx.markPx)) : '—',
+                        ctx ? fmtUsd(ctx.dayNtlVlm) : '—',
+                      ]
+                    })}
+                  />
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Spot */}
           {tab === 'spot' && (
