@@ -12,6 +12,22 @@ async function rpc<T>(method: string, params: unknown[]): Promise<T> {
   return d.result
 }
 
+// Batch eth_call — single HTTP round-trip for many read calls, avoiding rate-limit drops
+async function batchEthCall(calls: Array<{ to: string; data: string }>): Promise<string[]> {
+  if (calls.length === 0) return []
+  const batch = calls.map((call, i) => ({ jsonrpc: '2.0', id: i, method: 'eth_call', params: [call, 'latest'] }))
+  const r = await fetch(HEVM_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(batch),
+  })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  const results: Array<{ id: number; result?: string }> = await r.json()
+  const out = new Array<string>(calls.length).fill('0x0')
+  for (const res of results) { if (res.result) out[res.id] = res.result }
+  return out
+}
+
 // ── ABI helpers ───────────────────────────────────────────────────────────────
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
@@ -127,34 +143,26 @@ export const KNOWN_TOKENS: { address: string; symbol: string; name: string; deci
   { address: '0x0aD339d66BF4AeD5ce31c64Bc37B3244b6394A77', symbol: 'USR',     name: 'Resolv USD',         decimals: 18, protocol: 'Resolv'      },
   { address: '0xb50A96253aBDF803D85efcDce07Ad8becBc52BD5', symbol: 'USDHL',   name: 'Hyper USD',          decimals: 6,  protocol: 'HyperLend'   },
   { address: '0x111111a1a0667d36bD57c0A9f569b98057111111', symbol: 'USDH',    name: 'Paxos USDH',         decimals: 6,  protocol: 'Paxos'       },
-  // Kinetiq
-  { address: '0xfD739d4e423301CE9385c1fb8850539D657C296D', symbol: 'kHYPE',   name: 'Kinetiq Staked HYPE', decimals: 18, protocol: 'Kinetiq'    },
-  { address: '0x360C140E5344A1A0593D44B4ea6Fc7C3DAf0C473', symbol: 'kmHYPE',  name: 'Kinetiq Markets',    decimals: 18, protocol: 'Kinetiq'     },
-  { address: '0x86d96fF0E78Dba9570b00f75807ce21213a19f3d', symbol: 'flowHYPE',name: 'Flowdesk HYPE',      decimals: 18, protocol: 'Kinetiq'     },
-  { address: '0x4f322145aBedb2b39f69e7d4531AB4B2e6483154', symbol: 'HiHYPE',  name: 'Hyperion HYPE',      decimals: 18, protocol: 'Kinetiq'     },
+  // Kinetiq — only kHYPE address is on-chain verified; others removed pending confirmation
+  { address: '0xfD739d4e423301CE9385c1fb8850539D657C296D', symbol: 'kHYPE',   name: 'Kinetiq Staked HYPE', decimals: 18, protocol: 'Kinetiq'   },
   // StakedHYPE
-  { address: '0xfFaa4a3D97fE9107Cef8a3F48c069F577Ff76cC1', symbol: 'stHYPE',  name: 'Staked HYPE',        decimals: 18, protocol: 'StakedHYPE'  },
-  { address: '0x94e8396e0869c9F2200760aF0621aFd240E1CF38', symbol: 'wstHYPE', name: 'Wrapped stHYPE',     decimals: 18, protocol: 'StakedHYPE'  },
+  { address: '0xfFaa4a3D97fE9107Cef8a3F48c069F577Ff76cC1', symbol: 'stHYPE',  name: 'Staked HYPE',        decimals: 18, protocol: 'StakedHYPE' },
+  { address: '0x94e8396e0869c9F2200760aF0621aFd240E1CF38', symbol: 'wstHYPE', name: 'Wrapped stHYPE',     decimals: 18, protocol: 'StakedHYPE' },
   // Felix CDP
-  { address: '0x02c6a2fa58cc01a18b8d9e00ea48d65e4df26c70', symbol: 'feUSD',   name: 'Felix USD',          decimals: 18, protocol: 'Felix'       },
+  { address: '0x02c6a2fa58cc01a18b8d9e00ea48d65e4df26c70', symbol: 'feUSD',   name: 'Felix USD',          decimals: 18, protocol: 'Felix'      },
   // Hyperstable
-  { address: '0x8ff0dd9f9c40a0d76ef1bcfaf5f98c1610c74bd8', symbol: 'USH',     name: 'Hyperstable USD',    decimals: 18, protocol: 'Hyperstable'  },
-  // Hyperbeat
-  { address: '0x81e064d0eB539de7c3170EDF38C1A42CBd752A76', symbol: 'lstHYPE', name: 'Hyperbeat LST',      decimals: 18, protocol: 'Hyperbeat'   },
-  { address: '0xd8FC8F0b03eBA61F64D08B0bef69d80916E5DdA9', symbol: 'beHYPE',  name: 'Hyperbeat x ef HYPE',decimals: 18, protocol: 'Hyperbeat'   },
-  { address: '0x96C6cBB6251Ee1c257b2162ca0f39AA5Fa44B1FB', symbol: 'hbHYPE',  name: 'Hyperbeat Ultra',    decimals: 18, protocol: 'Hyperbeat'   },
-  { address: '0x5e105266db42f78FA814322Bce7f388B4C2e61eb', symbol: 'hbUSDT',  name: 'Hyperbeat USDT',     decimals: 6,  protocol: 'Hyperbeat'   },
-  // HyperLend
-  { address: '0xbd6dab50f03a305a80037294fa8d1a9dc0cac91b', symbol: 'HPL',     name: 'HyperLend Token',    decimals: 18, protocol: 'HyperLend'   },
+  { address: '0x8ff0dd9f9c40a0d76ef1bcfaf5f98c1610c74bd8', symbol: 'USH',     name: 'Hyperstable USD',    decimals: 18, protocol: 'Hyperstable' },
+  // Hyperbeat — only verified two; others removed pending address confirmation
+  { address: '0x81e064d0eB539de7c3170EDF38C1A42CBd752A76', symbol: 'lstHYPE', name: 'Hyperbeat LST',      decimals: 18, protocol: 'Hyperbeat'  },
+  { address: '0xd8FC8F0b03eBA61F64D08B0bef69d80916E5DdA9', symbol: 'beHYPE',  name: 'Hyperbeat efHYPE',   decimals: 18, protocol: 'Hyperbeat'  },
+  // HyperLend governance
+  { address: '0xbd6dab50f03a305a80037294fa8d1a9dc0cac91b', symbol: 'HPL',     name: 'HyperLend Token',    decimals: 18, protocol: 'HyperLend'  },
   // Morpho vaults
-  { address: '0x242572d6f1AF7111bcA807ECDd0f74108cEAeD5d', symbol: 'mUSDT',   name: 'Morpho USDT Vault',  decimals: 6,  protocol: 'Morpho'      },
-  { address: '0x9FA2074E43ef6F6dB4a1bB5eeB72e4bc8558bFDe', symbol: 'mUSDC',   name: 'Morpho USDC Vault',  decimals: 6,  protocol: 'Morpho'      },
+  { address: '0x242572d6f1AF7111bcA807ECDd0f74108cEAeD5d', symbol: 'mUSDT',   name: 'Morpho USDT Vault',  decimals: 6,  protocol: 'Morpho'     },
+  { address: '0x9FA2074E43ef6F6dB4a1bB5eeB72e4bc8558bFDe', symbol: 'mUSDC',   name: 'Morpho USDC Vault',  decimals: 6,  protocol: 'Morpho'     },
   // Misc
-  { address: '0xE6829d9a7eE3040e1276Fa75293Bde931859e8fA', symbol: 'cmETH',   name: 'cmETH',              decimals: 18, protocol: 'Native'      },
-  { address: '0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a', symbol: 'thBILL',  name: 'T-Bill Token',       decimals: 18, protocol: 'TradFi'      },
-  { address: '0x9FD7466f987Fd4C45a5BBDe22ED8aba5BC8D72d1', symbol: 'hwHLP',   name: 'Hyperwave HLP',      decimals: 18, protocol: 'Hyperwave'   },
-  { address: '0x9ab96A4668456896d45c301Bc3A15Cee76AA7B8D', symbol: 'rUSDC',   name: 'Relend USDC',        decimals: 6,  protocol: 'Relend'      },
-  { address: '0xf44f49e6577b3934f981c6f0629d15154d2606e6', symbol: 'hXXI',    name: 'D2 XXI BTC Vault',   decimals: 18, protocol: 'D2.Finance'  },
+  { address: '0xE6829d9a7eE3040e1276Fa75293Bde931859e8fA', symbol: 'cmETH',   name: 'cmETH',              decimals: 18, protocol: 'Native'     },
+  { address: '0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a', symbol: 'thBILL',  name: 'T-Bill Token',       decimals: 18, protocol: 'TradFi'     },
 ]
 
 // ── Protocol position readers ─────────────────────────────────────────────────
@@ -253,32 +261,44 @@ export async function fetchEvmWallet(address: string): Promise<EvmWalletData> {
   const tokenAddrs = Array.from(tokenSet)
   const knownMap   = new Map(KNOWN_TOKENS.map(t => [t.address.toLowerCase(), t]))
 
-  // Query balance + metadata for each token in parallel
-  const tokenResults = await Promise.all(tokenAddrs.map(async ta => {
-    const known = knownMap.get(ta)
-    const balResult = await rpc<string>('eth_call', [{ to: ta, data: balanceOfData(addr) }, 'latest']).catch(() => '0x0')
-    const bal = decodeBigInt(balResult)
-    if (bal === 0n) return null
+  // Batch all balanceOf calls in one request to avoid rate-limit drops
+  const balanceCalls = tokenAddrs.map(ta => ({ to: ta, data: balanceOfData(addr) }))
+  const balanceResults = await batchEthCall(balanceCalls).catch(() => tokenAddrs.map(() => '0x0'))
 
-    let symbol   = known?.symbol   ?? ''
-    let name     = known?.name     ?? ''
-    let decimals = known?.decimals ?? 18
-    const protocol = known?.protocol ?? 'Unknown'
-
-    if (!known) {
-      const [symHex, decHex] = await Promise.all([
-        rpc<string>('eth_call', [{ to: ta, data: SEL_SYMBOL   }, 'latest']).catch(() => '0x'),
-        rpc<string>('eth_call', [{ to: ta, data: SEL_DECIMALS }, 'latest']).catch(() => '0x12'),
-      ])
-      symbol   = decodeAbiString(symHex) || ta.slice(0, 8) + '…'
-      name     = symbol
-      decimals = decodeUint(decHex) || 18
+  // For unknown tokens with non-zero balance, batch symbol+decimals calls
+  const unknownIdxs: number[] = []
+  for (let i = 0; i < tokenAddrs.length; i++) {
+    if (!knownMap.has(tokenAddrs[i]) && decodeBigInt(balanceResults[i]) > 0n) {
+      unknownIdxs.push(i)
     }
+  }
+  const metaCalls = unknownIdxs.flatMap(i => [
+    { to: tokenAddrs[i], data: SEL_SYMBOL },
+    { to: tokenAddrs[i], data: SEL_DECIMALS },
+  ])
+  const metaResults = unknownIdxs.length > 0
+    ? await batchEthCall(metaCalls).catch(() => metaCalls.map(() => '0x'))
+    : []
+  const metaByIdx = new Map<number, { symbol: string; decimals: number }>()
+  for (let j = 0; j < unknownIdxs.length; j++) {
+    const symHex = metaResults[j * 2] ?? '0x'
+    const decHex = metaResults[j * 2 + 1] ?? '0x12'
+    const symbol = decodeAbiString(symHex) || tokenAddrs[unknownIdxs[j]].slice(0, 8) + '…'
+    metaByIdx.set(unknownIdxs[j], { symbol, decimals: decodeUint(decHex) || 18 })
+  }
 
-    return { address: ta, symbol, name, decimals, balance: bal, formatted: Number(bal) / 10 ** decimals, protocol } as EvmToken
-  }))
-
-  const tokens = tokenResults.filter((t): t is EvmToken => t !== null)
+  const tokens: EvmToken[] = []
+  for (let i = 0; i < tokenAddrs.length; i++) {
+    const ta  = tokenAddrs[i]
+    const bal = decodeBigInt(balanceResults[i])
+    if (bal === 0n) continue
+    const known = knownMap.get(ta)
+    const symbol   = known?.symbol   ?? metaByIdx.get(i)?.symbol   ?? ta.slice(0, 8) + '…'
+    const name     = known?.name     ?? symbol
+    const decimals = known?.decimals ?? metaByIdx.get(i)?.decimals ?? 18
+    const protocol = known?.protocol ?? 'Unknown'
+    tokens.push({ address: ta, symbol, name, decimals, balance: bal, formatted: Number(bal) / 10 ** decimals, protocol })
+  }
 
   // Protocol positions (HyperLend, wstHYPE underlying)
   const [hyperLendPositions] = await Promise.all([
