@@ -123,6 +123,42 @@ function LevGauge({ leverage }: { leverage: number }) {
   )
 }
 
+// ── token icon circle ───────────────────────────────────────────────────────────
+
+function TokenIcon({ symbol, icons, size = 28 }: { symbol: string; icons: Record<string, string | null>; size?: number }) {
+  const url = icons[symbol]
+  const initials = symbol.slice(0, 2).toUpperCase()
+  const colors: Record<string, string> = {
+    BTC: '#f7931a', ETH: '#627eea', SOL: '#9945ff', NEAR: '#00c08b',
+    LIT: '#e0ff6b', HYPE: '#7fb8ff', AVAX: '#e84142', ARB: '#28a0f0',
+    OP: '#ff0420', LINK: '#2a5ada', DOGE: '#c3a634', PEPE: '#3d9970',
+  }
+  const bg = colors[symbol] ?? '#2a3035'
+  if (url) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: bg }}>
+        <img src={url} alt={symbol} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e: any) => { e.currentTarget.style.display = 'none' }} />
+      </div>
+    )
+  }
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: Math.round(size * 0.34), fontWeight: 700, color: '#fff', letterSpacing: '-0.03em' }}>
+      {initials}
+    </div>
+  )
+}
+
+// ── size formatter with symbol suffix ─────────────────────────────────────────────────
+
+function fmtSizeWithSym(size: number, baseSym: string): string {
+  const abs = Math.abs(size)
+  const pfx = size < 0 ? '-' : ''
+  if (abs >= 1e9) return pfx + (abs / 1e9).toFixed(2) + 'B ' + baseSym
+  if (abs >= 1e6) return pfx + (abs / 1e6).toFixed(2) + 'M ' + baseSym
+  if (abs >= 1e3) return pfx + (abs / 1e3).toFixed(2) + 'K ' + baseSym
+  return pfx + abs.toFixed(abs < 10 ? 4 : 2) + ' ' + baseSym
+}
+
 // ── flow PnL chart SVG ─────────────────────────────────────────
 
 function buildFlowSvg(trades: HistTrade[], accountIndex: number): { svg: string; lastVal: number } {
@@ -236,6 +272,7 @@ function ExplorerInner() {
   const [expandedPos, setExpandedPos] = useState<number | null>(null)
   const [posCandles, setPosCandles] = useState<Record<number, any[]>>({})
   const [posCandleLoading, setPosCandleLoading] = useState<number | null>(null)
+  const [tokenIcons, setTokenIcons] = useState<Record<string, string | null>>({})
 
   const checkTracked = (idx: number) => {
     try {
@@ -268,6 +305,11 @@ function ExplorerInner() {
       // background fills fetch
       fetchFills(j.l1_address, j.account_index, 0, true)
       fetchLitFlow(j.account_index, j.l1_address)
+      // fetch token icons for positions
+      const posSym = (j.positions ?? []).map((p: any) => p.symbol.replace(/-PERP$/, '').replace(/\/USDC$/, ''))
+      const assetSym = (j.assets ?? []).map((a: any) => a.symbol)
+      const allSym = [...new Set([...posSym, ...assetSym])].join(',')
+      if (allSym) fetch(`/api/lighter/icons?symbols=${encodeURIComponent(allSym)}`).then(r => r.json()).then(setTokenIcons).catch(() => {})
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -539,10 +581,17 @@ function ExplorerInner() {
                         const liqPrice = parseFloat(p.liquidation_price || '0')
                         const markPrice = posVal > 0 && Math.abs(size) > 0 ? posVal / Math.abs(size) : 0
                         const distPct = liqPrice > 0 && markPrice > 0 ? Math.abs(markPrice - liqPrice) / markPrice * 100 : null
+                        const baseSym = p.symbol.replace(/-PERP$/, '').replace(/\/USDC$/, '')
                         return (
-                          <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
-                            <td style={{ padding: '8px 0', fontWeight: 600, color: 'var(--ink)' }}>{p.symbol}</td>
-                            <td style={{ padding: '8px 4px' }}><span className={isLong ? 'pill-buy' : 'pill-sell'}>{isLong ? 'L' : 'S'}</span></td>
+                          <tr key={i} style={{ borderBottom: '1px solid var(--line)', cursor: 'pointer' }}
+                            onClick={() => setActiveTab('positions')}>
+                            <td style={{ padding: '8px 0', width: 36 }}>
+                              <TokenIcon symbol={baseSym} icons={tokenIcons} size={24} />
+                            </td>
+                            <td style={{ padding: '8px 4px' }}>
+                              <div style={{ fontWeight: 600, fontSize: 12 }}>{baseSym}</div>
+                              <div style={{ fontSize: 9, color: 'var(--ink-faint)' }}>{isLong ? 'LONG' : 'SHORT'}</div>
+                            </td>
                             <td style={{ padding: '8px 4px', textAlign: 'right', color: 'var(--ink-dim)', fontSize: 11 }}>{fmtUsd(posVal)}</td>
                             <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }} className={pnl >= 0 ? 'pos' : 'neg'}>{pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}</td>
                             {distPct != null && distPct < 20 && (
@@ -649,8 +698,8 @@ function ExplorerInner() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr>
-                      {['Symbol', 'Side', 'Size', 'Entry', 'Value', 'Unreal PnL', 'Real PnL', 'Liq Price', 'Funding', 'Alloc'].map(h => (
-                        <th key={h} style={{ padding: '10px 16px', textAlign: ['Size', 'Entry', 'Value', 'Unreal PnL', 'Real PnL', 'Liq Price', 'Funding', 'Alloc'].includes(h) ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                      {['Asset', 'Size', 'Value', 'Entry', 'Mark', 'PnL', 'Liq Price'].map(h => (
+                        <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Asset' ? 'left' : 'right', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -659,59 +708,67 @@ function ExplorerInner() {
                       const size = parseFloat(p.position)
                       const isLong = size >= 0
                       const pnl = parseFloat(p.unrealized_pnl || '0')
-                      const rpnl = parseFloat(p.realized_pnl || '0')
                       const posVal = Math.abs(parseFloat(p.position_value || '0'))
-                      const funding = parseFloat(p.total_funding_paid_out || '0')
                       const liqPrice = parseFloat(p.liquidation_price || '0')
+                      const entryPrice = parseFloat(p.avg_entry_price || '0')
                       const markPrice = posVal > 0 && Math.abs(size) > 0 ? posVal / Math.abs(size) : 0
                       const distPct = liqPrice > 0 && markPrice > 0 ? Math.abs(markPrice - liqPrice) / markPrice * 100 : null
                       const distColor = distPct == null ? '' : distPct < 8 ? 'var(--red)' : distPct < 18 ? 'var(--amber)' : 'var(--green)'
-                      const allocPct = portfolio > 0 ? posVal / portfolio * 100 : 0
                       const roe = posVal > 0 ? pnl / posVal * 100 : 0
                       const rowBg = distPct != null && distPct < 8 ? 'rgba(255,90,90,0.04)' : ''
+                      const baseSym = p.symbol.replace(/-PERP$/, '').replace(/\/USDC$/, '')
+                      const priceDecimals = markPrice > 1000 ? 2 : markPrice > 1 ? 4 : 6
                       return (
                         <>
-                        <tr key={i} style={{ borderBottom: '1px solid var(--line)', background: rowBg }}>
-                          <td style={{ padding: '9px 16px', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
-                            onClick={() => {
-                              if (expandedPos === p.market_id) { setExpandedPos(null) }
-                              else { setExpandedPos(p.market_id); loadPosCandles(p.market_id) }
-                            }}>
-                            {p.symbol}
-                            <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 5 }}>{expandedPos === p.market_id ? '▲' : '▼'}</span>
-                          </td>
-                          <td style={{ padding: '9px 16px' }}>
-                            <span className={isLong ? 'pill-buy' : 'pill-sell'}>{isLong ? 'LONG' : 'SHORT'}</span>
-                          </td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} className={isLong ? 'pos' : 'neg'}>{fmtNum(Math.abs(size), 2)}</td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${fmtNum(p.avg_entry_price, 4)}</td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>{fmtUsd(posVal)}</td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
-                            <div className={pnl >= 0 ? 'pos' : 'neg'} style={{ fontWeight: 600 }}>{pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}</div>
-                            {posVal > 0 && <div style={{ fontSize: 10, color: roe >= 0 ? 'var(--green)' : 'var(--red)' }}>{roe >= 0 ? '+' : ''}{roe.toFixed(1)}%</div>}
-                          </td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
-                            {rpnl !== 0
-                              ? <span className={rpnl >= 0 ? 'pos' : 'neg'} style={{ fontVariantNumeric: 'tabular-nums' }}>{rpnl >= 0 ? '+' : ''}{fmtUsd(rpnl)}</span>
-                              : <span style={{ color: 'var(--ink-faint)' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
-                            <div style={{ color: distPct != null && distPct < 8 ? 'var(--red)' : 'var(--ink-dim)' }}>{liqPrice > 0 ? '$' + liqPrice.toFixed(4) : '—'}</div>
-                            {distPct != null && <div style={{ fontSize: 9, color: distColor, marginTop: 2 }}>{distPct.toFixed(1)}% away</div>}
-                          </td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right', color: 'var(--ink-dim)' }}>{funding !== 0 ? fmtUsd(funding) : '—'}</td>
-                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                              <div style={{ width: 48, height: 3, background: 'var(--line)', borderRadius: 2 }}>
-                                <div style={{ height: '100%', width: Math.min(allocPct, 100).toFixed(1) + '%', background: 'var(--blue)', borderRadius: 2 }} />
+                        <tr key={i} style={{ borderBottom: '1px solid var(--line)', background: rowBg, cursor: 'pointer' }}
+                          onClick={() => {
+                            if (expandedPos === p.market_id) { setExpandedPos(null) }
+                            else { setExpandedPos(p.market_id); loadPosCandles(p.market_id) }
+                          }}>
+                          {/* Asset: icon + symbol + side pill */}
+                          <td style={{ padding: '10px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <TokenIcon symbol={baseSym} icons={tokenIcons} size={30} />
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontWeight: 700, fontSize: 13 }}>{baseSym}</span>
+                                  <span className={isLong ? 'pill-buy' : 'pill-sell'} style={{ fontSize: 9, padding: '1px 5px' }}>{isLong ? 'LONG' : 'SHORT'}</span>
+                                  <span style={{ fontSize: 8, color: 'var(--ink-faint)', letterSpacing: '0.06em' }}>{expandedPos === p.market_id ? '▲' : '▼'}</span>
+                                </div>
+                                <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{p.symbol}</div>
                               </div>
-                              <span style={{ fontSize: 11, color: 'var(--ink-dim)', minWidth: 30, textAlign: 'right' }}>{allocPct.toFixed(1)}%</span>
                             </div>
+                          </td>
+                          {/* Size with token suffix */}
+                          <td style={{ padding: '10px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            <div className={isLong ? 'pos' : 'neg'} style={{ fontWeight: 600 }}>{fmtSizeWithSym(size, baseSym)}</div>
+                          </td>
+                          {/* Value */}
+                          <td style={{ padding: '10px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(posVal)}</td>
+                          {/* Entry */}
+                          <td style={{ padding: '10px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--ink-dim)' }}>
+                            ${entryPrice.toLocaleString('en-US', { minimumFractionDigits: priceDecimals, maximumFractionDigits: priceDecimals })}
+                          </td>
+                          {/* Mark */}
+                          <td style={{ padding: '10px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            ${markPrice > 0 ? markPrice.toLocaleString('en-US', { minimumFractionDigits: priceDecimals, maximumFractionDigits: priceDecimals }) : '—'}
+                          </td>
+                          {/* PnL */}
+                          <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                            <div className={pnl >= 0 ? 'pos' : 'neg'} style={{ fontWeight: 700 }}>{pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}</div>
+                            {posVal > 0 && <div style={{ fontSize: 10, color: roe >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 1 }}>{roe >= 0 ? '+' : ''}{roe.toFixed(2)}%</div>}
+                          </td>
+                          {/* Liq Price */}
+                          <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                            <div style={{ color: distPct != null && distPct < 8 ? 'var(--red)' : 'var(--ink-dim)', fontVariantNumeric: 'tabular-nums' }}>
+                              {liqPrice > 0 ? '$' + liqPrice.toLocaleString('en-US', { minimumFractionDigits: priceDecimals, maximumFractionDigits: priceDecimals }) : '—'}
+                            </div>
+                            {distPct != null && <div style={{ fontSize: 9, color: distColor, marginTop: 2 }}>{distPct.toFixed(1)}% away</div>}
                           </td>
                         </tr>
                         {expandedPos === p.market_id && (
                           <tr key={`chart-${p.market_id}`}>
-                            <td colSpan={10} style={{ padding: 0, background: 'var(--paper-2)', borderBottom: '1px solid var(--line)' }}>
+                            <td colSpan={7} style={{ padding: 0, background: 'var(--paper-2)', borderBottom: '1px solid var(--line)' }}>
                               <div style={{ padding: '12px 16px' }}>
                                 <div style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
                                   {p.symbol} · 1h chart
@@ -743,7 +800,7 @@ function ExplorerInner() {
                       )
                     })}
                     {!positions.length && (
-                      <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--ink-faint)' }}>no open positions</td></tr>
+                      <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: 'var(--ink-faint)' }}>no open positions</td></tr>
                     )}
                   </tbody>
                 </table>
