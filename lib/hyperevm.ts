@@ -165,12 +165,21 @@ export const KNOWN_TOKENS: { address: string; symbol: string; name: string; deci
   // Morpho vaults
   { address: '0x242572d6f1AF7111bcA807ECDd0f74108cEAeD5d', symbol: 'mUSDT',   name: 'Morpho USDT Vault',   decimals: 6,  protocol: 'Morpho'     },
   { address: '0x9FA2074E43ef6F6dB4a1bB5eeB72e4bc8558bFDe', symbol: 'mUSDC',   name: 'Morpho USDC Vault',   decimals: 6,  protocol: 'Morpho'     },
+  // Nest
+  { address: '0x07c57e32a3c29d5659bda1d3efc2e7bf004e3035', symbol: 'NEST',    name: 'Nest',                decimals: 18, protocol: 'Nest'       },
+  // Kinetiq governance
+  { address: '0x000000000000780555bd0bca3791f89f9542c2d6', symbol: 'KNTQ',    name: 'Kinetiq Token',       decimals: 18, protocol: 'Kinetiq'    },
   // Misc
   { address: '0xE6829d9a7eE3040e1276Fa75293Bde931859e8fA', symbol: 'cmETH',   name: 'cmETH',               decimals: 18, protocol: 'Native'     },
   { address: '0xfDD22Ce6D1F66bc0Ec89b20BF16CcB6670F55A5a', symbol: 'thBILL',  name: 'T-Bill Token',        decimals: 18, protocol: 'TradFi'     },
   { address: '0x9FD7466f987Fd4C45a5BBDe22ED8aba5BC8D72d1', symbol: 'hwHLP',   name: 'Hyperwave HLP',       decimals: 18, protocol: 'Hyperwave'  },
   { address: '0x9ab96A4668456896d45c301Bc3A15Cee76AA7B8D', symbol: 'rUSDC',   name: 'Relend USDC',         decimals: 6,  protocol: 'Relend'     },
   { address: '0xf44f49e6577b3934f981c6f0629d15154d2606e6', symbol: 'hXXI',    name: 'D2 XXI BTC Vault',    decimals: 18, protocol: 'D2.Finance' },
+  { address: '0x0e01e3afd147c7f079ea19d0eca166ad3a22e79d', symbol: 'HWAVE',   name: 'Hyperwave',           decimals: 18, protocol: 'Hyperwave'  },
+  // Institutional LSTs
+  { address: '0x8599F2eFA5064C666B920E71381b5aaBc7Bb27F6', symbol: 'asxnHYPE', name: 'Asymmetrix HYPE',     decimals: 18, protocol: 'Asymmetrix' },
+  { address: '0x498edC41Fa92530920a95483dea7a6CCe91F1C5c', symbol: 'hylqHYPE', name: 'Hyperliquid LST',     decimals: 18, protocol: 'Hyperion'   },
+  { address: '0x74323CD0Db2FD826CadCc90153995F1E2b1d0801', symbol: 'GhostLST', name: 'Ghost LST HYPE',      decimals: 18, protocol: 'Ghost'      },
 ]
 
 // ── Protocol position readers ─────────────────────────────────────────────────
@@ -220,9 +229,24 @@ async function getHyperLendPositions(user: string): Promise<EvmProtocolPosition[
 // Function selector: keccak256("getCompoundedBoldDeposit(address)") — Felix uses feUSD so might differ
 // Use balanceOf on feUSD token directly (simpler & accurate for wallet holdings)
 
-// Kinetiq — kHYPE is an ERC-20 so balanceOf covers it
-// wstHYPE — ERC-4626, balanceOf + convertToAssets for underlying
+// Kinetiq StakingAccountant — kHYPEToHYPE(uint256) converts token balance → underlying HYPE
+// kHYPE accountant: 0x9209648Ec9D448EF57116B73A2f081835643dc7A
+// kmHYPE accountant: 0x5901e744759561C63309865Ef8822aBb041655E2
+// Both expose kHYPEToHYPE(uint256) with selector 0x759bc2fc
+const SEL_KHYPE_TO_HYPE = '0x759bc2fc'
+const KHYPE_ACCOUNTANT  = '0x9209648Ec9D448EF57116B73A2f081835643dc7A'
+const KMHYPE_ACCOUNTANT = '0x5901e744759561C63309865Ef8822aBb041655E2'
 
+async function getKinetiqUnderlying(accountant: string, tokenBalance: bigint): Promise<number> {
+  if (tokenBalance === 0n) return 0
+  try {
+    const data = SEL_KHYPE_TO_HYPE + tokenBalance.toString(16).padStart(64, '0')
+    const res = await rpc<string>('eth_call', [{ to: accountant, data }, 'latest'])
+    return Number(decodeBigInt(res)) / 1e18
+  } catch { return 0 }
+}
+
+// wstHYPE — ERC-4626, balanceOf + convertToAssets for underlying
 const SEL_CONVERT_TO_ASSETS = '0x07a2d13a' // convertToAssets(uint256)
 
 async function getWstHypeUnderlying(user: string, balance: bigint): Promise<number> {
@@ -252,8 +276,8 @@ export async function fetchEvmWallet(address: string): Promise<EvmWalletData> {
   const nativeBalance = decodeBigInt(balHex)
   const txCount       = parseInt(nonceHex, 16)
 
-  // Discover tokens via ERC-20 Transfer events (~100k blocks ≈ 2–3 days)
-  const fromBlock   = '0x' + Math.max(0, blockNumber - 100_000).toString(16)
+  // HyperEVM RPC hard-limits eth_getLogs to 1000 blocks per query (~33 min)
+  const fromBlock   = '0x' + Math.max(0, blockNumber - 1000).toString(16)
   const paddedAddr  = padAddr(addr)
 
   const [sentLogs, recvLogs] = await Promise.all([
@@ -320,19 +344,35 @@ export async function fetchEvmWallet(address: string): Promise<EvmWalletData> {
     }
   }
 
-  // Protocol positions (HyperLend, wstHYPE underlying)
-  const [hyperLendPositions] = await Promise.all([
+  // Protocol positions — batch independent calls where possible
+  const kHypeToken  = tokens.find(t => t.symbol === 'kHYPE')
+  const kmHypeToken = tokens.find(t => t.symbol === 'kmHYPE')
+  const wstHypeToken = tokens.find(t => t.symbol === 'wstHYPE')
+
+  const [hyperLendPositions, kHypeUnderlying, kmHypeUnderlying, wstHypeUnderlying] = await Promise.all([
     getHyperLendPositions(addr).catch(() => [] as EvmProtocolPosition[]),
+    kHypeToken  ? getKinetiqUnderlying(KHYPE_ACCOUNTANT,  kHypeToken.balance).catch(() => 0)  : Promise.resolve(0),
+    kmHypeToken ? getKinetiqUnderlying(KMHYPE_ACCOUNTANT, kmHypeToken.balance).catch(() => 0) : Promise.resolve(0),
+    wstHypeToken ? getWstHypeUnderlying(addr, wstHypeToken.balance).catch(() => wstHypeToken.formatted) : Promise.resolve(0),
   ])
 
-  // Add wstHYPE as a vault position if held
-  const wstHypeToken = tokens.find(t => t.symbol === 'wstHYPE')
   const vaultPositions: EvmProtocolPosition[] = []
-  if (wstHypeToken && wstHypeToken.balance > 0n) {
-    const underlying = await getWstHypeUnderlying(addr, wstHypeToken.balance).catch(() => wstHypeToken.formatted)
+  if (kHypeToken && kHypeToken.balance > 0n && kHypeUnderlying > 0) {
+    vaultPositions.push({
+      protocol: 'Kinetiq', type: 'stake', asset: 'kHYPE → HYPE',
+      decimals: 18, amount: kHypeUnderlying, raw: kHypeToken.balance,
+    })
+  }
+  if (kmHypeToken && kmHypeToken.balance > 0n && kmHypeUnderlying > 0) {
+    vaultPositions.push({
+      protocol: 'Kinetiq', type: 'stake', asset: 'kmHYPE → HYPE',
+      decimals: 18, amount: kmHypeUnderlying, raw: kmHypeToken.balance,
+    })
+  }
+  if (wstHypeToken && wstHypeToken.balance > 0n && wstHypeUnderlying > 0) {
     vaultPositions.push({
       protocol: 'StakedHYPE', type: 'vault', asset: 'wstHYPE → HYPE',
-      decimals: 18, amount: underlying, raw: wstHypeToken.balance,
+      decimals: 18, amount: wstHypeUnderlying, raw: wstHypeToken.balance,
     })
   }
 
