@@ -1053,14 +1053,14 @@ function HLTraderDashboard() {
 
   // Load EVM data as soon as a wallet is snooped (powers the overview panel)
   useEffect(() => {
-    if (!address || evmData || evmLoading) return
+    // evmError guard prevents infinite retry: a failed fetch sets evmError, stopping the loop
+    if (!address || evmData || evmLoading || evmError) return
     setEvmLoading(true)
-    setEvmError(null)
     fetchEvmWallet(address)
       .then(d => setEvmData(d))
       .catch(e => setEvmError(e instanceof Error ? e.message : 'Failed to fetch EVM data'))
       .finally(() => setEvmLoading(false))
-  }, [address, evmData, evmLoading])
+  }, [address, evmData, evmLoading, evmError])
 
   function stopSnoop() {
     setData(null); setAddress(''); setInput(''); setError(null); currentAddr.current = ''

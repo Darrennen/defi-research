@@ -9,6 +9,12 @@ export async function POST(req: NextRequest) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const data = await r.json()
+  let data: unknown
+  try {
+    data = await r.json()
+  } catch {
+    // HyperEVM returned non-JSON (e.g., rate-limit HTML page)
+    data = { jsonrpc: '2.0', id: null, error: { code: -32000, message: `Upstream HTTP ${r.status}` } }
+  }
   return NextResponse.json(data, { status: r.status })
 }

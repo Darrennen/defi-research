@@ -213,25 +213,24 @@ const HYPERLEND_ASSETS = [
 
 async function getHyperLendPositions(user: string): Promise<EvmProtocolPosition[]> {
   const addr = user.replace('0x', '').toLowerCase().padStart(64, '0')
-  const results = await Promise.all(HYPERLEND_ASSETS.map(async asset => {
-    try {
-      const data = SEL_USER_RESERVE
-        + asset.address.replace('0x', '').toLowerCase().padStart(64, '0')
-        + addr
-      const res = await rpc<string>('eth_call', [{ to: HYPERLEND_DATA_PROVIDER, data }, 'latest'])
-      if (!res || res === '0x' || res.length < 18) return []
-      // Returns: (currentATokenBalance, currentStableDebt, currentVariableDebt, ...)
-      const aToken = slot(res, 0)
-      const stableDebt = slot(res, 1)
-      const variableDebt = slot(res, 2)
-      const out: EvmProtocolPosition[] = []
-      if (aToken > 0n) out.push({ protocol: 'HyperLend', type: 'supply', asset: asset.symbol, decimals: asset.decimals, amount: Number(aToken) / 10 ** asset.decimals, raw: aToken })
-      const totalDebt = stableDebt + variableDebt
-      if (totalDebt > 0n) out.push({ protocol: 'HyperLend', type: 'borrow', asset: asset.symbol, decimals: asset.decimals, amount: Number(totalDebt) / 10 ** asset.decimals, raw: totalDebt })
-      return out
-    } catch { return [] }
+  const calls = HYPERLEND_ASSETS.map(asset => ({
+    to: HYPERLEND_DATA_PROVIDER,
+    data: SEL_USER_RESERVE + asset.address.replace('0x', '').toLowerCase().padStart(64, '0') + addr,
   }))
-  return results.flat()
+  const results = await batchEthCall(calls).catch(() => calls.map(() => '0x0'))
+  const positions: EvmProtocolPosition[] = []
+  for (let i = 0; i < HYPERLEND_ASSETS.length; i++) {
+    const res = results[i]
+    if (!res || res === '0x' || res === '0x0' || res.length < 18) continue
+    const asset = HYPERLEND_ASSETS[i]
+    const aToken = slot(res, 0)
+    const stableDebt = slot(res, 1)
+    const variableDebt = slot(res, 2)
+    if (aToken > 0n) positions.push({ protocol: 'HyperLend', type: 'supply', asset: asset.symbol, decimals: asset.decimals, amount: Number(aToken) / 10 ** asset.decimals, raw: aToken })
+    const totalDebt = stableDebt + variableDebt
+    if (totalDebt > 0n) positions.push({ protocol: 'HyperLend', type: 'borrow', asset: asset.symbol, decimals: asset.decimals, amount: Number(totalDebt) / 10 ** asset.decimals, raw: totalDebt })
+  }
+  return positions
 }
 
 // Felix StabilityPool deposits — getCompoundedDeposit(address) → 0x... (Liquity v2 style)
