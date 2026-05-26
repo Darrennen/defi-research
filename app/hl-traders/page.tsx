@@ -586,9 +586,9 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
         </div>
       )}
 
-      {/* 3-window grid (24h / 7d / 30d) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
-        {WINDOWS.slice(0, 3).map(({ key, ms }) => {
+      {/* 4-window grid: 24h / 7d / 30d / All */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+        {WINDOWS.map(({ key, ms }) => {
           const w = computeWindow(ms)
           const hasTrades = w.buys + w.sells > 0
           const total = w.buyUsd + w.sellUsd || 1
