@@ -10,6 +10,7 @@ import {
   fmtFundingRate, annualizedFunding, fundingDirection,
   type HLWalletData, type HLRole, type HLPortfolioSeries, type HLPredictedFundings,
 } from '@/lib/hyperliquid'
+import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, type EvmWalletData } from '@/lib/hyperevm'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ const ROLE_META: Record<HLRole, { label: string; color: string; bg: string }> = 
   missing:    { label: 'Unknown',     color: 'var(--ink-soft)', bg: 'var(--rule-soft)' },
 }
 
-type Tab = 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts'
+type Tab = 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts' | 'evm'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -423,6 +424,9 @@ function HLTraderDashboard() {
   const [history, setHistory] = useState<string[]>([])
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [evmData, setEvmData] = useState<EvmWalletData | null>(null)
+  const [evmLoading, setEvmLoading] = useState(false)
+  const [evmError, setEvmError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
 
@@ -475,8 +479,20 @@ function HLTraderDashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlAddr])
 
+  // Lazy-load EVM data when the EVM tab is first opened
+  useEffect(() => {
+    if (tab !== 'evm' || !address || evmData || evmLoading) return
+    setEvmLoading(true)
+    setEvmError(null)
+    fetchEvmWallet(address)
+      .then(d => setEvmData(d))
+      .catch(e => setEvmError(e instanceof Error ? e.message : 'Failed to fetch EVM data'))
+      .finally(() => setEvmLoading(false))
+  }, [tab, address, evmData, evmLoading])
+
   function stopSnoop() {
     setData(null); setAddress(''); setInput(''); setError(null); currentAddr.current = ''
+    setEvmData(null); setEvmError(null); setEvmLoading(false)
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -511,6 +527,7 @@ function HLTraderDashboard() {
     { id: 'funding',      label: 'Funding',      count: fundingPayments.length },
     { id: 'transactions', label: 'Transactions', count: ledger.length },
     { id: 'subaccounts',  label: 'Sub-Accounts', count: subs.length },
+    { id: 'evm',          label: '⬡ HyperEVM' },
   ]
 
   // ── Normal page (no data loaded) ─────────────────────────────────────────
@@ -864,6 +881,111 @@ function HLTraderDashboard() {
                   ]
                 })}
               />
+            </div>
+          )}
+
+          {/* HyperEVM */}
+          {tab === 'evm' && (
+            <div>
+              {/* EVM header */}
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>⬡ HyperEVM</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)', background: 'var(--rule-soft)', border: '1px solid var(--rule)', borderRadius: 4, padding: '2px 8px' }}>Chain ID: 999</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)', background: 'var(--rule-soft)', border: '1px solid var(--rule)', borderRadius: 4, padding: '2px 8px' }}>rpc.hyperliquid.xyz/evm</span>
+                {evmData && (
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>Block #{evmData.blockNumber.toLocaleString()}</span>
+                )}
+                {evmData && (
+                  <button
+                    onClick={() => { setEvmData(null); setEvmError(null) }}
+                    style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, padding: '3px 10px' }}
+                  >
+                    ↻ Refresh
+                  </button>
+                )}
+              </div>
+
+              {evmLoading && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {[240, 180, 140].map((w, i) => (
+                    <div key={i} style={{ height: 18, width: w, borderRadius: 4, background: 'var(--rule)', animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.15}s` }} />
+                  ))}
+                </div>
+              )}
+
+              {evmError && (
+                <div style={{ background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, color: 'var(--red)', fontSize: 14, padding: '12px 16px' }}>
+                  {evmError}
+                </div>
+              )}
+
+              {evmData && !evmLoading && (
+                <>
+                  {/* EVM stats */}
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+                    <MetricCard
+                      label="Native HYPE"
+                      value={fmtEvmAmount(evmData.nativeFormatted, 4)}
+                      sub="EVM gas balance"
+                    />
+                    <MetricCard
+                      label="EVM Transactions"
+                      value={evmData.txCount.toLocaleString()}
+                      sub="Total sent from this address"
+                    />
+                    <MetricCard
+                      label="ERC-20 Tokens"
+                      value={String(evmData.tokens.length)}
+                      sub="Non-zero balances found"
+                    />
+                  </div>
+
+                  {/* ERC-20 holdings */}
+                  <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>
+                      ERC-20 Holdings ({evmData.tokens.length})
+                    </div>
+                    <Table
+                      headers={['Token', 'Balance', 'Contract']}
+                      alignRight={[1]}
+                      empty="No ERC-20 token balances found"
+                      rows={evmData.tokens.map(t => [
+                        <span key="sym" style={{ fontWeight: 600 }}>{t.symbol}</span>,
+                        fmtEvmAmount(t.formatted, t.decimals > 6 ? 4 : 2),
+                        <a key="addr" href={`${HEVM_EXPLORER}/address/${t.address}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                          {shortAddr(t.address)}
+                        </a>,
+                      ])}
+                    />
+                  </div>
+
+                  {/* ERC-20 transfer history */}
+                  <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>
+                      ERC-20 Transfer History ({evmData.transfers.length})
+                    </div>
+                    <Table
+                      headers={['Dir', 'Token', 'Amount', 'From / To', 'Block', 'TX']}
+                      alignRight={[2, 4]}
+                      empty="No ERC-20 transfers found in recent blocks"
+                      rows={evmData.transfers.map(t => [
+                        <span key="dir" style={{ fontSize: 11, fontWeight: 700, color: t.direction === 'in' ? 'var(--green)' : 'var(--red)', background: t.direction === 'in' ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '2px 8px' }}>
+                          {t.direction === 'in' ? '↓ IN' : '↑ OUT'}
+                        </span>,
+                        <span key="sym" style={{ fontWeight: 600 }}>{t.tokenSymbol}</span>,
+                        fmtEvmAmount(t.formatted, t.decimals > 6 ? 4 : 2),
+                        <span key="peer" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
+                          {t.direction === 'in' ? shortAddr(t.from) : shortAddr(t.to)}
+                        </span>,
+                        t.blockNumber.toLocaleString(),
+                        <a key="tx" href={`${HEVM_EXPLORER}/tx/${t.txHash}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                          {t.txHash.slice(0, 10)}…
+                        </a>,
+                      ])}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
         </>
