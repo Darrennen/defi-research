@@ -304,184 +304,147 @@ function ExplorerInner() {
   const { svg: flowSvg, lastVal: flowPnl } = buildFlowSvg(filterFills(flowPeriod), account?.account_index ?? 0)
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 16px' }}>
-      {/* header */}
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <div className="kicker">Lighter DEX · Account Explorer</div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, margin: '4px 0 6px' }}>Explorer</h1>
-        <p style={{ color: 'var(--ink-dim)', fontSize: 13, margin: 0 }}>
-          Inspect positions, assets, LIT staking and trade history for any Lighter account.
-        </p>
-      </div>
-
-      {/* sub-nav */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        <Link href="/lighter" className="ch" style={{ padding: '6px 14px' }}>Overview</Link>
-        <Link href="/lighter/lit" className="ch" style={{ padding: '6px 14px' }}>LIT Tracker</Link>
-        <span className="ch on" style={{ padding: '6px 14px' }}>Explorer</span>
-      </div>
-
-      {/* search */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24, maxWidth: 520 }}>
+    <div>
+      {/* search control bar */}
+      <div style={{ display: 'flex', gap: 8, padding: '10px 24px', borderBottom: '1px solid var(--line)', background: 'var(--paper-2)', alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           value={inputVal}
           onChange={e => setInputVal(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { setQuery(inputVal); lookup(inputVal) } }}
-          placeholder="Account # or 0x address…"
-          style={{
-            flex: 1, background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4,
-            color: 'var(--ink)', padding: '9px 12px', fontSize: 14, outline: 'none',
-            fontFamily: 'var(--font-mono)',
-          }} />
+          placeholder="account # or 0x address…"
+          style={{ flex: 1, maxWidth: 440, background: 'var(--bg)', border: '1px solid var(--line-2)', borderRadius: 3, color: 'var(--ink)', padding: '7px 12px', fontSize: 13, outline: 'none', fontFamily: 'var(--font-mono)' }} />
         <button onClick={() => { setQuery(inputVal); lookup(inputVal) }} disabled={loading}
-          className="ch on" style={{ padding: '9px 20px', fontSize: 13 }}>
-          {loading ? 'Loading…' : 'Search'}
+          className="ch on" style={{ padding: '7px 20px', fontSize: 11 }}>
+          {loading ? 'searching…' : 'search'}
         </button>
+        {error && <span style={{ fontSize: 12, color: 'var(--red)', marginLeft: 4 }}>{error}</span>}
+        {!account && !loading && !error && (
+          <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>enter an account index or ethereum address</span>
+        )}
       </div>
-
-      {error && (
-        <div style={{ padding: '12px 16px', background: 'rgba(255,90,90,0.08)', border: '1px solid rgba(255,90,90,0.2)', borderRadius: 4, color: 'var(--red)', fontSize: 13, marginBottom: 20 }}>
-          {error}
-        </div>
-      )}
 
       {account && (
         <>
-          {/* account header */}
-          <div className="panel" style={{ padding: '16px 20px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
-                  Account #{account.account_index}
-                  {account.name && <span style={{ marginLeft: 10, fontSize: 14, color: 'var(--ink-dim)' }}>{account.name}</span>}
-                </div>
-                {account.l1_address && (
-                  <div style={{ fontSize: 12, color: 'var(--blue)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>
-                    <span title={account.l1_address}>{account.l1_address}</span>
-                    <a href={`https://app.lighter.xyz/explorer/accounts/${account.l1_address}`} target="_blank" rel="noopener"
-                      style={{ marginLeft: 8, color: 'var(--blue)', fontSize: 10, textDecoration: 'none' }}>↗ lighter.xyz</a>
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ color: account.status === 1 ? 'var(--green)' : 'var(--ink-faint)', fontSize: 12 }}>
-                    {account.status === 1 ? '● Active' : '○ Inactive'}
-                  </span>
-                  {staking.is_staking && (
-                    <span style={{ padding: '2px 8px', border: '1px solid var(--amber)', borderRadius: 2, fontSize: 10, letterSpacing: '0.1em', color: 'var(--amber)' }}>
-                      LIT STAKING
-                    </span>
-                  )}
-                  <button onClick={() => toggleTracked(account.account_index)}
-                    className="ch" style={{
-                      padding: '3px 10px', fontSize: 10,
-                      border: isTracked ? '1px solid var(--amber)' : '1px solid var(--line)',
-                      background: isTracked ? 'rgba(242,193,78,0.1)' : 'transparent',
-                      color: isTracked ? 'var(--amber)' : 'var(--ink-dim)',
-                    }}>
-                    {isTracked ? '★ Tracked' : '☆ Track'}
-                  </button>
-                  <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{account.total_order_count.toLocaleString()} orders total</span>
-                </div>
-              </div>
-
-              {/* KPI cards */}
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {[
-                  { lbl: 'Collateral', val: fmtUsd(collateral), color: '' },
-                  { lbl: 'Available', val: fmtUsd(available), color: '' },
-                  { lbl: 'Portfolio', val: fmtUsd(portfolio), color: '' },
-                  { lbl: 'Open Orders', val: account.pending_order_count.toLocaleString(), color: '' },
-                  ...(netPnl !== 0 ? [{ lbl: 'Net PnL', val: (netPnl >= 0 ? '+' : '') + fmtUsd(netPnl), color: netPnl >= 0 ? 'var(--green)' : 'var(--red)' }] : []),
-                ].map(k => (
-                  <div key={k.lbl} style={{ background: 'var(--bg)', padding: '10px 16px', minWidth: 100, textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>{k.lbl}</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: k.color || 'inherit' }}>{k.val}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* portfolio allocation bar */}
-            {portfolio > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: 'var(--line-2)', marginBottom: 6 }}>
-                  <div style={{ width: Math.min(totalPosVal / portfolio * 100, 100).toFixed(1) + '%', background: 'var(--blue)', transition: 'width .4s' }} />
-                  <div style={{ width: Math.min(stakingVal / portfolio * 100, 100).toFixed(1) + '%', background: 'var(--amber)' }} />
-                  <div style={{ flex: 1, background: 'rgba(111,224,137,0.4)' }} />
-                </div>
-                <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--ink-dim)', flexWrap: 'wrap' }}>
-                  <span><span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--blue)', borderRadius: 1, marginRight: 4 }} />Perps {portfolio > 0 ? (totalPosVal / portfolio * 100).toFixed(1) : 0}%</span>
-                  {stakingVal > 0 && <span><span style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--amber)', borderRadius: 1, marginRight: 4 }} />Staking {(stakingVal / portfolio * 100).toFixed(1)}%</span>}
-                  <span><span style={{ display: 'inline-block', width: 8, height: 8, background: 'rgba(111,224,137,0.6)', borderRadius: 1, marginRight: 4 }} />Free {Math.max(0, 100 - totalPosVal / portfolio * 100 - stakingVal / portfolio * 100).toFixed(1)}%</span>
-                </div>
-              </div>
+          {/* identity strip */}
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 500, fontSize: 22, letterSpacing: '-0.02em', fontStyle: 'italic' }}>
+              #{account.account_index}
+            </span>
+            {account.name && <span style={{ fontSize: 13, color: 'var(--ink-dim)' }}>{account.name}</span>}
+            {account.l1_address && (
+              <span style={{ fontSize: 11, color: 'var(--blue)', fontFamily: 'var(--font-mono)' }}>
+                {account.l1_address}
+                <a href={`https://app.lighter.xyz/explorer/accounts/${account.l1_address}`} target="_blank" rel="noopener"
+                  style={{ marginLeft: 6, color: 'var(--blue)', textDecoration: 'none', fontSize: 10 }}>↗</a>
+              </span>
             )}
-
-            {/* bias + leverage */}
-            <div style={{ display: 'flex', gap: 20, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>Direction Bias</div>
-                <div style={{ color: biasColor, fontWeight: 600, fontSize: 14 }}>{biasLabel}</div>
-                <div style={{ width: 120, height: 4, background: 'var(--line)', borderRadius: 2, marginTop: 4 }}>
-                  <div style={{ height: '100%', width: longPct.toFixed(1) + '%', background: biasColor, borderRadius: 2, transition: 'width .4s' }} />
-                </div>
-              </div>
-              {leverage > 0 && <LevGauge leverage={leverage} />}
-              {unrealPnl !== 0 && (
-                <div>
-                  <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>Unrealized PnL</div>
-                  <div className={unrealPnl >= 0 ? 'pos' : 'neg'} style={{ fontSize: 18, fontWeight: 700 }}>
-                    {unrealPnl >= 0 ? '+' : ''}{fmtUsd(unrealPnl)}
-                  </div>
-                  {realPnl !== 0 && (
-                    <div style={{ fontSize: 11, color: 'var(--ink-dim)', marginTop: 2 }}>
-                      Real: <span className={realPnl >= 0 ? 'pos' : 'neg'}>{realPnl >= 0 ? '+' : ''}{fmtUsd(realPnl)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-              {marginHealthPct != null && totalPosVal > 0 && (
-                <div style={{ minWidth: 160 }}>
-                  <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>Margin Health</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: marginColor, marginBottom: 4 }}>
-                    {marginHealthPct.toFixed(0)}%
-                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--ink-faint)', marginLeft: 6 }}>
-                      {marginHealthPct < 105 ? '⚠ near liquidation' : marginHealthPct < 130 ? 'caution' : 'healthy'}
-                    </span>
-                  </div>
-                  <div style={{ width: 160, height: 5, background: 'var(--line)', borderRadius: 3, position: 'relative' }}>
-                    <div style={{ height: '100%', width: `${Math.min(marginHealthPct, 300) / 3}%`, background: marginColor, borderRadius: 3, transition: 'width .4s' }} />
-                    {maintHealthPct != null && (
-                      <div style={{ position: 'absolute', top: -1, left: `${Math.min(maintHealthPct, 300) / 3}%`, width: 1, height: 7, background: 'var(--red)', opacity: 0.8 }} title="Maintenance margin" />
-                    )}
-                  </div>
-                  <div style={{ fontSize: 9, color: 'var(--ink-faint)', marginTop: 3 }}>
-                    {fmtUsd(crossAssetVal)} / {fmtUsd(initMarginReq)} required
-                  </div>
-                </div>
-              )}
+            <span style={{ fontSize: 11, color: account.status === 1 ? 'var(--green)' : 'var(--ink-faint)' }}>
+              {account.status === 1 ? '● active' : '○ inactive'}
+            </span>
+            {staking.is_staking && (
+              <span style={{ padding: '2px 7px', border: '1px solid var(--amber)', fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--amber)' }}>
+                lit staking
+              </span>
+            )}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{account.total_order_count.toLocaleString()} orders total</span>
+              <button onClick={() => toggleTracked(account.account_index)}
+                style={{ padding: '4px 12px', fontSize: 10, border: isTracked ? '1px solid var(--amber)' : '1px solid var(--line-2)', background: isTracked ? 'rgba(242,193,78,0.1)' : 'transparent', color: isTracked ? 'var(--amber)' : 'var(--ink-dim)', borderRadius: 3, cursor: 'pointer', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+                {isTracked ? '★ tracked' : '☆ track'}
+              </button>
             </div>
           </div>
 
+          {/* cockpit KPI strip */}
+          <div className="cockpit-kpis" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+            <div className="cockpit-kpi">
+              <div className="lbl">Collateral</div>
+              <div className="val">{fmtUsd(collateral)}</div>
+              <div className="sub">{fmtUsd(available)} free</div>
+            </div>
+            <div className="cockpit-kpi">
+              <div className="lbl">Portfolio</div>
+              <div className="val">{fmtUsd(portfolio)}</div>
+              <div className="sub">{positions.length} open position{positions.length !== 1 ? 's' : ''}</div>
+            </div>
+            <div className="cockpit-kpi">
+              <div className="lbl">Unrealized PnL</div>
+              <div className={`val ${unrealPnl > 0 ? 'up' : unrealPnl < 0 ? 'down' : ''}`}>
+                {unrealPnl !== 0 ? (unrealPnl >= 0 ? '+' : '') + fmtUsd(unrealPnl) : '—'}
+              </div>
+              <div className="sub">{realPnl !== 0 ? 'real: ' + (realPnl >= 0 ? '+' : '') + fmtUsd(realPnl) : 'no realized pnl'}</div>
+            </div>
+            <div className="cockpit-kpi">
+              <div className="lbl">Direction</div>
+              <div className="val" style={{ color: biasColor, fontSize: biasTotal > 0 ? 20 : 16, letterSpacing: 0 }}>{biasLabel}</div>
+              <div className="sub">{biasTotal > 0 ? `${longPct.toFixed(0)}% long · ${(100 - longPct).toFixed(0)}% short` : 'no positions'}</div>
+            </div>
+            <div className="cockpit-kpi">
+              <div className="lbl">Leverage</div>
+              <div className="val" style={{ color: leverage > 10 ? 'var(--red)' : leverage > 5 ? 'var(--amber)' : leverage > 0 ? 'var(--green)' : 'var(--ink-faint)' }}>
+                {leverage > 0 ? leverage.toFixed(1) + '×' : '—'}
+              </div>
+              <div className="sub">{totalPosVal > 0 ? fmtUsd(totalPosVal) + ' notional' : 'no exposure'}</div>
+            </div>
+            <div className="cockpit-kpi">
+              <div className="lbl">Margin Health</div>
+              <div className="val" style={{ color: marginColor, fontSize: 24 }}>
+                {marginHealthPct != null ? marginHealthPct.toFixed(0) + '%' : '—'}
+              </div>
+              <div className="sub" style={{ color: marginHealthPct == null ? 'var(--ink-faint)' : marginHealthPct < 105 ? 'var(--red)' : marginHealthPct < 130 ? 'var(--amber)' : 'var(--ink-dim)' }}>
+                {marginHealthPct == null ? 'no positions' : marginHealthPct < 105 ? '⚠ near liquidation' : marginHealthPct < 130 ? 'caution' : 'healthy'}
+              </div>
+            </div>
+          </div>
+
+          {/* allocation + margin bar */}
+          {(portfolio > 0 || (marginHealthPct != null && totalPosVal > 0)) && (
+            <div style={{ padding: '10px 24px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'center' }}>
+              {portfolio > 0 && (
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 5 }}>Allocation</div>
+                  <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', background: 'var(--line)', marginBottom: 4 }}>
+                    <div style={{ width: Math.min(totalPosVal / portfolio * 100, 100).toFixed(1) + '%', background: 'var(--blue)', transition: 'width .4s' }} />
+                    <div style={{ width: Math.min(stakingVal / portfolio * 100, 100).toFixed(1) + '%', background: 'var(--amber)' }} />
+                    <div style={{ flex: 1, background: 'rgba(111,224,137,0.3)' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, fontSize: 10, color: 'var(--ink-dim)' }}>
+                    <span><span style={{ color: 'var(--blue)' }}>■</span> perps {(totalPosVal / portfolio * 100).toFixed(1)}%</span>
+                    {stakingVal > 0 && <span><span style={{ color: 'var(--amber)' }}>■</span> staking {(stakingVal / portfolio * 100).toFixed(1)}%</span>}
+                    <span><span style={{ color: 'rgba(111,224,137,0.6)' }}>■</span> free {Math.max(0, 100 - totalPosVal / portfolio * 100 - stakingVal / portfolio * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              )}
+              {marginHealthPct != null && totalPosVal > 0 && (
+                <div style={{ minWidth: 200 }}>
+                  <div style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 5 }}>Margin Bar</div>
+                  <div style={{ width: '100%', height: 4, background: 'var(--line)', borderRadius: 2, position: 'relative', marginBottom: 4 }}>
+                    <div style={{ height: '100%', width: `${Math.min(marginHealthPct, 300) / 3}%`, background: marginColor, borderRadius: 2, transition: 'width .4s' }} />
+                    {maintHealthPct != null && (
+                      <div style={{ position: 'absolute', top: -2, left: `${Math.min(maintHealthPct, 300) / 3}%`, width: 1, height: 8, background: 'var(--red)', opacity: 0.7 }} title="maintenance margin" />
+                    )}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-dim)' }}>
+                    {fmtUsd(crossAssetVal)} / <span style={{ color: 'var(--ink-faint)' }}>{fmtUsd(initMarginReq)} init required</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* tabs */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 0, borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
+          <div style={{ display: 'flex', gap: 4, padding: '8px 24px', borderBottom: '1px solid var(--line)', background: 'var(--paper-2)', flexWrap: 'wrap' }}>
             {([
-              ['positions', `Positions${positions.length ? ` (${positions.length})` : ''}`],
-              ['assets', `Assets${assets.length ? ` (${assets.length})` : ''}`],
-              ['staking', 'LIT Staking'],
-              ['history', 'Trade History'],
-              ['flow', 'LIT Flow'],
+              ['positions', `positions${positions.length ? ` (${positions.length})` : ''}`],
+              ['assets', `assets${assets.length ? ` (${assets.length})` : ''}`],
+              ['staking', 'lit staking'],
+              ['history', 'trade history'],
+              ['flow', 'lit flow'],
             ] as const).map(([id, label]) => (
               <button key={id}
+                className={`ch${activeTab === id ? ' on' : ''}`}
                 onClick={() => handleTabChange(id)}
-                style={{
-                  padding: '8px 16px', background: 'none', border: 'none',
-                  borderBottom: activeTab === id ? '2px solid var(--blue)' : '2px solid transparent',
-                  color: activeTab === id ? 'var(--ink)' : 'var(--ink-dim)',
-                  cursor: 'pointer', fontSize: 13, fontWeight: activeTab === id ? 600 : 400,
-                  transition: 'color .15s',
-                  marginBottom: -1,
-                }}>
+                style={{ padding: '4px 14px', fontSize: 11 }}>
                 {label}
               </button>
             ))}
@@ -489,13 +452,13 @@ function ExplorerInner() {
 
           {/* positions tab */}
           {activeTab === 'positions' && (
-            <div className="panel" style={{ padding: 0, borderRadius: '0 0 6px 6px' }}>
+            <div>
               <div className="table-scroll-x">
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
-                    <tr style={{ background: 'var(--paper)' }}>
+                    <tr>
                       {['Symbol', 'Side', 'Size', 'Entry', 'Value', 'Unreal PnL', 'Real PnL', 'Liq Price', 'Funding', 'Alloc'].map(h => (
-                        <th key={h} style={{ padding: '10px 12px', textAlign: ['Size', 'Entry', 'Value', 'Unreal PnL', 'Real PnL', 'Liq Price', 'Funding', 'Alloc'].includes(h) ? 'right' : 'left', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)', whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding: '10px 16px', textAlign: ['Size', 'Entry', 'Value', 'Unreal PnL', 'Real PnL', 'Liq Price', 'Funding', 'Alloc'].includes(h) ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -513,48 +476,43 @@ function ExplorerInner() {
                       const distColor = distPct == null ? '' : distPct < 8 ? 'var(--red)' : distPct < 18 ? 'var(--amber)' : 'var(--green)'
                       const allocPct = portfolio > 0 ? posVal / portfolio * 100 : 0
                       const roe = posVal > 0 ? pnl / posVal * 100 : 0
-                      const rowBg = distPct != null && distPct < 8 ? 'rgba(255,90,90,0.04)' : 'transparent'
+                      const rowBg = distPct != null && distPct < 8 ? 'rgba(255,90,90,0.04)' : ''
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid var(--line)', background: rowBg }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{p.symbol}</td>
-                          <td style={{ padding: '8px 12px' }}>
-                            <span className={isLong ? 'pos' : 'neg'} style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', background: isLong ? 'rgba(111,224,137,0.1)' : 'rgba(255,90,90,0.1)', borderRadius: 3 }}>
-                              {isLong ? 'LONG' : 'SHORT'}
-                            </span>
+                          <td style={{ padding: '9px 16px', fontWeight: 600 }}>{p.symbol}</td>
+                          <td style={{ padding: '9px 16px' }}>
+                            <span className={isLong ? 'pill-buy' : 'pill-sell'}>{isLong ? 'LONG' : 'SHORT'}</span>
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} className={isLong ? 'pos' : 'neg'}>{fmtNum(Math.abs(size), 2)}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${fmtNum(p.avg_entry_price, 4)}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>{fmtUsd(posVal)}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }} className={isLong ? 'pos' : 'neg'}>{fmtNum(Math.abs(size), 2)}</td>
+                          <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${fmtNum(p.avg_entry_price, 4)}</td>
+                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>{fmtUsd(posVal)}</td>
+                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
                             <div className={pnl >= 0 ? 'pos' : 'neg'} style={{ fontWeight: 600 }}>{pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}</div>
                             {posVal > 0 && <div style={{ fontSize: 10, color: roe >= 0 ? 'var(--green)' : 'var(--red)' }}>{roe >= 0 ? '+' : ''}{roe.toFixed(1)}%</div>}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
                             {rpnl !== 0
                               ? <span className={rpnl >= 0 ? 'pos' : 'neg'} style={{ fontVariantNumeric: 'tabular-nums' }}>{rpnl >= 0 ? '+' : ''}{fmtUsd(rpnl)}</span>
-                              : <span style={{ color: 'var(--ink-faint)' }}>—</span>
-                            }
+                              : <span style={{ color: 'var(--ink-faint)' }}>—</span>}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
                             <div style={{ color: distPct != null && distPct < 8 ? 'var(--red)' : 'var(--ink-dim)' }}>{liqPrice > 0 ? '$' + liqPrice.toFixed(4) : '—'}</div>
-                            {distPct != null && (
-                              <div style={{ fontSize: 9, color: distColor, marginTop: 2 }}>{distPct.toFixed(1)}% away</div>
-                            )}
+                            {distPct != null && <div style={{ fontSize: 9, color: distColor, marginTop: 2 }}>{distPct.toFixed(1)}% away</div>}
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--ink-dim)' }}>{funding !== 0 ? fmtUsd(funding) : '—'}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: '9px 16px', textAlign: 'right', color: 'var(--ink-dim)' }}>{funding !== 0 ? fmtUsd(funding) : '—'}</td>
+                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                              <div style={{ width: 50, height: 4, background: 'var(--line)', borderRadius: 2 }}>
+                              <div style={{ width: 48, height: 3, background: 'var(--line)', borderRadius: 2 }}>
                                 <div style={{ height: '100%', width: Math.min(allocPct, 100).toFixed(1) + '%', background: 'var(--blue)', borderRadius: 2 }} />
                               </div>
-                              <span style={{ fontSize: 11, color: 'var(--ink-dim)', minWidth: 32, textAlign: 'right' }}>{allocPct.toFixed(1)}%</span>
+                              <span style={{ fontSize: 11, color: 'var(--ink-dim)', minWidth: 30, textAlign: 'right' }}>{allocPct.toFixed(1)}%</span>
                             </div>
                           </td>
                         </tr>
                       )
                     })}
                     {!positions.length && (
-                      <tr><td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no open positions</td></tr>
+                      <tr><td colSpan={10} style={{ padding: 32, textAlign: 'center', color: 'var(--ink-faint)' }}>no open positions</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -564,13 +522,13 @@ function ExplorerInner() {
 
           {/* assets tab */}
           {activeTab === 'assets' && (
-            <div className="panel" style={{ padding: 0, borderRadius: '0 0 6px 6px' }}>
+            <div>
               <div className="table-scroll-x">
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
-                    <tr style={{ background: 'var(--paper)' }}>
-                      {['Symbol', 'Balance', 'Est. Value', 'Allocation', 'Locked'].map(h => (
-                        <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Symbol' ? 'left' : 'right', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)' }}>{h}</th>
+                    <tr>
+                      {['Symbol', 'Balance', 'Allocation', 'Locked'].map(h => (
+                        <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Symbol' ? 'left' : 'right' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -581,23 +539,22 @@ function ExplorerInner() {
                       const allocPct = portfolio > 0 && bal > 0 ? Math.min(bal / portfolio * 100, 100) : 0
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{a.symbol}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(bal, 6)}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>—</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                          <td style={{ padding: '9px 16px', fontWeight: 600 }}>{a.symbol}</td>
+                          <td style={{ padding: '9px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(bal, 6)}</td>
+                          <td style={{ padding: '9px 16px', textAlign: 'right' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                              <div style={{ width: 50, height: 4, background: 'var(--line)', borderRadius: 2 }}>
+                              <div style={{ width: 48, height: 3, background: 'var(--line)', borderRadius: 2 }}>
                                 <div style={{ height: '100%', width: allocPct.toFixed(1) + '%', background: 'var(--green)', borderRadius: 2 }} />
                               </div>
-                              <span style={{ fontSize: 11, color: 'var(--ink-dim)', minWidth: 32 }}>{allocPct.toFixed(1)}%</span>
+                              <span style={{ fontSize: 11, color: 'var(--ink-dim)', minWidth: 30 }}>{allocPct.toFixed(1)}%</span>
                             </div>
                           </td>
-                          <td style={{ padding: '8px 12px', textAlign: 'right', color: locked > 0 ? 'var(--amber)' : 'var(--ink-faint)' }}>{locked > 0 ? fmtNum(locked, 6) : '—'}</td>
+                          <td style={{ padding: '9px 16px', textAlign: 'right', color: locked > 0 ? 'var(--amber)' : 'var(--ink-faint)' }}>{locked > 0 ? fmtNum(locked, 6) : '—'}</td>
                         </tr>
                       )
                     })}
                     {!assets.length && (
-                      <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no spot assets held</td></tr>
+                      <tr><td colSpan={4} style={{ padding: 32, textAlign: 'center', color: 'var(--ink-faint)' }}>no spot assets held</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -607,21 +564,18 @@ function ExplorerInner() {
 
           {/* staking tab */}
           {activeTab === 'staking' && (
-            <div className="panel" style={{ padding: '20px', borderRadius: '0 0 6px 6px' }}>
+            <div style={{ padding: '20px 24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 16, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: staking.is_staking ? 'var(--green)' : 'var(--ink-faint)' }}>
-                    {staking.is_staking ? '● Staking' : '○ Not Staking'}
-                  </div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: staking.is_staking ? 'var(--green)' : 'var(--ink-faint)' }}>
+                  {staking.is_staking ? '● Staking' : '○ Not Staking'}
                 </div>
                 <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                   <div style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>LIT Free Balance</div>
                   <div style={{ fontSize: 18, fontWeight: 600 }}>{staking.lit_free_balance > 0 ? fmtLit(staking.lit_free_balance) : '—'}</div>
                 </div>
               </div>
-
               {staking.is_staking && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 1, background: 'var(--line)', marginBottom: 16 }}>
                   {[
                     { lbl: 'Staked Value', val: fmtUsd(staking.staked_usdc_value), cls: 'pos' },
                     { lbl: 'Entry Value', val: staking.entry_usdc > 0 ? fmtUsd(staking.entry_usdc) : '—', cls: '' },
@@ -632,24 +586,23 @@ function ExplorerInner() {
                     },
                     { lbl: 'Shares Held', val: Number(staking.shares_amount).toLocaleString(), cls: '' },
                   ].map(k => (
-                    <div key={k.lbl} style={{ background: 'var(--bg)', padding: '14px' }}>
-                      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 6 }}>{k.lbl}</div>
-                      <div className={k.cls} style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{k.val}</div>
+                    <div key={k.lbl} style={{ background: 'var(--bg)', padding: '16px 20px' }}>
+                      <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 6 }}>{k.lbl}</div>
+                      <div className={k.cls} style={{ fontSize: 20, fontVariantNumeric: 'tabular-nums', fontWeight: 500, fontFamily: 'var(--font-serif)' }}>{k.val}</div>
                     </div>
                   ))}
                 </div>
               )}
-
               {staking.pending_unlocks.length > 0 && (
                 <div>
                   <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--amber)', marginBottom: 8 }}>
-                    ⚠ Pending Unstake Requests ({staking.pending_unlocks.length})
+                    ⚠ Pending Unstake ({staking.pending_unlocks.length})
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
                       <tr>
-                        <th style={{ padding: '4px 8px', textAlign: 'left', color: 'var(--ink-faint)', fontWeight: 500 }}>Amount</th>
-                        <th style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--ink-faint)', fontWeight: 500 }}>Unlock Time</th>
+                        <th style={{ padding: '4px 8px', textAlign: 'left' }}>Amount</th>
+                        <th style={{ padding: '4px 8px', textAlign: 'right' }}>Unlock Time</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -668,12 +621,12 @@ function ExplorerInner() {
 
           {/* history tab */}
           {activeTab === 'history' && (
-            <div className="panel" style={{ padding: 0, borderRadius: '0 0 6px 6px' }}>
-              {/* flow chart */}
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>Cumulative Trade Flow (buy - sell)</span>
-                  <span className={flowPnl >= 0 ? 'pos' : 'neg'} style={{ fontSize: 15, fontWeight: 700 }}>
+            <div>
+              {/* cumulative flow chart */}
+              <div style={{ padding: '14px 24px', borderBottom: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: 'var(--ink-dim)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Cumulative Flow</span>
+                  <span className={flowPnl >= 0 ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>
                     {flowPnl !== 0 ? (flowPnl >= 0 ? '+' : '') + fmtUsd(flowPnl) : '—'}
                   </span>
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
@@ -684,7 +637,7 @@ function ExplorerInner() {
                   </div>
                 </div>
                 {flowSvg ? (
-                  <svg viewBox="0 0 600 100" preserveAspectRatio="none" style={{ width: '100%', height: 100, display: 'block' }}
+                  <svg viewBox="0 0 600 100" preserveAspectRatio="none" style={{ width: '100%', height: 90, display: 'block' }}
                     dangerouslySetInnerHTML={{ __html: flowSvg }} />
                 ) : (
                   <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>
@@ -692,14 +645,13 @@ function ExplorerInner() {
                   </div>
                 )}
               </div>
-
-              {/* table */}
+              {/* trade table */}
               <div className="table-scroll-x" style={{ maxHeight: 480, overflowY: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
-                    <tr style={{ position: 'sticky', top: 0, background: 'var(--paper)', zIndex: 1 }}>
+                    <tr style={{ position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 1 }}>
                       {['Time', 'Market', 'Role', 'Side', 'Price', 'Size', 'Value'].map(h => (
-                        <th key={h} style={{ padding: '8px 12px', textAlign: ['Price', 'Size', 'Value'].includes(h) ? 'right' : 'left', fontWeight: 500, fontSize: 11, color: 'var(--ink-dim)', whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding: '8px 16px', textAlign: ['Price', 'Size', 'Value'].includes(h) ? 'right' : 'left', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -707,37 +659,35 @@ function ExplorerInner() {
                     {histTrades.map((t, i) => {
                       const isBuy = (t.role === 'taker' && t.taker_is_buyer === 1) || (t.role === 'maker' && t.taker_is_buyer === 0)
                       const usd = parseFloat(t.price) * parseFloat(t.size)
-                      const mkt = t.market_id === 120 ? 'LIT-PERP' : t.market_id === 2049 ? 'LIT/USDC' : `Market ${t.market_id}`
+                      const mkt = t.market_id === 120 ? 'LIT-PERP' : t.market_id === 2049 ? 'LIT/USDC' : `Mkt ${t.market_id}`
                       return (
                         <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
-                          <td style={{ padding: '6px 12px', color: 'var(--ink-dim)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtTime(t.time)}</td>
-                          <td style={{ padding: '6px 12px', fontSize: 11, color: 'var(--ink-faint)' }}>{mkt}</td>
-                          <td style={{ padding: '6px 12px', fontSize: 10, letterSpacing: '0.08em', color: 'var(--ink-faint)' }}>{t.role?.toUpperCase()}</td>
-                          <td style={{ padding: '6px 12px' }}>
-                            <span className={isBuy ? 'pos' : 'neg'} style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', background: isBuy ? 'rgba(111,224,137,0.1)' : 'rgba(255,90,90,0.1)', borderRadius: 3 }}>
-                              {isBuy ? 'BUY' : 'SELL'}
-                            </span>
+                          <td style={{ padding: '7px 16px', color: 'var(--ink-dim)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmtTime(t.time)}</td>
+                          <td style={{ padding: '7px 16px', fontSize: 11, color: 'var(--ink-faint)' }}>{mkt}</td>
+                          <td style={{ padding: '7px 16px', fontSize: 10, letterSpacing: '0.08em', color: 'var(--ink-faint)' }}>{t.role?.toUpperCase()}</td>
+                          <td style={{ padding: '7px 16px' }}>
+                            <span className={isBuy ? 'pill-buy' : 'pill-sell'}>{isBuy ? 'BUY' : 'SELL'}</span>
                           </td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${parseFloat(t.price).toFixed(4)}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(t.size, 2)}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(usd)}</td>
+                          <td style={{ padding: '7px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${parseFloat(t.price).toFixed(4)}</td>
+                          <td style={{ padding: '7px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(t.size, 2)}</td>
+                          <td style={{ padding: '7px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(usd)}</td>
                         </tr>
                       )
                     })}
                     {!histTrades.length && !histLoading && (
-                      <tr><td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no trade history found</td></tr>
+                      <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: 'var(--ink-faint)' }}>no trade history found</td></tr>
                     )}
                     {histLoading && (
-                      <tr><td colSpan={7} style={{ padding: 16, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>loading…</td></tr>
+                      <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: 'var(--ink-faint)' }}>loading…</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
               {histHasMore && (
-                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--line)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ padding: '12px 24px', borderTop: '1px solid var(--line)', display: 'flex', gap: 8, alignItems: 'center' }}>
                   <button onClick={() => fetchFills(account.l1_address, account.account_index, histOffset + 100)}
-                    disabled={histLoading} className="ch" style={{ padding: '6px 16px', fontSize: 12 }}>
-                    {histLoading ? 'Loading…' : 'Load more'}
+                    disabled={histLoading} className="ch" style={{ padding: '6px 16px', fontSize: 11 }}>
+                    {histLoading ? 'loading…' : 'load more'}
                   </button>
                   <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{histTrades.length} loaded</span>
                 </div>
@@ -747,34 +697,60 @@ function ExplorerInner() {
 
           {/* LIT flow tab */}
           {activeTab === 'flow' && (
-            <div className="panel" style={{ padding: '20px', borderRadius: '0 0 6px 6px' }}>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 16 }}>LIT Token Buy/Sell Flow</div>
-              {litFlowLoading && <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>loading LIT flow data…</div>}
-              {!litFlowLoading && !litFlow && <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>no LIT trading data found for this account</div>}
+            <div>
+              {litFlowLoading && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>loading LIT flow data…</div>
+              )}
+              {!litFlowLoading && !litFlow && (
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>no LIT trading data found for this account</div>
+              )}
               {litFlow && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, background: 'var(--line)' }}>
                   {(['24h', '7d', '30d'] as const).map(w => {
                     const wData = litFlow[w]
                     if (!wData) return null
                     const net = wData.net_usd
+                    const flowPnl = wData.sell_usd - wData.buy_usd
+                    const isWin = flowPnl >= 0
                     const total = wData.buy_usd + wData.sell_usd || 1
+                    const pctBuy = wData.buy_usd / total * 100
                     return (
-                      <div key={w} style={{ background: 'var(--bg)', padding: '16px' }}>
-                        <div style={{ fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 10 }}>{w}</div>
-                        <div style={{ marginBottom: 8 }}>
-                          <span className="pos" style={{ fontWeight: 600, fontSize: 15 }}>{fmtUsd(wData.buy_usd)}</span>
-                          <span style={{ fontSize: 11, color: 'var(--ink-faint)', marginLeft: 6 }}>bought · {wData.buy_trades} trades</span>
+                      <div key={w} style={{ background: 'var(--bg)', padding: '20px 24px' }}>
+                        <div style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 14 }}>{w}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                          <div>
+                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Bought</div>
+                            <div className="pos" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>{fmtUsd(wData.buy_usd)}</div>
+                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.buy_trades} trades</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Sold</div>
+                            <div className="neg" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>{fmtUsd(wData.sell_usd)}</div>
+                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.sell_trades} trades</div>
+                          </div>
                         </div>
-                        <div style={{ marginBottom: 10 }}>
-                          <span className="neg" style={{ fontWeight: 600, fontSize: 15 }}>{fmtUsd(wData.sell_usd)}</span>
-                          <span style={{ fontSize: 11, color: 'var(--ink-faint)', marginLeft: 6 }}>sold · {wData.sell_trades} trades</span>
-                        </div>
-                        <div style={{ display: 'flex', height: 4, borderRadius: 2, overflow: 'hidden', background: 'var(--line-2)', marginBottom: 8 }}>
-                          <div style={{ width: (wData.buy_usd / total * 100).toFixed(1) + '%', background: 'var(--green)' }} />
+                        <div style={{ display: 'flex', height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--line)', marginBottom: 14 }}>
+                          <div style={{ width: pctBuy.toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
                           <div style={{ flex: 1, background: 'var(--red)' }} />
                         </div>
-                        <div className={net >= 0 ? 'pos' : 'neg'} style={{ fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                          {net >= 0 ? '+' : ''}{fmtUsd(net)} net
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Flow P&amp;L</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span className={isWin ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-serif)', fontSize: 22, fontWeight: 500 }}>
+                                {flowPnl >= 0 ? '+' : ''}{fmtUsd(flowPnl)}
+                              </span>
+                              <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 2, background: isWin ? 'rgba(111,224,137,0.18)' : 'rgba(255,106,119,0.18)', color: isWin ? 'var(--green)' : 'var(--red)', letterSpacing: '0.06em' }}>
+                                {isWin ? 'W' : 'L'}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Net</div>
+                            <div className={net <= 0 ? 'pos' : 'neg'} style={{ fontSize: 13, fontWeight: 600 }}>
+                              {net > 0 ? '+' : ''}{fmtUsd(-net)} {net > 0 ? 'holding' : 'took'}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )
@@ -787,8 +763,8 @@ function ExplorerInner() {
       )}
 
       {!account && !loading && !error && (
-        <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--ink-faint)', fontSize: 13 }}>
-          Enter an account number or Ethereum address to explore.
+        <div style={{ padding: '80px 24px', textAlign: 'center', color: 'var(--ink-faint)', fontSize: 13 }}>
+          search by account index or ethereum address to explore positions, assets, and trade history
         </div>
       )}
 
