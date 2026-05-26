@@ -938,6 +938,38 @@ function HLTraderDashboard() {
                       value={String(evmData.tokens.length)}
                       sub="Non-zero balances found"
                     />
+                    <MetricCard
+                      label="Protocol Positions"
+                      value={String(evmData.protocolPositions.length)}
+                      sub="HyperLend · Staking · Vaults"
+                    />
+                  </div>
+
+                  {/* DeFi Protocol Positions */}
+                  <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>
+                      DeFi Protocol Positions ({evmData.protocolPositions.length})
+                    </div>
+                    <Table
+                      headers={['Protocol', 'Type', 'Asset', 'Amount']}
+                      alignRight={[3]}
+                      empty="No protocol positions detected — try HyperLend, Kinetiq staking, or wstHYPE vault"
+                      rows={evmData.protocolPositions.map((p, i) => [
+                        <span key="proto" style={{ fontWeight: 600 }}>{p.protocol}</span>,
+                        <span key="type" style={{
+                          fontSize: 11, fontWeight: 700,
+                          color: p.type === 'borrow' ? 'var(--red)' : p.type === 'supply' ? 'var(--blue)' : 'var(--green)',
+                          background: p.type === 'borrow' ? 'rgba(244,63,94,0.08)' : p.type === 'supply' ? 'var(--blue-soft)' : 'rgba(34,197,94,0.08)',
+                          borderRadius: 4, padding: '2px 7px', textTransform: 'capitalize',
+                        }}>
+                          {p.type}
+                        </span>,
+                        <span key="asset" style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{p.asset}</span>,
+                        <span key="amt" style={{ fontFamily: 'var(--mono)' }}>
+                          {fmtEvmAmount(p.amount, p.decimals > 6 ? 4 : 2)}
+                        </span>,
+                      ])}
+                    />
                   </div>
 
                   {/* ERC-20 holdings */}
@@ -946,11 +978,12 @@ function HLTraderDashboard() {
                       ERC-20 Holdings ({evmData.tokens.length})
                     </div>
                     <Table
-                      headers={['Token', 'Balance', 'Contract']}
-                      alignRight={[1]}
+                      headers={['Token', 'Protocol', 'Balance', 'Contract']}
+                      alignRight={[2]}
                       empty="No ERC-20 token balances found"
                       rows={evmData.tokens.map(t => [
                         <span key="sym" style={{ fontWeight: 600 }}>{t.symbol}</span>,
+                        <span key="proto" style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{t.protocol}</span>,
                         fmtEvmAmount(t.formatted, t.decimals > 6 ? 4 : 2),
                         <a key="addr" href={`${HEVM_EXPLORER}/address/${t.address}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', fontFamily: 'var(--mono)', fontSize: 12 }}>
                           {shortAddr(t.address)}
