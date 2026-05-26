@@ -59,6 +59,37 @@ type Tab = 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transaction
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+const COIN_COLORS = ['#0d9488', '#3b82f6', '#9333ea', '#f59e0b', '#ef4444', '#10b981', '#f97316', '#06b6d4']
+
+function CoinIcon({ symbol, size = 26 }: { symbol: string; size?: number }) {
+  const [err, setErr] = useState(false)
+  const clean = symbol.replace(/-PERP$/, '').replace(/k$/, '').toLowerCase()
+  const src = `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/${clean}.png`
+  const color = COIN_COLORS[symbol.charCodeAt(0) % COIN_COLORS.length]
+  if (err) {
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: '50%', background: color,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: Math.round(size * 0.42), fontWeight: 800, color: '#fff',
+        flexShrink: 0, userSelect: 'none', letterSpacing: '-0.02em',
+      }}>
+        {symbol[0]}
+      </div>
+    )
+  }
+  return (
+    <img
+      src={src}
+      alt={symbol}
+      width={size}
+      height={size}
+      style={{ borderRadius: '50%', flexShrink: 0, display: 'block' }}
+      onError={() => setErr(true)}
+    />
+  )
+}
+
 function RoleBadge({ role }: { role: HLRole }) {
   const m = ROLE_META[role] ?? ROLE_META.missing
   return (
@@ -713,9 +744,12 @@ function HLTraderDashboard() {
                   const pxChange = ctx ? fmtPct24h(ctx.markPx, ctx.prevDayPx) : '—'
                   const pxChgNum = ctx ? (parseFloat(ctx.markPx) - parseFloat(ctx.prevDayPx)) / parseFloat(ctx.prevDayPx) * 100 : 0
                   return [
-                    <div key="sym">
-                      <div style={{ fontWeight: 600, fontFamily: 'var(--mono)' }}>{p.coin}</div>
-                      <div style={{ fontSize: 11, color: pxChgNum >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>{pxChange}</div>
+                    <div key="sym" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <CoinIcon symbol={p.coin} />
+                      <div>
+                        <div style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>{p.coin}</div>
+                        <div style={{ fontSize: 11, color: pxChgNum >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>{pxChange}</div>
+                      </div>
                     </div>,
                     <span key="side" style={{ color: isLong ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{isLong ? 'Long' : 'Short'}</span>,
                     fmtNum(Math.abs(size)),
@@ -753,7 +787,10 @@ function HLTraderDashboard() {
                   const pxChange = ctx ? fmtPct24h(ctx.markPx, ctx.prevDayPx) : '—'
                   const pxChgNum = ctx ? (parseFloat(ctx.markPx) - parseFloat(ctx.prevDayPx)) / parseFloat(ctx.prevDayPx) * 100 : 0
                   return [
-                    <span key="coin" style={{ fontWeight: 600 }}>{b.coin}</span>,
+                    <div key="coin" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <CoinIcon symbol={b.coin} size={24} />
+                      <span style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>{b.coin}</span>
+                    </div>,
                     fmtNum(b.total, 6),
                     fmtNum(b.hold, 6),
                     fmtUsd(b.entryNtl),
