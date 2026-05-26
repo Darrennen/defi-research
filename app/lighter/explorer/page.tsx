@@ -52,7 +52,12 @@ type HistTrade = {
   role: string
 }
 
-type FlowWindow = { buy_usd: number; sell_usd: number; net_usd: number; buy_trades: number; sell_trades: number }
+type FlowWindow = {
+  buy_usd: number; sell_usd: number; net_usd: number
+  buy_trades: number; sell_trades: number
+  buy_size?: number; sell_size?: number; net_size?: number
+  buy_avg_price?: number | null; sell_avg_price?: number | null
+}
 
 // ── formatters ─────────────────────────────────────────────────
 
@@ -948,11 +953,13 @@ function ExplorerInner() {
                             <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Bought</div>
                             <div className="pos" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>{fmtUsd(wData.buy_usd)}</div>
                             <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.buy_trades} trades</div>
+                            {wData.buy_avg_price != null && <div style={{ fontSize: 10, color: 'var(--ink-dim)', marginTop: 1 }}>avg ${wData.buy_avg_price.toFixed(4)}</div>}
                           </div>
                           <div>
                             <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 3 }}>Sold</div>
                             <div className="neg" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>{fmtUsd(wData.sell_usd)}</div>
                             <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 2 }}>{wData.sell_trades} trades</div>
+                            {wData.sell_avg_price != null && <div style={{ fontSize: 10, color: 'var(--ink-dim)', marginTop: 1 }}>avg ${wData.sell_avg_price.toFixed(4)}</div>}
                           </div>
                         </div>
                         <div style={{ display: 'flex', height: 3, borderRadius: 2, overflow: 'hidden', background: 'var(--line)', marginBottom: 14 }}>
