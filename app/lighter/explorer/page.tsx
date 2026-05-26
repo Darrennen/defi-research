@@ -246,6 +246,20 @@ function buildPosCandleSvg(rawCandles: any[]): string {
   return `__CANDLE__${out}__VOL__${volSvg}`
 }
 
+// ── flow phase encoder ──────────────────────────────────────────
+
+function encodePhases(seq: { side: 'B' | 'S'; usd: number }[]) {
+  if (!seq.length) return []
+  const phases: { side: 'B' | 'S'; count: number; usd: number }[] = []
+  let cur = { side: seq[0].side, count: 1, usd: seq[0].usd }
+  for (let i = 1; i < seq.length; i++) {
+    if (seq[i].side === cur.side) { cur.count++; cur.usd += seq[i].usd }
+    else { phases.push(cur); cur = { side: seq[i].side, count: 1, usd: seq[i].usd } }
+  }
+  phases.push(cur)
+  return phases
+}
+
 // ── tracked wallets ─────────────────────────────────────────────
 
 const TW_KEY = 'lit_tracked_v1'
@@ -690,26 +704,31 @@ function ExplorerInner() {
                             {hasTrades && (
                               <>
                                 {/* sequence strip */}
-                                {wd.sequence && wd.sequence.length > 0 && (
-                                  <div style={{ marginBottom: 6 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                                      <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>order</span>
-                                      <span style={{ fontSize: 10, fontWeight: 700, color: wd.first_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
-                                        {wd.first_action === 'B' ? '▲ bought first' : '▼ sold first'}
-                                      </span>
-                                      <span style={{ fontSize: 9, color: 'var(--ink-faint)', marginLeft: 'auto' }}>→</span>
-                                      <span style={{ fontSize: 10, fontWeight: 700, color: wd.last_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
-                                        {wd.last_action === 'B' ? '▲ last buy' : '▼ last sell'}
-                                      </span>
+                                {wd.sequence && wd.sequence.length > 0 && (() => {
+                                  const phases = encodePhases(wd.sequence)
+                                  return (
+                                    <div style={{ marginBottom: 6 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 5 }}>
+                                        <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.1em', textTransform: 'uppercase', marginRight: 2 }}>flow</span>
+                                        {phases.map((ph, i) => (
+                                          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            {i > 0 && <span style={{ fontSize: 9, color: 'var(--ink-faint)' }}>→</span>}
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)', whiteSpace: 'nowrap' }}>
+                                              {ph.side === 'B' ? '▲' : '▼'} {ph.side === 'B' ? (ph.count === 1 ? '1 buy' : `${ph.count} buys`) : (ph.count === 1 ? '1 sell' : `${ph.count} sells`)}
+                                              {' '}<span style={{ opacity: 0.55, fontSize: 9 }}>{fmtUsd(ph.usd)}</span>
+                                            </span>
+                                          </span>
+                                        ))}
+                                      </div>
+                                      <div style={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                                        {wd.sequence.map((s, i) => (
+                                          <div key={i} title={`${s.side === 'B' ? 'BUY' : 'SELL'} $${s.usd.toFixed(0)} @ $${s.price.toFixed(4)}`}
+                                            style={{ width: 6, height: 12, borderRadius: 1, background: s.side === 'B' ? 'var(--green)' : 'var(--red)', opacity: 0.75 }} />
+                                        ))}
+                                      </div>
                                     </div>
-                                    <div style={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                                      {wd.sequence.map((s, i) => (
-                                        <div key={i} title={`${s.side === 'B' ? 'BUY' : 'SELL'} $${s.usd.toFixed(0)} @ $${s.price.toFixed(4)}`}
-                                          style={{ width: 6, height: 12, borderRadius: 1, background: s.side === 'B' ? 'var(--green)' : 'var(--red)', opacity: 0.75 }} />
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                                  )
+                                })()}
                                 {/* buy/sell bar */}
                                 <div style={{ height: 3, background: 'var(--line)', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
                                   <div style={{ height: '100%', width: (wd.buy_usd / total * 100).toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
@@ -1084,27 +1103,32 @@ function ExplorerInner() {
                               )}
                             </div>
                             {/* trade sequence */}
-                            {wData.sequence && wData.sequence.length > 0 && (
-                              <div style={{ marginBottom: 14 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                                  <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>sequence</span>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: wData.first_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
-                                    {wData.first_action === 'B' ? '▲ opened buying' : '▼ opened selling'}
-                                  </span>
-                                  <span style={{ color: 'var(--ink-faint)', fontSize: 10 }}>→</span>
-                                  <span style={{ fontSize: 11, fontWeight: 700, color: wData.last_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
-                                    {wData.last_action === 'B' ? '▲ last was buy' : '▼ last was sell'}
-                                  </span>
-                                </div>
-                                <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                            {wData.sequence && wData.sequence.length > 0 && (() => {
+                              const phases = encodePhases(wData.sequence)
+                              return (
+                                <div style={{ marginBottom: 14 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                                    <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', marginRight: 2 }}>flow</span>
+                                    {phases.map((ph, i) => (
+                                      <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        {i > 0 && <span style={{ fontSize: 10, color: 'var(--ink-faint)' }}>→</span>}
+                                        <span style={{ fontSize: 11, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)', whiteSpace: 'nowrap' }}>
+                                          {ph.side === 'B' ? '▲' : '▼'} {ph.side === 'B' ? (ph.count === 1 ? '1 buy' : `${ph.count} buys`) : (ph.count === 1 ? '1 sell' : `${ph.count} sells`)}
+                                          {' '}<span style={{ opacity: 0.55, fontSize: 10 }}>{fmtUsd(ph.usd)}</span>
+                                        </span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                                   {wData.sequence.map((s, i) => (
                                     <div key={i} title={`${s.side === 'B' ? 'BUY' : 'SELL'} $${s.usd.toFixed(0)} @ $${s.price.toFixed(4)}
 ${new Date(s.ts).toLocaleString()}`}
                                       style={{ width: 7, height: 16, borderRadius: 1.5, background: s.side === 'B' ? 'var(--green)' : 'var(--red)', opacity: 0.8 }} />
                                   ))}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )
+                            })()}
                             {/* buy/sell grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                               <div>
