@@ -61,32 +61,53 @@ type Tab = 'overview' | 'positions' | 'spot' | 'orders' | 'trades' | 'funding' |
 
 const COIN_COLORS = ['#0d9488', '#3b82f6', '#9333ea', '#f59e0b', '#ef4444', '#10b981', '#f97316', '#06b6d4']
 
+// Module-level icon registry — fetched once per session from our cached API route
+const _icons: Record<string, string> = {}
+let _iconsFetched = false
+let _iconsFetch: Promise<void> | null = null
+
+function prefetchIcons(): Promise<void> {
+  if (_iconsFetched) return Promise.resolve()
+  if (_iconsFetch) return _iconsFetch
+  _iconsFetch = fetch('/api/coin-icons')
+    .then(r => r.json())
+    .then((m: Record<string, string>) => { Object.assign(_icons, m); _iconsFetched = true })
+    .catch(() => { _iconsFetched = true })
+  return _iconsFetch
+}
+
 function CoinIcon({ symbol, size = 26 }: { symbol: string; size?: number }) {
-  const [err, setErr] = useState(false)
-  const clean = symbol.replace(/-PERP$/, '').replace(/k$/, '').toLowerCase()
-  const src = `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/32/color/${clean}.png`
+  // Strip HL-specific prefixes to find the base coin (k = 1000x meme coins)
+  const key = symbol.replace(/^k/, '').toUpperCase()
   const color = COIN_COLORS[symbol.charCodeAt(0) % COIN_COLORS.length]
-  if (err) {
+  const [imgUrl, setImgUrl] = useState<string | null>(_icons[key] ?? null)
+  const [err, setErr] = useState(false)
+
+  useEffect(() => {
+    prefetchIcons().then(() => { if (_icons[key]) setImgUrl(_icons[key]) })
+  }, [key])
+
+  if (imgUrl && !err) {
     return (
-      <div style={{
-        width: size, height: size, borderRadius: '50%', background: color,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: Math.round(size * 0.42), fontWeight: 800, color: '#fff',
-        flexShrink: 0, userSelect: 'none', letterSpacing: '-0.02em',
-      }}>
-        {symbol[0]}
-      </div>
+      <img
+        src={imgUrl}
+        alt={symbol}
+        width={size}
+        height={size}
+        style={{ borderRadius: '50%', flexShrink: 0, display: 'block' }}
+        onError={() => setErr(true)}
+      />
     )
   }
   return (
-    <img
-      src={src}
-      alt={symbol}
-      width={size}
-      height={size}
-      style={{ borderRadius: '50%', flexShrink: 0, display: 'block' }}
-      onError={() => setErr(true)}
-    />
+    <div style={{
+      width: size, height: size, borderRadius: '50%', background: color,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(size * 0.42), fontWeight: 800, color: '#fff',
+      flexShrink: 0, userSelect: 'none', letterSpacing: '-0.02em',
+    }}>
+      {symbol[0]}
+    </div>
   )
 }
 
