@@ -999,6 +999,7 @@ function HLTraderDashboard() {
   const [evmData, setEvmData] = useState<EvmWalletData | null>(null)
   const [evmLoading, setEvmLoading] = useState(false)
   const [evmError, setEvmError] = useState<string | null>(null)
+  const [tradeFilter, setTradeFilter] = useState<'perps' | 'spot'>('perps')
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
 
@@ -1426,28 +1427,78 @@ function HLTraderDashboard() {
           )}
 
           {/* Trades */}
-          {tab === 'trades' && (
-            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
-              {fills.length > 200 && (
-                <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--ink-mute)', borderBottom: '1px solid var(--rule-soft)' }}>Showing 200 of {fills.length} fills</div>
-              )}
-              <Table
-                headers={['Symbol', 'Side', 'Size', 'Price', 'Direction', 'Closed PnL', 'Fee', 'Time']}
-                alignRight={[2, 3, 5, 6]}
-                empty="No trade history"
-                rows={fills.slice(0, 200).map(f => [
-                  <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(f.coin, data.spotTokenMap)}</span>,
-                  <span key="side" style={{ color: f.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{f.side === 'B' ? 'Buy' : 'Sell'}</span>,
-                  fmtNum(f.sz),
-                  fmtUsd(f.px),
-                  <span key="dir" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>{f.dir}</span>,
-                  <span key="pnl" style={{ color: pnlColor(f.closedPnl) }}>{fmtUsd(f.closedPnl)}</span>,
-                  <span key="fee" style={{ color: 'var(--ink-mute)' }}>{fmtUsd(f.fee)} {f.feeToken}</span>,
-                  fmtTime(f.time),
-                ])}
-              />
-            </div>
-          )}
+          {tab === 'trades' && (() => {
+            const perpFills = fills.filter(f => !f.coin.startsWith('@'))
+            const spotFills = fills.filter(f => f.coin.startsWith('@'))
+            const shown = tradeFilter === 'perps' ? perpFills : spotFills
+
+            return (
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {(['perps', 'spot'] as const).map(f => (
+                    <button key={f} onClick={() => setTradeFilter(f)} style={{
+                      background: tradeFilter === f ? 'var(--blue-soft)' : 'transparent',
+                      border: '1px solid var(--rule)', borderRadius: 6,
+                      color: tradeFilter === f ? 'var(--blue)' : 'var(--ink-soft)',
+                      cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 600,
+                      padding: '4px 14px',
+                    }}>
+                      {f === 'perps' ? 'Perpetuals' : 'Spot'}
+                      <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>
+                        {f === 'perps' ? perpFills.length : spotFills.length}
+                      </span>
+                    </button>
+                  ))}
+                  {shown.length > 200 && (
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--ink-mute)' }}>Showing 200 of {shown.length}</span>
+                  )}
+                </div>
+
+                {tradeFilter === 'perps' ? (
+                  <Table
+                    headers={['Symbol', 'Side', 'Size', 'Price', 'Direction', 'Closed PnL', 'Fee', 'Time']}
+                    alignRight={[2, 3, 5, 6]}
+                    empty="No perpetual trades"
+                    rows={shown.slice(0, 200).map(f => [
+                      <span key="coin" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <CoinIcon symbol={f.coin} size={18} />
+                        <span style={{ fontWeight: 600 }}>{f.coin}</span>
+                      </span>,
+                      <span key="side" style={{ color: f.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>{f.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                      fmtNum(f.sz),
+                      fmtUsd(f.px),
+                      <span key="dir" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>{f.dir}</span>,
+                      <span key="pnl" style={{ color: pnlColor(f.closedPnl), fontWeight: 600 }}>{parseFloat(f.closedPnl || '0') !== 0 ? (parseFloat(f.closedPnl) >= 0 ? '+' : '') + fmtUsd(f.closedPnl) : '—'}</span>,
+                      <span key="fee" style={{ color: 'var(--ink-mute)' }}>{fmtUsd(f.fee)}</span>,
+                      fmtTime(f.time),
+                    ])}
+                  />
+                ) : (
+                  <Table
+                    headers={['Token', 'Side', 'Amount', 'Price', 'Total', 'Fee', 'Time']}
+                    alignRight={[2, 3, 4, 5]}
+                    empty="No spot trades"
+                    rows={shown.slice(0, 200).map(f => {
+                      const name = resolveCoins(f.coin, data.spotTokenMap)
+                      const total = parseFloat(f.sz) * parseFloat(f.px)
+                      return [
+                        <span key="coin" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <CoinIcon symbol={name} size={18} />
+                          <span style={{ fontWeight: 600 }}>{name}</span>
+                        </span>,
+                        <span key="side" style={{ color: f.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>{f.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                        fmtNum(f.sz, 4),
+                        fmtUsd(f.px),
+                        fmtUsd(total),
+                        <span key="fee" style={{ color: 'var(--ink-mute)' }}>{fmtUsd(f.fee)}</span>,
+                        fmtTime(f.time),
+                      ]
+                    })}
+                  />
+                )}
+              </div>
+            )
+          })()}
 
           {/* Funding */}
           {tab === 'funding' && <FundingTab data={data} />}
