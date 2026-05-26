@@ -57,6 +57,9 @@ type FlowWindow = {
   buy_trades: number; sell_trades: number
   buy_size?: number; sell_size?: number; net_size?: number
   buy_avg_price?: number | null; sell_avg_price?: number | null
+  first_action?: 'B' | 'S' | null
+  last_action?: 'B' | 'S' | null
+  sequence?: { side: 'B' | 'S'; usd: number; price: number; ts: number }[]
 }
 
 // ── formatters ─────────────────────────────────────────────────
@@ -686,6 +689,27 @@ function ExplorerInner() {
                             </div>
                             {hasTrades && (
                               <>
+                                {/* sequence strip */}
+                                {wd.sequence && wd.sequence.length > 0 && (
+                                  <div style={{ marginBottom: 6 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                      <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>order</span>
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: wd.first_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                        {wd.first_action === 'B' ? '▲ bought first' : '▼ sold first'}
+                                      </span>
+                                      <span style={{ fontSize: 9, color: 'var(--ink-faint)', marginLeft: 'auto' }}>→</span>
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: wd.last_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                        {wd.last_action === 'B' ? '▲ last buy' : '▼ last sell'}
+                                      </span>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                                      {wd.sequence.map((s, i) => (
+                                        <div key={i} title={`${s.side === 'B' ? 'BUY' : 'SELL'} $${s.usd.toFixed(0)} @ $${s.price.toFixed(4)}`}
+                                          style={{ width: 6, height: 12, borderRadius: 1, background: s.side === 'B' ? 'var(--green)' : 'var(--red)', opacity: 0.75 }} />
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                                 {/* buy/sell bar */}
                                 <div style={{ height: 3, background: 'var(--line)', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
                                   <div style={{ height: '100%', width: (wd.buy_usd / total * 100).toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
@@ -1059,6 +1083,28 @@ function ExplorerInner() {
                                 </div>
                               )}
                             </div>
+                            {/* trade sequence */}
+                            {wData.sequence && wData.sequence.length > 0 && (
+                              <div style={{ marginBottom: 14 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                  <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>sequence</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: wData.first_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                    {wData.first_action === 'B' ? '▲ opened buying' : '▼ opened selling'}
+                                  </span>
+                                  <span style={{ color: 'var(--ink-faint)', fontSize: 10 }}>→</span>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: wData.last_action === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                    {wData.last_action === 'B' ? '▲ last was buy' : '▼ last was sell'}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                                  {wData.sequence.map((s, i) => (
+                                    <div key={i} title={`${s.side === 'B' ? 'BUY' : 'SELL'} $${s.usd.toFixed(0)} @ $${s.price.toFixed(4)}
+${new Date(s.ts).toLocaleString()}`}
+                                      style={{ width: 7, height: 16, borderRadius: 1.5, background: s.side === 'B' ? 'var(--green)' : 'var(--red)', opacity: 0.8 }} />
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                             {/* buy/sell grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                               <div>

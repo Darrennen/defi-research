@@ -31,13 +31,25 @@ function parseExplorerLitTrade(entry: any): any | null {
 }
 
 function flowWindow(trades: any[], accountId: number, sinceMs: number) {
-  const w = trades.filter(t => t.ts >= sinceMs)
+  // sort oldest → newest so sequence reflects actual chronological order
+  const w = trades.filter(t => t.ts >= sinceMs).sort((a, b) => a.ts - b.ts)
   const buys = w.filter(t => t.buyer_id === accountId)
   const sells = w.filter(t => t.seller_id === accountId)
   const buyUsd = buys.reduce((s, t) => s + t.usd, 0)
   const buySize = buys.reduce((s, t) => s + t.size, 0)
   const sellUsd = sells.reduce((s, t) => s + t.usd, 0)
   const sellSize = sells.reduce((s, t) => s + t.size, 0)
+
+  // chronological sequence: each trade marked B or S, capped at 60
+  const sequence = w.slice(0, 60).map(t => ({
+    side: t.buyer_id === accountId ? 'B' : 'S',
+    usd: t.usd,
+    price: t.price,
+    ts: t.ts,
+  }))
+  const firstAction = sequence.length > 0 ? sequence[0].side : null
+  const lastAction  = sequence.length > 0 ? sequence[sequence.length - 1].side : null
+
   return {
     buy_usd: buyUsd, buy_size: buySize, buy_trades: buys.length,
     buy_avg_price: buySize > 0 ? buyUsd / buySize : null,
@@ -45,6 +57,9 @@ function flowWindow(trades: any[], accountId: number, sinceMs: number) {
     sell_avg_price: sellSize > 0 ? sellUsd / sellSize : null,
     net_usd: buyUsd - sellUsd,
     net_size: buySize - sellSize,
+    sequence,
+    first_action: firstAction,
+    last_action: lastAction,
   }
 }
 
