@@ -197,6 +197,52 @@ function buildCandleSvg(rawCandles: any[]): string {
   return `__CANDLE__${out}__VOL__${volSvg}__OI__${oiSvg}`
 }
 
+// ── flow time-series bars ──────────────────────────────────────
+
+function buildFlowTimeSvg(trades: LitTrade[], bucketMs: number): string {
+  const W = 800, H = 80
+  if (!trades.length) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-faint)" style="font-size:11px">no trades loaded</text>`
+  const buckets = new Map<number, { buy: number; sell: number }>()
+  for (const t of trades) {
+    const key = Math.floor(t.ts / bucketMs) * bucketMs
+    if (!buckets.has(key)) buckets.set(key, { buy: 0, sell: 0 })
+    const b = buckets.get(key)!
+    if (t.taker_is_buyer === 1) b.buy += t.usd; else b.sell += t.usd
+  }
+  const sorted = [...buckets.entries()].sort((a, b) => a[0] - b[0])
+  if (sorted.length < 2) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-faint)" style="font-size:11px">collecting data…</text>`
+  const maxVal = Math.max(...sorted.map(([, b]) => Math.max(b.buy, b.sell))) || 1
+  const mid = H / 2
+  const n = sorted.length, slotW = W / n, bW = Math.max(1, slotW - 1)
+  let out = `<line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="3,3"/>`
+  sorted.forEach(([ts, b], i) => {
+    const x = (i * slotW + 0.5).toFixed(1)
+    const buyH = (b.buy / maxVal * (mid - 4)).toFixed(1)
+    const sellH = (b.sell / maxVal * (mid - 4)).toFixed(1)
+    const net = b.buy - b.sell
+    const netH = (Math.abs(net) / maxVal * (mid - 4)).toFixed(1)
+    out += `<rect x="${x}" y="${(mid - parseFloat(buyH)).toFixed(1)}" width="${(bW * 0.48).toFixed(1)}" height="${buyH}" fill="rgba(111,224,137,0.65)"/>`
+    out += `<rect x="${(parseFloat(x) + bW * 0.5).toFixed(1)}" y="${mid.toFixed(1)}" width="${(bW * 0.48).toFixed(1)}" height="${sellH}" fill="rgba(255,106,119,0.65)"/>`
+  })
+  // net line
+  const netPts = sorted.map(([, b], i) => {
+    const x = (i * slotW + slotW / 2).toFixed(1)
+    const net = b.buy - b.sell
+    const y = (mid - (net / maxVal * (mid - 4))).toFixed(1)
+    return `${x},${y}`
+  }).join(' ')
+  out += `<polyline points="${netPts}" fill="none" stroke="rgba(224,255,107,0.7)" stroke-width="1.5"/>`
+  // time labels
+  const step = Math.max(1, Math.floor(n / 5))
+  sorted.forEach(([ts], i) => {
+    if (i % step !== 0) return
+    const x = (i * slotW + slotW / 2).toFixed(1)
+    const lbl = new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    out += `<text x="${x}" y="${H - 2}" text-anchor="middle" fill="var(--ink-faint)" font-size="9" font-family="monospace">${lbl}</text>`
+  })
+  return out
+}
+
 // ── order book heatmap (canvas) ─────────────────────────────────
 
 const HM_SNAPSHOTS = 100
@@ -772,6 +818,30 @@ export default function LitTracker() {
                 ))}
               </div>
             ) : <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>loading…</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* flow timeline */}
+      <div className="panel" style={{ padding: 0, marginBottom: 16 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>Flow Timeline</div>
+          <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>buy ↑ · sell ↓ · <span style={{ color: 'var(--accent)' }}>net</span> line</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ink-faint)' }}>{trades.length} trades bucketed</span>
+        </div>
+        <div style={{ padding: '8px 16px 12px' }}>
+          {(() => {
+            const bucketMs = hours <= 24 ? 1800000 : hours <= 168 ? 14400000 : 86400000
+            const svgBody = buildFlowTimeSvg(trades, bucketMs)
+            return (
+              <svg viewBox={`0 0 800 80`} preserveAspectRatio="none" style={{ width: '100%', height: 80, display: 'block' }}
+                dangerouslySetInnerHTML={{ __html: svgBody }} />
+            )
+          })()}
+          <div style={{ display: 'flex', gap: 16, fontSize: 10, color: 'var(--ink-dim)', marginTop: 4 }}>
+            <span><span style={{ color: 'var(--green)' }}>■</span> buy</span>
+            <span><span style={{ color: 'var(--red)' }}>■</span> sell</span>
+            <span><span style={{ color: 'var(--accent)' }}>—</span> net</span>
           </div>
         </div>
       </div>

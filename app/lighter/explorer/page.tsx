@@ -152,6 +152,56 @@ function buildFlowSvg(trades: HistTrade[], accountIndex: number): { svg: string;
   return { svg, lastVal }
 }
 
+// ── mini candle chart SVG (for position expand) ──────────────────
+
+function buildPosCandleSvg(rawCandles: any[]): string {
+  const W = 800, H = 160
+  const pad = { t: 8, r: 60, b: 20, l: 4 }
+  const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b
+  if (!rawCandles.length) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-faint)" style="font-size:11px">no chart data</text>`
+  const data = rawCandles.map((c: any) => ({
+    t: Number(c.t || c.open_time || c.time || c.timestamp || 0),
+    o: parseFloat(c.o ?? c.open ?? 0), h: parseFloat(c.h ?? c.high ?? 0),
+    l: parseFloat(c.l ?? c.low ?? 0), c: parseFloat(c.c ?? c.close ?? 0),
+    v: parseFloat(c.base_volume ?? c.quote_volume ?? c.volume ?? c.v ?? 0),
+  })).filter(c => c.o > 0).sort((a, b) => a.t - b.t)
+  if (data.length < 2) return `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="var(--ink-faint)" style="font-size:11px">loading…</text>`
+  const prices = data.flatMap(c => [c.h, c.l]).filter(p => p > 0)
+  const yMin = Math.min(...prices), yMax = Math.max(...prices)
+  const yRange = yMax - yMin || yMin * 0.01
+  const py = (p: number) => pad.t + ((yMax - p) / yRange) * cH
+  const n = data.length, slotW = cW / n, bodyW = Math.max(1, slotW * 0.6)
+  let out = [0,1,2,3,4].map(i => {
+    const p = yMin + yRange * (i / 4), y = py(p).toFixed(1)
+    return `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/>` +
+      `<text x="${W - pad.r + 4}" y="${(parseFloat(y)+3).toFixed(1)}" fill="var(--ink-faint)" font-size="9" font-family="monospace">$${p.toFixed(4)}</text>`
+  }).join('')
+  data.forEach((c, i) => {
+    const cx = (pad.l + (i + 0.5) * slotW).toFixed(1)
+    const isBull = c.c >= c.o, col = isBull ? 'var(--green)' : 'var(--red)'
+    const bTop = py(Math.max(c.o, c.c)).toFixed(1), bBot = py(Math.min(c.o, c.c)).toFixed(1)
+    const bH = Math.max(1, parseFloat(bBot) - parseFloat(bTop)).toFixed(1)
+    out += `<line x1="${cx}" x2="${cx}" y1="${py(c.h).toFixed(1)}" y2="${py(c.l).toFixed(1)}" stroke="${col}" stroke-width="1" opacity="0.7"/>`
+    out += `<rect x="${(parseFloat(cx) - bodyW/2).toFixed(1)}" y="${bTop}" width="${bodyW.toFixed(1)}" height="${bH}" fill="${col}" opacity="0.85" rx="0.5"/>`
+  })
+  const step = Math.max(1, Math.floor(n / 5))
+  for (let i = 0; i < n; i += step) {
+    const c = data[i], x = (pad.l + (i + 0.5) * slotW).toFixed(1)
+    const ts = c.t > 1e12 ? c.t : c.t * 1000
+    const lbl = new Date(ts).toLocaleString('en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    out += `<text x="${x}" y="${H - 4}" text-anchor="middle" fill="var(--ink-faint)" font-size="9" font-family="monospace">${lbl}</text>`
+  }
+  // volume strip (30px)
+  const VH = 28, maxV = Math.max(...data.map(c => c.v)) || 1
+  let volSvg = ''
+  data.forEach((c, i) => {
+    const x = (pad.l + i * slotW).toFixed(1), bh = (c.v / maxV * VH).toFixed(1)
+    const col = c.c >= c.o ? 'rgba(111,224,137,0.5)' : 'rgba(255,106,119,0.5)'
+    volSvg += `<rect x="${x}" y="${(VH - parseFloat(bh)).toFixed(1)}" width="${(slotW - 0.5).toFixed(1)}" height="${bh}" fill="${col}"/>`
+  })
+  return `__CANDLE__${out}__VOL__${volSvg}`
+}
+
 // ── tracked wallets ─────────────────────────────────────────────
 
 const TW_KEY = 'lit_tracked_v1'
@@ -168,7 +218,7 @@ function ExplorerInner() {
   const [account, setAccount] = useState<AccountData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'positions' | 'assets' | 'staking' | 'history' | 'flow'>('positions')
+  const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'assets' | 'staking' | 'history' | 'flow'>('overview')
   const [histTrades, setHistTrades] = useState<HistTrade[]>([])
   const [histOffset, setHistOffset] = useState(0)
   const [histLoading, setHistLoading] = useState(false)
@@ -178,6 +228,9 @@ function ExplorerInner() {
   const [flowPeriod, setFlowPeriod] = useState<'all' | '24h' | '7d' | '30d'>('all')
   const [allFills, setAllFills] = useState<HistTrade[]>([])
   const [isTracked, setIsTracked] = useState(false)
+  const [expandedPos, setExpandedPos] = useState<number | null>(null)
+  const [posCandles, setPosCandles] = useState<Record<number, any[]>>({})
+  const [posCandleLoading, setPosCandleLoading] = useState<number | null>(null)
 
   const checkTracked = (idx: number) => {
     try {
@@ -205,10 +258,11 @@ function ExplorerInner() {
       if (!res.ok) { setError(j.error || 'Not found'); return }
       setAccount(j)
       setIsTracked(checkTracked(j.account_index))
-      setActiveTab('positions')
+      setActiveTab('overview')
       router.replace(`/lighter/explorer?q=${encodeURIComponent(q.trim())}`, { scroll: false })
       // background fills fetch
       fetchFills(j.l1_address, j.account_index, 0, true)
+      fetchLitFlow(j.account_index, j.l1_address)
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -244,6 +298,16 @@ function ExplorerInner() {
       const j = await res.json()
       setLitFlow(j)
     } catch {} finally { setLitFlowLoading(false) }
+  }
+
+  const loadPosCandles = async (marketId: number) => {
+    if (posCandles[marketId] || posCandleLoading === marketId) return
+    setPosCandleLoading(marketId)
+    try {
+      const res = await fetch(`/api/lighter/lit/candles?market_id=${marketId}&resolution=1h&count=72`)
+      const j = await res.json()
+      setPosCandles(prev => ({ ...prev, [marketId]: j.candles ?? [] }))
+    } catch {} finally { setPosCandleLoading(null) }
   }
 
   useEffect(() => {
@@ -435,6 +499,7 @@ function ExplorerInner() {
           {/* tabs */}
           <div style={{ display: 'flex', gap: 4, padding: '8px 24px', borderBottom: '1px solid var(--line)', background: 'var(--paper-2)', flexWrap: 'wrap' }}>
             {([
+              ['overview', 'overview'],
               ['positions', `positions${positions.length ? ` (${positions.length})` : ''}`],
               ['assets', `assets${assets.length ? ` (${assets.length})` : ''}`],
               ['staking', 'lit staking'],
@@ -449,6 +514,128 @@ function ExplorerInner() {
               </button>
             ))}
           </div>
+
+          {/* overview tab */}
+          {activeTab === 'overview' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 1, background: 'var(--line)' }}>
+              {/* left: positions snapshot + assets */}
+              <div style={{ background: 'var(--bg)', padding: '20px 24px' }}>
+                <div className="cockpit-h2">Open Positions</div>
+                {positions.length === 0 ? (
+                  <div style={{ color: 'var(--ink-faint)', fontSize: 12, marginBottom: 20 }}>no open positions</div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 20 }}>
+                    <tbody>
+                      {[...positions].sort((a, b) => Math.abs(parseFloat(b.position_value)) - Math.abs(parseFloat(a.position_value))).map((p, i) => {
+                        const size = parseFloat(p.position)
+                        const isLong = size >= 0
+                        const pnl = parseFloat(p.unrealized_pnl || '0')
+                        const posVal = Math.abs(parseFloat(p.position_value || '0'))
+                        const liqPrice = parseFloat(p.liquidation_price || '0')
+                        const markPrice = posVal > 0 && Math.abs(size) > 0 ? posVal / Math.abs(size) : 0
+                        const distPct = liqPrice > 0 && markPrice > 0 ? Math.abs(markPrice - liqPrice) / markPrice * 100 : null
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--line)' }}>
+                            <td style={{ padding: '8px 0', fontWeight: 600, color: 'var(--ink)' }}>{p.symbol}</td>
+                            <td style={{ padding: '8px 4px' }}><span className={isLong ? 'pill-buy' : 'pill-sell'}>{isLong ? 'L' : 'S'}</span></td>
+                            <td style={{ padding: '8px 4px', textAlign: 'right', color: 'var(--ink-dim)', fontSize: 11 }}>{fmtUsd(posVal)}</td>
+                            <td style={{ padding: '8px 0', textAlign: 'right', fontWeight: 600 }} className={pnl >= 0 ? 'pos' : 'neg'}>{pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}</td>
+                            {distPct != null && distPct < 20 && (
+                              <td style={{ padding: '8px 0 8px 8px', textAlign: 'right', fontSize: 10, color: distPct < 8 ? 'var(--red)' : 'var(--amber)' }}>liq {distPct.toFixed(1)}%</td>
+                            )}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+                {assets.length > 0 && (
+                  <>
+                    <div className="cockpit-h2">Assets</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                      {assets.map((a, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--line)', fontSize: 12 }}>
+                          <span style={{ fontWeight: 600 }}>{a.symbol}</span>
+                          <span style={{ color: 'var(--ink-dim)', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(parseFloat(a.balance), 4)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* right: staking + LIT flow */}
+              <div style={{ background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--line)' }}>
+                  <div className="cockpit-h2">LIT Staking</div>
+                  {staking.is_staking ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 4 }}>Staked</div>
+                        <div className="pos" style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>{fmtUsd(staking.staked_usdc_value)}</div>
+                      </div>
+                      {staking.entry_usdc > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 4 }}>Staking PnL</div>
+                          <div className={staking.staked_usdc_value >= staking.entry_usdc ? 'pos' : 'neg'} style={{ fontFamily: 'var(--font-serif)', fontSize: 20, fontWeight: 500 }}>
+                            {staking.staked_usdc_value - staking.entry_usdc >= 0 ? '+' : ''}{fmtUsd(staking.staked_usdc_value - staking.entry_usdc)}
+                          </div>
+                        </div>
+                      )}
+                      {staking.lit_free_balance > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginBottom: 4 }}>LIT Free</div>
+                          <div style={{ fontSize: 14, fontWeight: 500 }}>{fmtLit(staking.lit_free_balance)}</div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>
+                      not staking{staking.lit_free_balance > 0 ? ` · holds ${fmtLit(staking.lit_free_balance)}` : ''}
+                    </div>
+                  )}
+                </div>
+                <div style={{ padding: '20px 24px', flex: 1 }}>
+                  <div className="cockpit-h2">LIT Flow</div>
+                  {litFlowLoading && <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>loading…</div>}
+                  {litFlow && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {(['24h', '7d', '30d'] as const).map(w => {
+                        const wd = litFlow[w]
+                        if (!wd) return null
+                        const flowPnl = wd.sell_usd - wd.buy_usd
+                        const isWin = flowPnl >= 0
+                        const total = wd.buy_usd + wd.sell_usd || 1
+                        const hasTrades = wd.buy_trades + wd.sell_trades > 0
+                        return (
+                          <div key={w}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
+                              <span style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', width: 28 }}>{w}</span>
+                              {hasTrades ? (
+                                <>
+                                  <div style={{ flex: 1, height: 3, background: 'var(--line)', borderRadius: 2, overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: (wd.buy_usd / total * 100).toFixed(1) + '%', background: 'var(--green)', transition: 'width .4s' }} />
+                                  </div>
+                                  <span className="pos" style={{ fontSize: 11, width: 56, textAlign: 'right' }}>{fmtUsd(wd.buy_usd)}</span>
+                                  <span className="neg" style={{ fontSize: 11, width: 56, textAlign: 'right' }}>{fmtUsd(wd.sell_usd)}</span>
+                                  <span className={isWin ? 'pos' : 'neg'} style={{ fontSize: 13, fontWeight: 700, width: 64, textAlign: 'right' }}>{flowPnl >= 0 ? '+' : ''}{fmtUsd(flowPnl)}</span>
+                                  <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 2, background: isWin ? 'rgba(111,224,137,0.18)' : 'rgba(255,106,119,0.18)', color: isWin ? 'var(--green)' : 'var(--red)' }}>{isWin ? 'W' : 'L'}</span>
+                                </>
+                              ) : (
+                                <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>no LIT trades</span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {!litFlowLoading && !litFlow && (
+                    <div style={{ color: 'var(--ink-faint)', fontSize: 12 }}>no LIT activity found</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* positions tab */}
           {activeTab === 'positions' && (
@@ -478,8 +665,16 @@ function ExplorerInner() {
                       const roe = posVal > 0 ? pnl / posVal * 100 : 0
                       const rowBg = distPct != null && distPct < 8 ? 'rgba(255,90,90,0.04)' : ''
                       return (
+                        <>
                         <tr key={i} style={{ borderBottom: '1px solid var(--line)', background: rowBg }}>
-                          <td style={{ padding: '9px 16px', fontWeight: 600 }}>{p.symbol}</td>
+                          <td style={{ padding: '9px 16px', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
+                            onClick={() => {
+                              if (expandedPos === p.market_id) { setExpandedPos(null) }
+                              else { setExpandedPos(p.market_id); loadPosCandles(p.market_id) }
+                            }}>
+                            {p.symbol}
+                            <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 5 }}>{expandedPos === p.market_id ? '▲' : '▼'}</span>
+                          </td>
                           <td style={{ padding: '9px 16px' }}>
                             <span className={isLong ? 'pill-buy' : 'pill-sell'}>{isLong ? 'LONG' : 'SHORT'}</span>
                           </td>
@@ -509,6 +704,37 @@ function ExplorerInner() {
                             </div>
                           </td>
                         </tr>
+                        {expandedPos === p.market_id && (
+                          <tr key={`chart-${p.market_id}`}>
+                            <td colSpan={10} style={{ padding: 0, background: 'var(--paper-2)', borderBottom: '1px solid var(--line)' }}>
+                              <div style={{ padding: '12px 16px' }}>
+                                <div style={{ fontSize: 10, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 8 }}>
+                                  {p.symbol} · 1h chart
+                                  {posCandleLoading === p.market_id && <span style={{ marginLeft: 8 }}>loading…</span>}
+                                </div>
+                                {posCandles[p.market_id] ? (() => {
+                                  const result = buildPosCandleSvg(posCandles[p.market_id])
+                                  const parts = result.split('__VOL__')
+                                  const candleBody = parts[0].replace('__CANDLE__', '')
+                                  const volBody = parts[1] ?? ''
+                                  return (
+                                    <>
+                                      <svg viewBox="0 0 800 160" preserveAspectRatio="none" style={{ width: '100%', height: 160, display: 'block', overflow: 'visible' }}
+                                        dangerouslySetInnerHTML={{ __html: candleBody }} />
+                                      <svg viewBox="0 0 800 28" preserveAspectRatio="none" style={{ width: '100%', height: 28, display: 'block', marginTop: 2 }}
+                                        dangerouslySetInnerHTML={{ __html: volBody }} />
+                                    </>
+                                  )
+                                })() : (
+                                  <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--ink-faint)', fontSize: 12 }}>
+                                    {posCandleLoading === p.market_id ? 'loading chart…' : 'no chart data'}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </>
                       )
                     })}
                     {!positions.length && (
