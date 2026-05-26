@@ -60,6 +60,7 @@ type FlowWindow = {
   first_action?: 'B' | 'S' | null
   last_action?: 'B' | 'S' | null
   sequence?: { side: 'B' | 'S'; usd: number; price: number; ts: number }[]
+  phases?: { side: 'B' | 'S'; count: number; usd: number }[]
 }
 
 // ── formatters ─────────────────────────────────────────────────
@@ -705,7 +706,7 @@ function ExplorerInner() {
                               <>
                                 {/* sequence strip */}
                                 {wd.sequence && wd.sequence.length > 0 && (() => {
-                                  const phases = encodePhases(wd.sequence)
+                                  const phases = wd.phases ?? encodePhases(wd.sequence ?? [])
                                   return (
                                     <div style={{ marginBottom: 6 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
@@ -1103,7 +1104,7 @@ function ExplorerInner() {
                             </div>
                             {/* trade sequence */}
                             {wData.sequence && wData.sequence.length > 0 && (() => {
-                              const phases = encodePhases(wData.sequence)
+                              const phases = wData.phases ?? encodePhases(wData.sequence ?? [])
                               return (
                                 <div style={{ marginBottom: 14 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>

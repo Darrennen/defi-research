@@ -40,15 +40,27 @@ function flowWindow(trades: any[], accountId: number, sinceMs: number) {
   const sellUsd = sells.reduce((s, t) => s + t.usd, 0)
   const sellSize = sells.reduce((s, t) => s + t.size, 0)
 
-  // chronological sequence: each trade marked B or S, capped at 60
-  const sequence = w.slice(0, 60).map(t => ({
+  // compute phases from ALL trades (run-length encode consecutive same-side)
+  type Phase = { side: 'B' | 'S'; count: number; usd: number }
+  const phases: Phase[] = []
+  for (const t of w) {
+    const side: 'B' | 'S' = t.buyer_id === accountId ? 'B' : 'S'
+    if (phases.length > 0 && phases[phases.length - 1].side === side) {
+      phases[phases.length - 1].count++
+      phases[phases.length - 1].usd += t.usd
+    } else {
+      phases.push({ side, count: 1, usd: t.usd })
+    }
+  }
+
+  // pixel strip: proportional sample of up to 80 trades across the full window
+  const stride = w.length > 80 ? Math.floor(w.length / 80) : 1
+  const sequence = w.filter((_, i) => i % stride === 0).slice(0, 80).map(t => ({
     side: t.buyer_id === accountId ? 'B' : 'S',
     usd: t.usd,
     price: t.price,
     ts: t.ts,
   }))
-  const firstAction = sequence.length > 0 ? sequence[0].side : null
-  const lastAction  = sequence.length > 0 ? sequence[sequence.length - 1].side : null
 
   return {
     buy_usd: buyUsd, buy_size: buySize, buy_trades: buys.length,
@@ -57,9 +69,10 @@ function flowWindow(trades: any[], accountId: number, sinceMs: number) {
     sell_avg_price: sellSize > 0 ? sellUsd / sellSize : null,
     net_usd: buyUsd - sellUsd,
     net_size: buySize - sellSize,
+    phases,
     sequence,
-    first_action: firstAction,
-    last_action: lastAction,
+    first_action: phases.length > 0 ? phases[0].side : null,
+    last_action:  phases.length > 0 ? phases[phases.length - 1].side : null,
   }
 }
 
