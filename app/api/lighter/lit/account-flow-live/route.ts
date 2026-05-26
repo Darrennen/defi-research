@@ -41,17 +41,20 @@ function flowWindow(trades: any[], accountId: number, sinceMs: number) {
   const sellSize = sells.reduce((s, t) => s + t.size, 0)
 
   // compute phases from ALL trades (run-length encode consecutive same-side)
-  type Phase = { side: 'B' | 'S'; count: number; usd: number }
+  type Phase = { side: 'B' | 'S'; count: number; usd: number; size: number }
   const phases: Phase[] = []
   for (const t of w) {
     const side: 'B' | 'S' = t.buyer_id === accountId ? 'B' : 'S'
     if (phases.length > 0 && phases[phases.length - 1].side === side) {
       phases[phases.length - 1].count++
       phases[phases.length - 1].usd += t.usd
+      phases[phases.length - 1].size += t.size
     } else {
-      phases.push({ side, count: 1, usd: t.usd })
+      phases.push({ side, count: 1, usd: t.usd, size: t.size })
     }
   }
+  // attach avg price to each phase
+  const phasesWithAvg = phases.map(p => ({ ...p, avg_price: p.size > 0 ? p.usd / p.size : null }))
 
   // pixel strip: proportional sample of up to 80 trades across the full window
   const stride = w.length > 80 ? Math.floor(w.length / 80) : 1
@@ -69,7 +72,7 @@ function flowWindow(trades: any[], accountId: number, sinceMs: number) {
     sell_avg_price: sellSize > 0 ? sellUsd / sellSize : null,
     net_usd: buyUsd - sellUsd,
     net_size: buySize - sellSize,
-    phases,
+    phases: phasesWithAvg,
     sequence,
     first_action: phases.length > 0 ? phases[0].side : null,
     last_action:  phases.length > 0 ? phases[phases.length - 1].side : null,

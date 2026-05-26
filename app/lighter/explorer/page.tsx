@@ -60,7 +60,7 @@ type FlowWindow = {
   first_action?: 'B' | 'S' | null
   last_action?: 'B' | 'S' | null
   sequence?: { side: 'B' | 'S'; usd: number; price: number; ts: number }[]
-  phases?: { side: 'B' | 'S'; count: number; usd: number }[]
+  phases?: { side: 'B' | 'S'; count: number; usd: number; size: number; avg_price: number | null }[]
 }
 
 // ── formatters ─────────────────────────────────────────────────
@@ -249,15 +249,18 @@ function buildPosCandleSvg(rawCandles: any[]): string {
 
 // ── flow phase encoder ──────────────────────────────────────────
 
-function encodePhases(seq: { side: 'B' | 'S'; usd: number }[]) {
+function encodePhases(seq: { side: 'B' | 'S'; usd: number; price?: number }[]) {
   if (!seq.length) return []
-  const phases: { side: 'B' | 'S'; count: number; usd: number }[] = []
-  let cur = { side: seq[0].side, count: 1, usd: seq[0].usd }
+  type Ph = { side: 'B' | 'S'; count: number; usd: number; size: number; avg_price: number | null }
+  const finish = (c: Omit<Ph, 'avg_price'>): Ph => ({ ...c, avg_price: c.size > 0 ? c.usd / c.size : null })
+  const phases: Ph[] = []
+  let cur = { side: seq[0].side, count: 1, usd: seq[0].usd, size: seq[0].price ? seq[0].usd / seq[0].price : 0 }
   for (let i = 1; i < seq.length; i++) {
-    if (seq[i].side === cur.side) { cur.count++; cur.usd += seq[i].usd }
-    else { phases.push(cur); cur = { side: seq[i].side, count: 1, usd: seq[i].usd } }
+    const sz = seq[i].price ? seq[i].usd / seq[i].price! : 0
+    if (seq[i].side === cur.side) { cur.count++; cur.usd += seq[i].usd; cur.size += sz }
+    else { phases.push(finish(cur)); cur = { side: seq[i].side, count: 1, usd: seq[i].usd, size: sz } }
   }
-  phases.push(cur)
+  phases.push(finish(cur))
   return phases
 }
 
@@ -714,8 +717,15 @@ function ExplorerInner() {
                                         {phases.map((ph, i) => (
                                           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                             {i > 0 && <span style={{ color: 'var(--ink-faint)', fontSize: 10 }}>→</span>}
-                                            <span style={{ fontSize: 11, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
-                                              {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
+                                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                              <span style={{ fontSize: 11, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                                {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
+                                              </span>
+                                              {ph.avg_price != null && (
+                                                <span style={{ fontSize: 9, color: 'var(--ink-faint)', fontVariantNumeric: 'tabular-nums' }}>
+                                                  ${ph.avg_price.toFixed(4)}
+                                                </span>
+                                              )}
                                             </span>
                                           </span>
                                         ))}
@@ -1112,8 +1122,15 @@ function ExplorerInner() {
                                     {phases.map((ph, i) => (
                                       <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                         {i > 0 && <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>→</span>}
-                                        <span style={{ fontSize: 13, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
-                                          {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
+                                        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                          <span style={{ fontSize: 13, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                            {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
+                                          </span>
+                                          {ph.avg_price != null && (
+                                            <span style={{ fontSize: 10, color: 'var(--ink-faint)', fontVariantNumeric: 'tabular-nums' }}>
+                                              ${ph.avg_price.toFixed(4)}
+                                            </span>
+                                          )}
                                         </span>
                                       </span>
                                     ))}
