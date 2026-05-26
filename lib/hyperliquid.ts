@@ -403,7 +403,10 @@ export function fmtPct(v: string | number | null | undefined): string {
 
 export function fmtTime(ms: number): string {
   const d = new Date(ms)
+  const now = new Date()
+  const sameYear = d.getFullYear() === now.getFullYear()
   return d.toLocaleString('en-US', {
+    year: sameYear ? undefined : 'numeric',
     month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
     hour12: false,
