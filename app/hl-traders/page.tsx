@@ -508,10 +508,12 @@ function buildHypeFlowSvg(fills: HLFill[]): string {
 }
 
 function HypeFlowTab({ data }: { data: HLWalletData }) {
-  const allHypeFills = (data.fills ?? []).filter(f => f.coin === 'HYPE')
-  const hypeMarkPx   = parseFloat(data.assetCtxMap.get('HYPE')?.markPx ?? '0')
-  const hypePos      = data.perps.assetPositions.find(ap => ap.position.coin === 'HYPE')?.position
-  const netOpenSize  = hypePos ? parseFloat(hypePos.szi) : 0
+  // Spot HYPE fills: coin is '@{index}' where spotTokenMap maps index → 'HYPE'
+  const hypeSpotKey = [...data.spotTokenMap.entries()].find(([, name]) => name === 'HYPE')?.[0]
+  const allHypeFills = (data.fills ?? []).filter(f => hypeSpotKey ? f.coin === hypeSpotKey : false)
+  const hypeMarkPx   = parseFloat(data.spotAssetCtxMap.get('HYPE')?.markPx ?? data.assetCtxMap.get('HYPE')?.markPx ?? '0')
+  const hypeSpotBal  = data.spot.balances?.find(b => b.coin === 'HYPE')
+  const netOpenSize  = hypeSpotBal ? parseFloat(hypeSpotBal.total) : 0
 
   const WINDOWS = [
     { key: '24h',  ms: 86_400_000 },
@@ -543,7 +545,7 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
   if (allHypeFills.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ink-mute)', fontSize: 14 }}>
-        No HYPE perp trades found for this wallet
+        No spot HYPE trades found for this wallet
       </div>
     )
   }
@@ -557,33 +559,29 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
 
   return (
     <div>
-      {/* current position banner */}
-      {hypePos && (
+      {/* spot holding banner */}
+      {(netOpenSize > 0 || hypeMarkPx > 0) && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>Current HYPE Position</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{Math.abs(netOpenSize).toLocaleString('en-US', { maximumFractionDigits: 2 })} HYPE</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: netOpenSize > 0 ? 'var(--green)' : 'var(--red)', background: netOpenSize > 0 ? 'rgba(34,197,94,0.1)' : 'rgba(244,63,94,0.1)', borderRadius: 4, padding: '2px 8px' }}>
-                {netOpenSize > 0 ? 'LONG' : 'SHORT'}
-              </span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-mute)' }}>{hypePos.leverage.value}× lev</span>
+            <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>Spot HYPE Balance</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>
+              {netOpenSize > 0 ? netOpenSize.toLocaleString('en-US', { maximumFractionDigits: 4 }) : '0'} HYPE
             </div>
           </div>
-          <div style={{ borderLeft: '1px solid var(--rule)', paddingLeft: 20 }}>
-            <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 3 }}>Unrealized PnL</div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16, color: pnlColor(hypePos.unrealizedPnl) }}>
-              {parseFloat(hypePos.unrealizedPnl) >= 0 ? '+' : ''}{fmtUsd(hypePos.unrealizedPnl)}
+          {hypeMarkPx > 0 && netOpenSize > 0 && (
+            <div style={{ borderLeft: '1px solid var(--rule)', paddingLeft: 20 }}>
+              <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 3 }}>Value</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{sfmt(netOpenSize * hypeMarkPx)}</div>
             </div>
-          </div>
+          )}
           {hypeMarkPx > 0 && (
             <div style={{ borderLeft: '1px solid var(--rule)', paddingLeft: 20 }}>
-              <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 3 }}>HYPE Mark</div>
+              <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 3 }}>Spot Price</div>
               <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>${hypeMarkPx.toFixed(3)}</div>
             </div>
           )}
           <div style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--ink-mute)' }}>
-            {allHypeFills.length} total fills in history
+            {allHypeFills.length} spot fills in history
           </div>
         </div>
       )}
@@ -693,7 +691,7 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
       {/* Fill history table */}
       <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>
-          HYPE Fill History ({allHypeFills.length})
+          Spot HYPE Trade History ({allHypeFills.length})
         </div>
         <Table
           headers={['Time', 'Side', 'Price', 'Size', 'USD', 'Direction', 'Closed PnL']}
