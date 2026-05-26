@@ -566,9 +566,12 @@ function OverviewPanel({
   // HyperCore: perp equity (includes unrealized PnL) + spot current value
   const perpEquity = parseFloat(data.perps.marginSummary.accountValue ?? '0')
   const spotValue  = spotBalances.reduce((s, b) => {
+    const amount = parseFloat(b.total)
+    // tokenUsd handles stables (USDC = $1) and HYPE — spotAssetCtxMap misses USDC (quote currency)
+    const v = tokenUsd(b.coin, amount)
+    if (v !== null) return s + v
     const ctx = data.spotAssetCtxMap.get(b.coin)
-    const px = ctx ? parseFloat(ctx.markPx) : 0
-    return s + parseFloat(b.total) * px
+    return s + (ctx ? amount * parseFloat(ctx.markPx) : 0)
   }, 0)
   const hyperCoreValue = perpEquity + spotValue
 
