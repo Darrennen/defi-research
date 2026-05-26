@@ -708,14 +708,13 @@ function ExplorerInner() {
                                   const phases = encodePhases(wd.sequence)
                                   return (
                                     <div style={{ marginBottom: 6 }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 5 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 5 }}>
                                         <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.1em', textTransform: 'uppercase', marginRight: 2 }}>flow</span>
                                         {phases.map((ph, i) => (
-                                          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                            {i > 0 && <span style={{ fontSize: 9, color: 'var(--ink-faint)' }}>→</span>}
-                                            <span style={{ fontSize: 10, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)', whiteSpace: 'nowrap' }}>
-                                              {ph.side === 'B' ? '▲' : '▼'} {ph.side === 'B' ? (ph.count === 1 ? '1 buy' : `${ph.count} buys`) : (ph.count === 1 ? '1 sell' : `${ph.count} sells`)}
-                                              {' '}<span style={{ opacity: 0.55, fontSize: 9 }}>{fmtUsd(ph.usd)}</span>
+                                          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                            {i > 0 && <span style={{ color: 'var(--ink-faint)', fontSize: 10 }}>→</span>}
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                              {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
                                             </span>
                                           </span>
                                         ))}
@@ -1107,14 +1106,13 @@ function ExplorerInner() {
                               const phases = encodePhases(wData.sequence)
                               return (
                                 <div style={{ marginBottom: 14 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                                     <span style={{ fontSize: 9, color: 'var(--ink-faint)', letterSpacing: '0.12em', textTransform: 'uppercase', marginRight: 2 }}>flow</span>
                                     {phases.map((ph, i) => (
-                                      <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        {i > 0 && <span style={{ fontSize: 10, color: 'var(--ink-faint)' }}>→</span>}
-                                        <span style={{ fontSize: 11, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)', whiteSpace: 'nowrap' }}>
-                                          {ph.side === 'B' ? '▲' : '▼'} {ph.side === 'B' ? (ph.count === 1 ? '1 buy' : `${ph.count} buys`) : (ph.count === 1 ? '1 sell' : `${ph.count} sells`)}
-                                          {' '}<span style={{ opacity: 0.55, fontSize: 10 }}>{fmtUsd(ph.usd)}</span>
+                                      <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {i > 0 && <span style={{ fontSize: 11, color: 'var(--ink-faint)' }}>→</span>}
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: ph.side === 'B' ? 'var(--green)' : 'var(--red)' }}>
+                                          {ph.side === 'B' ? '▲ Buy' : '▼ Sell'}
                                         </span>
                                       </span>
                                     ))}
