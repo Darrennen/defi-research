@@ -1304,6 +1304,12 @@ function HLTraderDashboard() {
   const [entities, setEntities]           = useState<WatchEntity[]>([])
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<{ label: string; entityId: string; newEntityName: string } | null>(null)
+  const [entityView, setEntityView] = useState<{
+    entityId: string
+    walletData: Record<string, HLWalletData | null>
+    loading: Set<string>
+    errors: Record<string, string>
+  } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
 
@@ -1420,6 +1426,32 @@ function HLTraderDashboard() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  async function openEntityView(entityId: string) {
+    const members = watchlist.filter(e => e.entityId === entityId)
+    if (!members.length) return
+    const loadingSet = new Set(members.map(m => m.addr))
+    setEntityView({ entityId, walletData: {}, loading: loadingSet, errors: {} })
+    stopSnoop()
+    await Promise.all(members.map(async ({ addr }) => {
+      try {
+        const result = await fetchWallet(addr)
+        setEntityView(prev => {
+          if (!prev || prev.entityId !== entityId) return prev
+          const next = { ...prev, walletData: { ...prev.walletData, [addr]: result } }
+          next.loading = new Set([...next.loading].filter(a => a !== addr))
+          return next
+        })
+      } catch {
+        setEntityView(prev => {
+          if (!prev || prev.entityId !== entityId) return prev
+          const next = { ...prev, errors: { ...prev.errors, [addr]: 'Failed' } }
+          next.loading = new Set([...next.loading].filter(a => a !== addr))
+          return next
+        })
+      }
+    }))
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -1542,11 +1574,14 @@ function HLTraderDashboard() {
                 <div key={ent.id} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
                   {/* Entity row */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: `${col}08` }}>
-                    <button onClick={() => toggleEntity(ent.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flex: 1, textAlign: 'left' }}>
-                      <span style={{ fontSize: 10, color: col, minWidth: 10 }}>{expanded ? '▼' : '▶'}</span>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                    <button onClick={() => toggleEntity(ent.id)} style={{ background: 'none', border: 'none', padding: '0 4px 0 0', cursor: 'pointer', color: col, fontSize: 10, flexShrink: 0 }}>
+                      {expanded ? '▼' : '▶'}
+                    </button>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                    <button onClick={() => openEntityView(ent.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flex: 1, textAlign: 'left' }}>
                       <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{ent.name}</span>
                       <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>{members.length} wallet{members.length !== 1 ? 's' : ''}</span>
+                      {members.length > 0 && <span style={{ fontSize: 10, color: col, fontWeight: 600, marginLeft: 2 }}>View all →</span>}
                     </button>
                     <button
                       onClick={() => deleteEntity(ent.id)}
@@ -1619,6 +1654,169 @@ function HLTraderDashboard() {
           ))}
         </div>
       )}
+
+      {/* Entity overview */}
+      {entityView && (() => {
+        const ent = entities.find(e => e.id === entityView.entityId)
+        if (!ent) return null
+        const col = entityColor(entities.indexOf(ent))
+        const members = watchlist.filter(e => e.entityId === entityView.entityId)
+        const loaded = members.map(m => ({ entry: m, wd: entityView.walletData[m.addr] ?? null }))
+        const isLoading = entityView.loading.size > 0
+
+        // Aggregates
+        const totalEquity = loaded.reduce((s, { wd }) => s + parseFloat(wd?.perps.marginSummary.accountValue ?? '0'), 0)
+        const totalPnl    = loaded.reduce((s, { wd }) => s + (wd?.perps.assetPositions ?? []).reduce((ss, ap) => ss + parseFloat(ap.position.unrealizedPnl || '0'), 0), 0)
+        const allPositions = loaded.flatMap(({ entry, wd }) =>
+          (wd?.perps.assetPositions ?? []).map(ap => ({ ...ap.position, _wallet: entry.label, _addr: entry.addr, _ctx: wd?.assetCtxMap.get(ap.position.coin) }))
+        ).filter(p => parseFloat(p.szi) !== 0)
+        const allSpot = loaded.flatMap(({ entry, wd }) =>
+          (wd?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0).map(b => ({ ...b, _wallet: entry.label, _addr: entry.addr }))
+        )
+
+        return (
+          <div style={{ marginBottom: 32 }}>
+            {/* Entity banner */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: `${col}10`, border: `1px solid ${col}40`, borderRadius: 8, padding: '10px 16px', marginBottom: 16, flexWrap: 'wrap' }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: col, flexShrink: 0 }} />
+              <span style={{ fontWeight: 700, fontSize: 14, color: col }}>{ent.name}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>{members.length} wallets</span>
+              {isLoading && <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontStyle: 'italic' }}>Loading {entityView.loading.size} wallet{entityView.loading.size !== 1 ? 's' : ''}…</span>}
+              <button
+                onClick={() => setEntityView(null)}
+                style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
+              >
+                ← Back
+              </button>
+            </div>
+
+            {/* Aggregate metrics */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+              <MetricCard label="Total Perp Equity" value={fmtUsd(totalEquity)} sub={`${members.length} wallets`} />
+              <MetricCard label="Open Positions" value={String(allPositions.length)} sub={`Across all wallets`} />
+              <MetricCard label="Total Unrealized PnL" value={fmtUsd(totalPnl)} valueColor={pnlColor(totalPnl)} sub="All wallets combined" />
+              <MetricCard label="Spot Tokens" value={String(new Set(allSpot.map(b => b.coin)).size)} sub={`${allSpot.length} holdings`} />
+            </div>
+
+            {/* Per-wallet summary */}
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Wallet Breakdown</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    {['Wallet', 'Address', 'Perp Equity', 'Positions', 'Unrealized PnL', ''].map((h, i) => (
+                      <th key={i} style={{ textAlign: i >= 2 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loaded.map(({ entry, wd }) => {
+                    const isW = entityView.loading.has(entry.addr)
+                    const hasErr = entityView.errors[entry.addr]
+                    const equity = parseFloat(wd?.perps.marginSummary.accountValue ?? '0')
+                    const posCount = (wd?.perps.assetPositions ?? []).filter(ap => parseFloat(ap.position.szi) !== 0).length
+                    const upnl = (wd?.perps.assetPositions ?? []).reduce((s, ap) => s + parseFloat(ap.position.unrealizedPnl || '0'), 0)
+                    return (
+                      <tr key={entry.addr} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 700 }}>{entry.label}</td>
+                        <td style={{ padding: '10px 12px', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{shortAddr(entry.addr)}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>
+                          {isW ? <span style={{ color: 'var(--ink-mute)' }}>…</span> : hasErr ? <span style={{ color: 'var(--red)', fontSize: 11 }}>Error</span> : fmtUsd(equity)}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>
+                          {isW ? '…' : posCount}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: pnlColor(upnl) }}>
+                          {isW ? '…' : fmtUsd(upnl)}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                          <button
+                            onClick={() => { setEntityView(null); lookup(entry.addr) }}
+                            style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 10px' }}
+                          >
+                            Deep dive →
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* All open positions */}
+            {allPositions.length > 0 && (
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>All Open Positions ({allPositions.length})</div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        {['Wallet', 'Symbol', 'Side', 'Size', 'Entry', 'Unr. PnL', 'Liq. Price'].map((h, i) => (
+                          <th key={i} style={{ textAlign: i >= 3 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...allPositions].sort((a, b) => Math.abs(parseFloat(b.positionValue)) - Math.abs(parseFloat(a.positionValue))).map((p, i) => {
+                        const size = parseFloat(p.szi)
+                        const isLong = size >= 0
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                            <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--ink-mute)' }}>{p._wallet}</td>
+                            <td style={{ padding: '9px 12px', fontWeight: 700, fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <CoinIcon symbol={p.coin} size={18} />{p.coin}
+                            </td>
+                            <td style={{ padding: '9px 12px' }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)' }}>{isLong ? 'Long' : 'Short'}</span>
+                            </td>
+                            <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtNum(Math.abs(size))}</td>
+                            <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtUsd(p.entryPx)}</td>
+                            <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: pnlColor(p.unrealizedPnl) }}>{fmtUsd(p.unrealizedPnl)}</td>
+                            <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--ink-mute)' }}>{p.liquidationPx ? fmtUsd(p.liquidationPx) : '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* All spot holdings */}
+            {allSpot.length > 0 && (
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>All Spot Holdings ({allSpot.length})</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {['Wallet', 'Token', 'Balance', 'Entry Value'].map((h, i) => (
+                        <th key={i} style={{ textAlign: i >= 2 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allSpot.map((b, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                        <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--ink-mute)' }}>{b._wallet}</td>
+                        <td style={{ padding: '9px 12px', fontWeight: 700, fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <CoinIcon symbol={b.coin} size={18} />{b.coin}
+                        </td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtNum(b.total, 4)}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtUsd(b.entryNtl)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {!isLoading && allPositions.length === 0 && allSpot.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-mute)', fontSize: 14 }}>No open positions or spot holdings across this entity</div>
+            )}
+          </div>
+        )
+      })()}
 
       {/* Results */}
       {data && !loading && (
