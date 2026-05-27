@@ -126,6 +126,15 @@ const dashboards = [
     chips: ['LIT Flow', 'Order Book', 'P&L Tracker'],
     status: 'live' as const,
   },
+  {
+    href: '/variational',
+    category: 'Derivatives',
+    num: '11',
+    title: 'Variational Explorer',
+    desc: 'Live markets and wallet analytics for Variational Omni — on-chain RFQ derivatives on Arbitrum. Browse all 460+ listings with OI, funding, and quotes. Look up any wallet\'s deposit/withdrawal history and net PnL proxy.',
+    chips: ['RFQ Markets', 'Wallet Lookup', 'Arbitrum'],
+    status: 'live' as const,
+  },
 ]
 
 const methods = [

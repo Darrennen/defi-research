@@ -61,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <li><a href="/yield-tracker">Yield Tracker</a></li>
                 <li><a href="/whale-tracker">Whale Tracker</a></li>
                 <li><a href="/lighter">Lighter DEX</a></li>
+                <li><a href="/variational">Variational</a></li>
               </ul>
             </div>
             <div>
