@@ -16,6 +16,7 @@ import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, groupByProtocol, type EvmW
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const HISTORY_KEY = 'hl-trader-history'
+const WATCHLIST_KEY = 'hl-trader-watchlist'
 const MAX_HISTORY = 8
 
 function loadHistory(): string[] {
@@ -26,6 +27,16 @@ function saveHistory(addr: string) {
   const h = loadHistory().filter(a => a !== addr)
   h.unshift(addr)
   localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, MAX_HISTORY)))
+}
+
+type WatchEntry = { addr: string; label: string }
+
+function loadWatchlist(): WatchEntry[] {
+  try { return JSON.parse(localStorage.getItem(WATCHLIST_KEY) ?? '[]') } catch { return [] }
+}
+
+function saveWatchlist(list: WatchEntry[]) {
+  localStorage.setItem(WATCHLIST_KEY, JSON.stringify(list))
 }
 
 function pnlColor(v: string | number): string {
@@ -1279,10 +1290,12 @@ function HLTraderDashboard() {
   const [evmError, setEvmError] = useState<string | null>(null)
   const [tradeFilter, setTradeFilter] = useState<'perps' | 'spot'>('perps')
   const [showAllOrders, setShowAllOrders] = useState(false)
+  const [watchlist, setWatchlist] = useState<WatchEntry[]>([])
+  const [addingLabel, setAddingLabel] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
 
-  useEffect(() => { setHistory(loadHistory()) }, [])
+  useEffect(() => { setHistory(loadHistory()); setWatchlist(loadWatchlist()) }, [])
 
   useEffect(() => {
     if (address) {
@@ -1345,6 +1358,21 @@ function HLTraderDashboard() {
   function stopSnoop() {
     setData(null); setAddress(''); setInput(''); setError(null); currentAddr.current = ''
     setEvmData(null); setEvmError(null); setEvmLoading(false); setTab('overview')
+    setAddingLabel(null)
+  }
+
+  function addToWatchlist(addr: string, label: string) {
+    const trimmed = label.trim() || shortAddr(addr)
+    const next = [{ addr, label: trimmed }, ...watchlist.filter(e => e.addr !== addr)]
+    saveWatchlist(next)
+    setWatchlist(next)
+    setAddingLabel(null)
+  }
+
+  function removeFromWatchlist(addr: string) {
+    const next = watchlist.filter(e => e.addr !== addr)
+    saveWatchlist(next)
+    setWatchlist(next)
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -1433,6 +1461,43 @@ function HLTraderDashboard() {
         )}
       </div>
 
+      {/* Watchlist */}
+      {watchlist.length > 0 && (
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, marginBottom: 20, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>Whale Watchlist</span>
+            <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, padding: '1px 6px' }}>{watchlist.length}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {watchlist.map((e, i) => (
+              <div key={e.addr} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < watchlist.length - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
+                <button
+                  onClick={() => lookup(e.addr)}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}
+                >
+                  <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', minWidth: 120 }}>{e.label}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{e.addr}</span>
+                </button>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  <button
+                    onClick={() => lookup(e.addr)}
+                    style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 10px' }}
+                  >
+                    Load
+                  </button>
+                  <button
+                    onClick={() => removeFromWatchlist(e.addr)}
+                    style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '3px 8px' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* History chips */}
       {history.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 32 }}>
@@ -1485,6 +1550,31 @@ function HLTraderDashboard() {
               <button onClick={() => { lookup(address, true); setEvmData(null); setEvmError(null) }} disabled={refreshing} style={{ background: 'transparent', border: '1px solid rgba(147,51,234,0.3)', borderRadius: 4, color: '#9333ea', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
                 ↻ Refresh
               </button>
+              {watchlist.some(e => e.addr === address) ? (
+                <button onClick={() => removeFromWatchlist(address)} style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.4)', borderRadius: 4, color: '#b2740d', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
+                  ★ Watching
+                </button>
+              ) : addingLabel !== null ? (
+                <form onSubmit={e => { e.preventDefault(); addToWatchlist(address, addingLabel) }} style={{ display: 'flex', gap: 4 }}>
+                  <input
+                    autoFocus
+                    value={addingLabel}
+                    onChange={ev => setAddingLabel(ev.target.value)}
+                    placeholder="Label (e.g. Whale #1)"
+                    style={{ background: 'var(--card)', border: '1px solid var(--blue)', borderRadius: 4, color: 'var(--ink)', fontFamily: 'var(--sans)', fontSize: 11, padding: '4px 8px', width: 160, outline: 'none' }}
+                  />
+                  <button type="submit" style={{ background: 'var(--blue-soft)', border: '1px solid var(--blue)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
+                    Save
+                  </button>
+                  <button type="button" onClick={() => setAddingLabel(null)} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '4px 8px' }}>
+                    ✕
+                  </button>
+                </form>
+              ) : (
+                <button onClick={() => setAddingLabel(shortAddr(address))} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
+                  ☆ Watch
+                </button>
+              )}
               <button onClick={stopSnoop} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
                 Stop ✕
               </button>
