@@ -71,6 +71,18 @@ type WalletData = {
   activity: Activity[]
 }
 
+type LeaderboardRow = {
+  rank: number
+  wallet: string
+  total_deposited: number
+  total_withdrawn: number
+  net_pnl: number
+  deposit_count: number
+  withdrawal_count: number
+  first_activity: string | null
+  last_activity: string | null
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const n = (s: string | number | undefined | null) => parseFloat(String(s ?? '0')) || 0
@@ -159,7 +171,7 @@ type SortKey = 'ticker' | 'markPrice' | 'vol24h' | 'oiTotal' | 'lsRatio' | 'fund
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function VariationalExplorer() {
-  const [tab, setTab] = useState<'markets' | 'wallet'>('markets')
+  const [tab, setTab] = useState<'markets' | 'wallet' | 'leaderboard'>('markets')
 
   // Markets state
   const [listings, setListings] = useState<Listing[]>([])
@@ -182,6 +194,15 @@ export default function VariationalExplorer() {
   const [walletLoading, setWalletLoading] = useState(false)
   const [walletError, setWalletError] = useState<string | null>(null)
   const histRef = useRef<HTMLDivElement>(null)
+
+  // Leaderboard state
+  const [lbRows, setLbRows] = useState<LeaderboardRow[]>([])
+  const [lbTotal, setLbTotal] = useState(0)
+  const [lbOffset, setLbOffset] = useState(0)
+  const [lbLoading, setLbLoading] = useState(false)
+  const [lbError, setLbError] = useState<string | null>(null)
+  const [lbFilter, setLbFilter] = useState('')
+  const LB_LIMIT = 100
 
   // Load localStorage on mount
   useEffect(() => {
@@ -287,6 +308,30 @@ export default function VariationalExplorer() {
     }
   }, [addressInput, apiKeyInput])
 
+  const fetchLeaderboard = useCallback(async (offset = 0) => {
+    setLbLoading(true)
+    setLbError(null)
+    try {
+      const r = await fetch(`/api/variational/leaderboard?limit=${100}&offset=${offset}`)
+      const data = await r.json()
+      if (data.error) throw new Error(data.error)
+      if (offset === 0) setLbRows(data.rows)
+      else setLbRows(prev => [...prev, ...data.rows])
+      setLbTotal(data.total_row_count)
+      setLbOffset(offset + data.rows.length)
+    } catch (e) {
+      setLbError(e instanceof Error ? e.message : 'Failed to load leaderboard')
+    } finally {
+      setLbLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'leaderboard' && lbRows.length === 0 && !lbLoading) {
+      fetchLeaderboard(0)
+    }
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleAddressKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') { setShowHistory(false); lookupWallet() }
     if (e.key === 'Escape') setShowHistory(false)
@@ -339,7 +384,7 @@ export default function VariationalExplorer() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '2px solid var(--rule)' }}>
-        {(['markets', 'wallet'] as const).map(t => (
+        {(['markets', 'leaderboard', 'wallet'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             background: 'none', border: 'none', cursor: 'pointer',
             padding: '8px 18px', fontFamily: 'var(--sans)', fontWeight: 600,
@@ -348,7 +393,7 @@ export default function VariationalExplorer() {
             borderBottom: tab === t ? '2px solid var(--blue)' : '2px solid transparent',
             marginBottom: -2, transition: 'color 0.15s',
           }}>
-            {t === 'markets' ? `Markets${listings.length ? ` (${listings.length})` : ''}` : 'Wallet Lookup'}
+            {t === 'markets' ? `Markets${listings.length ? ` (${listings.length})` : ''}` : t === 'leaderboard' ? `Leaderboard${lbTotal ? ` (${lbTotal.toLocaleString()})` : ''}` : 'Wallet Lookup'}
           </button>
         ))}
       </div>
@@ -794,6 +839,153 @@ export default function VariationalExplorer() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── LEADERBOARD TAB ── */}
+      {tab === 'leaderboard' && (
+        <div>
+          {/* Header + search */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Filter by wallet address…"
+              value={lbFilter}
+              onChange={e => setLbFilter(e.target.value)}
+              style={{
+                flex: 1, maxWidth: 360, padding: '7px 12px', fontFamily: 'var(--mono)',
+                fontSize: 13, background: 'var(--card)', border: '1px solid var(--rule)',
+                borderRadius: 6, color: 'var(--ink)', outline: 'none',
+              }}
+            />
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)' }}>
+              {lbTotal > 0 && `${lbTotal.toLocaleString()} wallets · showing ${lbRows.length}`}
+              {lbLoading && ' · loading…'}
+            </div>
+            <button
+              onClick={() => fetchLeaderboard(0)}
+              disabled={lbLoading}
+              style={{
+                padding: '7px 14px', background: 'none', border: '1px solid var(--rule)',
+                borderRadius: 6, cursor: lbLoading ? 'wait' : 'pointer',
+                fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)',
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+
+          {lbError && (
+            <div style={{ color: 'var(--red)', fontFamily: 'var(--mono)', fontSize: 12, padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 6, marginBottom: 16 }}>
+              {lbError.includes('DUNE_API_KEY') ? (
+                <>Add <code>DUNE_API_KEY=your_key</code> to <code>.env.local</code> — free key at <a href="https://dune.com/settings/api" target="_blank" rel="noopener" style={{ color: 'var(--blue)' }}>dune.com/settings/api</a></>
+              ) : lbError}
+            </div>
+          )}
+
+          {lbLoading && lbRows.length === 0 && (
+            <div style={{ color: 'var(--ink-soft)', fontFamily: 'var(--mono)', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>
+              Loading leaderboard from Dune…
+            </div>
+          )}
+
+          {lbRows.length > 0 && (() => {
+            const filtered = lbFilter
+              ? lbRows.filter(r => r.wallet.toLowerCase().includes(lbFilter.toLowerCase()))
+              : lbRows
+            return (
+              <div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'var(--mono)' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--rule)' }}>
+                        {[
+                          ['#', 'right'], ['Wallet', 'left'], ['Deposited', 'right'],
+                          ['Withdrawn', 'right'], ['Net PnL', 'right'],
+                          ['Deps', 'right'], ['Wdrs', 'right'], ['First Active', 'left'],
+                        ].map(([h, align]) => (
+                          <th key={h} style={{
+                            textAlign: align as 'left' | 'right', padding: '7px 10px',
+                            color: 'var(--ink-soft)', fontWeight: 600, fontSize: 11,
+                            letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map(row => (
+                        <tr
+                          key={row.wallet}
+                          style={{ borderBottom: '1px solid var(--rule-soft)', cursor: 'pointer' }}
+                          onClick={() => { setTab('wallet'); setAddressInput(row.wallet); lookupWallet(row.wallet) }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--rule-soft)'}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                        >
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)', fontWeight: row.rank <= 3 ? 700 : 400 }}>
+                            {row.rank <= 3 ? ['🥇','🥈','🥉'][row.rank - 1] : row.rank}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'left' }}>
+                            <a
+                              href={`${ARB_EXPLORER}/address/${row.wallet}`}
+                              target="_blank" rel="noopener"
+                              onClick={e => e.stopPropagation()}
+                              style={{ color: 'var(--blue)', textDecoration: 'none' }}
+                            >
+                              {shortAddr(row.wallet)}
+                            </a>
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)' }}>
+                            {fmtUsd(row.total_deposited)}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)' }}>
+                            {fmtUsd(row.total_withdrawn)}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: row.net_pnl > 0 ? 'var(--green)' : row.net_pnl < 0 ? 'var(--red)' : 'var(--ink-soft)' }}>
+                            {row.net_pnl > 0 ? '+' : ''}{fmtUsd(row.net_pnl)}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)' }}>
+                            {row.deposit_count}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)' }}>
+                            {row.withdrawal_count}
+                          </td>
+                          <td style={{ padding: '7px 10px', color: 'var(--ink-soft)', whiteSpace: 'nowrap', fontSize: 11 }}>
+                            {row.first_activity ? fmtDate(new Date(row.first_activity).getTime()) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Load more */}
+                {lbRows.length < lbTotal && !lbFilter && (
+                  <div style={{ textAlign: 'center', marginTop: 20 }}>
+                    <button
+                      onClick={() => fetchLeaderboard(lbOffset)}
+                      disabled={lbLoading}
+                      style={{
+                        padding: '9px 24px', background: 'var(--card)', border: '1px solid var(--rule)',
+                        borderRadius: 6, cursor: lbLoading ? 'wait' : 'pointer',
+                        fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink)',
+                        opacity: lbLoading ? 0.6 : 1,
+                      }}
+                    >
+                      {lbLoading ? 'Loading…' : `Load more (${(lbTotal - lbRows.length).toLocaleString()} remaining)`}
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 14, fontSize: 11, color: 'var(--ink-soft)', fontFamily: 'var(--mono)' }}>
+                  Source: Dune query{' '}
+                  <a href="https://dune.com/queries/7589078" target="_blank" rel="noopener" style={{ color: 'var(--blue)' }}>
+                    #7589078
+                  </a>
+                  {' '}· USDC flows via settlement vaults · cached 1h · click any row to drill into wallet
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>
