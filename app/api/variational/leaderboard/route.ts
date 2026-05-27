@@ -26,15 +26,17 @@ export async function GET(req: NextRequest) {
 
     // Normalize rows
     const rows = (data.result?.rows ?? []).map((row: Record<string, unknown>) => ({
-      rank:             Number(row.rank),
-      wallet:           String(row.wallet),
-      total_deposited:  Number(row.total_deposited ?? 0),
-      total_withdrawn:  Number(row.total_withdrawn ?? 0),
-      net_pnl:          Number(row.net_pnl ?? 0),
-      deposit_count:    Number(row.deposit_count ?? 0),
-      withdrawal_count: Number(row.withdrawal_count ?? 0),
-      first_activity:   row.first_activity ? String(row.first_activity) : null,
-      last_activity:    row.last_activity  ? String(row.last_activity)  : null,
+      rank:                Number(row.rank),
+      wallet:              String(row.wallet),
+      total_deposited:     Number(row.total_deposited  ?? 0),
+      total_withdrawn:     Number(row.total_withdrawn  ?? 0),
+      net_pnl:             Number(row.net_pnl          ?? 0),
+      deposit_count:       Number(row.deposit_count    ?? 0),
+      withdrawal_count:    Number(row.withdrawal_count ?? 0),
+      funding_received:    Number(row.funding_received ?? 0),
+      funding_events:      Number(row.funding_events   ?? 0),
+      first_activity:      row.first_activity ? String(row.first_activity) : null,
+      last_activity:       row.last_activity  ? String(row.last_activity)  : null,
     }))
 
     return NextResponse.json({

@@ -79,6 +79,8 @@ type LeaderboardRow = {
   net_pnl: number
   deposit_count: number
   withdrawal_count: number
+  funding_received: number
+  funding_events: number
   first_activity: string | null
   last_activity: string | null
 }
@@ -902,7 +904,9 @@ export default function VariationalExplorer() {
                         {[
                           ['#', 'right'], ['Wallet', 'left'], ['Deposited', 'right'],
                           ['Withdrawn', 'right'], ['Net PnL', 'right'],
-                          ['Deps', 'right'], ['Wdrs', 'right'], ['First Active', 'left'],
+                          ['Deps', 'right'], ['Wdrs', 'right'],
+                          ['Funding Rcvd', 'right'], ['Funding Events', 'right'],
+                          ['First Active', 'left'],
                         ].map(([h, align]) => (
                           <th key={h} style={{
                             textAlign: align as 'left' | 'right', padding: '7px 10px',
@@ -948,6 +952,12 @@ export default function VariationalExplorer() {
                           </td>
                           <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)' }}>
                             {row.withdrawal_count}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: row.funding_received > 0 ? 'var(--green)' : 'var(--ink-soft)' }}>
+                            {row.funding_received > 0 ? fmtUsd(row.funding_received) : '—'}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)' }}>
+                            {row.funding_events > 0 ? row.funding_events.toLocaleString() : '—'}
                           </td>
                           <td style={{ padding: '7px 10px', color: 'var(--ink-soft)', whiteSpace: 'nowrap', fontSize: 11 }}>
                             {row.first_activity ? fmtDate(new Date(row.first_activity).getTime()) : '—'}
