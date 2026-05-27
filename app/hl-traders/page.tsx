@@ -6,10 +6,10 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import {
-  fetchWallet, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
+  fetchWallet, getDelegatorSummary, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
   fmtFundingRate, annualizedFunding, fundingDirection,
   type HLWalletData, type HLRole, type HLPortfolioSeries, type HLPredictedFundings, type HLFill,
-  type HLTwapOrder, type HLTwapHistoryEntry,
+  type HLTwapOrder, type HLTwapHistoryEntry, type HLDelegatorSummary,
 } from '@/lib/hyperliquid'
 import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, groupByProtocol, type EvmWalletData } from '@/lib/hyperevm'
 
@@ -1307,12 +1307,16 @@ function HLTraderDashboard() {
   const [entityView, setEntityView] = useState<{
     entityId: string
     walletData: Record<string, HLWalletData | null>
+    evmData: Record<string, EvmWalletData | null>
+    stakingData: Record<string, HLDelegatorSummary | null>
     loading: Set<string>
     errors: Record<string, string>
   } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
   const entityAccum = useRef<Record<string, HLWalletData | null>>({})
+  const entityEvmAccum = useRef<Record<string, EvmWalletData | null>>({})
+  const entityStakingAccum = useRef<Record<string, HLDelegatorSummary | null>>({})
   const entityErrAccum = useRef<Record<string, string>>({})
 
   useEffect(() => {
@@ -1435,21 +1439,27 @@ function HLTraderDashboard() {
     if (!members.length) return
     stopSnoop()
     entityAccum.current = {}
+    entityEvmAccum.current = {}
+    entityStakingAccum.current = {}
     entityErrAccum.current = {}
-    setEntityView({ entityId, walletData: {}, loading: new Set(members.map(m => m.addr)), errors: {} })
+    setEntityView({ entityId, walletData: {}, evmData: {}, stakingData: {}, loading: new Set(members.map(m => m.addr)), errors: {} })
     await Promise.all(members.map(async ({ addr }) => {
-      try {
-        const result = await fetchWallet(addr)
-        entityAccum.current[addr] = result
-      } catch {
-        entityErrAccum.current[addr] = 'Failed'
-        entityAccum.current[addr] = null
-      }
+      const [hlResult, evmResult, stakingResult] = await Promise.allSettled([
+        fetchWallet(addr),
+        fetchEvmWallet(addr),
+        getDelegatorSummary(addr),
+      ])
+      entityAccum.current[addr] = hlResult.status === 'fulfilled' ? hlResult.value : null
+      entityEvmAccum.current[addr] = evmResult.status === 'fulfilled' ? evmResult.value : null
+      entityStakingAccum.current[addr] = stakingResult.status === 'fulfilled' ? stakingResult.value : null
+      if (hlResult.status === 'rejected') entityErrAccum.current[addr] = 'Failed'
       setEntityView(prev => {
         if (!prev || prev.entityId !== entityId) return prev
         return {
           ...prev,
           walletData: { ...entityAccum.current },
+          evmData: { ...entityEvmAccum.current },
+          stakingData: { ...entityStakingAccum.current },
           loading: new Set([...prev.loading].filter(a => a !== addr)),
           errors: { ...prev.errors, ...entityErrAccum.current },
         }
@@ -1664,17 +1674,78 @@ function HLTraderDashboard() {
         if (!ent) return null
         const col = entityColor(entities.indexOf(ent))
         const members = watchlist.filter(e => e.entityId === entityView.entityId)
-        const loaded = members.map(m => ({ entry: m, wd: entityView.walletData[m.addr] ?? null }))
+        const loaded = members.map(m => ({
+          entry: m,
+          wd: entityView.walletData[m.addr] ?? null,
+          evm: entityView.evmData[m.addr] ?? null,
+          staking: entityView.stakingData[m.addr] ?? null,
+        }))
         const isLoading = entityView.loading.size > 0
 
+        // Use prices from first loaded wallet
+        const firstWd = loaded.find(l => l.wd)?.wd ?? null
+        const hypePrice   = parseFloat(firstWd?.assetCtxMap.get('HYPE')?.markPx ?? '0')
+        const btcPrice    = parseFloat(firstWd?.assetCtxMap.get('BTC')?.markPx  ?? '0')
+        const ethPrice    = parseFloat(firstWd?.assetCtxMap.get('ETH')?.markPx  ?? '0')
+        const STABLES     = new Set(['USDC','USDT0','USDT','FEUSD','USH','USDHL','USDE','SUSDE','USR','USDH'])
+        const HYPE_LIKE   = new Set(['WHYPE','KHYPE','STHYPE','WSTHYPE','LSTHYPE','BEHYPE','HBHYPE','FLOWHYPE','HIHYPE','KMHYPE'])
+        function tokenUsd(symbol: string, amount: number): number | null {
+          const s = symbol.split(/[\s→]/)[0].toUpperCase()
+          if (STABLES.has(s))   return amount
+          if (s === 'HYPE' || HYPE_LIKE.has(s)) return amount * hypePrice
+          if (s === 'UBTC')     return amount * btcPrice
+          if (s === 'UETH' || s === 'CMETH') return amount * ethPrice
+          const ctx = firstWd?.assetCtxMap.get(s) ?? firstWd?.spotAssetCtxMap.get(s)
+          if (ctx) return amount * parseFloat(ctx.markPx)
+          return null
+        }
+
+        // Per-wallet value breakdown
+        const walletValues = loaded.map(({ entry, wd, evm, staking }) => {
+          const perpEquity = parseFloat(wd?.perps.marginSummary.accountValue ?? '0')
+          const spotVal = (wd?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0).reduce((s, b) => {
+            const v = tokenUsd(b.coin, parseFloat(b.total))
+            if (v !== null) return s + v
+            const ctx = wd?.spotAssetCtxMap.get(b.coin)
+            return s + (ctx ? parseFloat(b.total) * parseFloat(ctx.markPx) : 0)
+          }, 0)
+          let evmVal = 0
+          if (evm) {
+            evmVal += evm.nativeFormatted * hypePrice
+            for (const t of evm.tokens) { const v = tokenUsd(t.symbol, t.formatted); if (v !== null) evmVal += v }
+            for (const p of evm.protocolPositions) {
+              const sign = p.type === 'borrow' ? -1 : 1
+              const v = tokenUsd(p.asset, p.amount)
+              if (v !== null) evmVal += sign * v
+            }
+          }
+          const stakedHype = parseFloat(staking?.delegated ?? '0')
+          const stakedVal = stakedHype * hypePrice
+          return { entry, wd, evm, staking, perpEquity, spotVal, evmVal, stakedVal, total: perpEquity + spotVal + evmVal + stakedVal }
+        })
+
         // Aggregates
-        const totalEquity = loaded.reduce((s, { wd }) => s + parseFloat(wd?.perps.marginSummary.accountValue ?? '0'), 0)
-        const totalPnl    = loaded.reduce((s, { wd }) => s + (wd?.perps.assetPositions ?? []).reduce((ss, ap) => ss + parseFloat(ap.position.unrealizedPnl || '0'), 0), 0)
-        const allPositions = loaded.flatMap(({ entry, wd }) =>
+        const totalNetWorth = walletValues.reduce((s, w) => s + w.total, 0)
+        const totalEquity   = walletValues.reduce((s, w) => s + w.perpEquity, 0)
+        const totalSpotVal  = walletValues.reduce((s, w) => s + w.spotVal, 0)
+        const totalEvmVal   = walletValues.reduce((s, w) => s + w.evmVal, 0)
+        const totalStakedVal = walletValues.reduce((s, w) => s + w.stakedVal, 0)
+        const totalPnl      = loaded.reduce((s, { wd }) => s + (wd?.perps.assetPositions ?? []).reduce((ss, ap) => ss + parseFloat(ap.position.unrealizedPnl || '0'), 0), 0)
+        const allPositions  = loaded.flatMap(({ entry, wd }) =>
           (wd?.perps.assetPositions ?? []).map(ap => ({ ...ap.position, _wallet: entry.label, _addr: entry.addr, _ctx: wd?.assetCtxMap.get(ap.position.coin) }))
         ).filter(p => parseFloat(p.szi) !== 0)
         const allSpot = loaded.flatMap(({ entry, wd }) =>
-          (wd?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0).map(b => ({ ...b, _wallet: entry.label, _addr: entry.addr }))
+          (wd?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0).map(b => {
+            const amount = parseFloat(b.total)
+            const v = tokenUsd(b.coin, amount) ?? (wd?.spotAssetCtxMap.get(b.coin) ? amount * parseFloat(wd!.spotAssetCtxMap.get(b.coin)!.markPx) : null)
+            return { ...b, _wallet: entry.label, _addr: entry.addr, _usdVal: v }
+          })
+        )
+        const allEvmTokens = loaded.flatMap(({ entry, evm }) =>
+          (evm?.tokens ?? []).map(t => ({ ...t, _wallet: entry.label }))
+        )
+        const allEvmPositions = loaded.flatMap(({ entry, evm }) =>
+          (evm?.protocolPositions ?? []).map(p => ({ ...p, _wallet: entry.label }))
         )
 
         return (
@@ -1705,58 +1776,109 @@ function HLTraderDashboard() {
               </div>
             </div>
 
-            {/* Aggregate metrics */}
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-              <MetricCard label="Total Perp Equity" value={fmtUsd(totalEquity)} sub={`${members.length} wallets`} />
-              <MetricCard label="Open Positions" value={String(allPositions.length)} sub={`Across all wallets`} />
-              <MetricCard label="Total Unrealized PnL" value={fmtUsd(totalPnl)} valueColor={pnlColor(totalPnl)} sub="All wallets combined" />
-              <MetricCard label="Spot Tokens" value={String(new Set(allSpot.map(b => b.coin)).size)} sub={`${allSpot.length} holdings`} />
+            {/* Net worth banner */}
+            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '20px 24px', marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: 6 }}>Entity Total Net Worth</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 32, color: 'var(--ink)', lineHeight: 1, marginBottom: 14 }}>
+                {fmtUsd(totalNetWorth)}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--blue)', display: 'inline-block' }} /> Perp Equity
+                  </div>
+                  <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtUsd(totalEquity)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} /> Spot Holdings
+                  </div>
+                  <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtUsd(totalSpotVal)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#9333ea', display: 'inline-block' }} /> HyperEVM
+                  </div>
+                  <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtUsd(totalEvmVal)}</div>
+                </div>
+                {totalStakedVal > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} /> Staked HYPE
+                    </div>
+                    <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtUsd(totalStakedVal)}</div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Per-wallet summary */}
+            {/* Aggregate metric cards */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+              <MetricCard label="Open Positions" value={String(allPositions.length)} sub="Across all wallets" />
+              <MetricCard label="Unrealized PnL" value={fmtUsd(totalPnl)} valueColor={pnlColor(totalPnl)} sub="All wallets combined" />
+              <MetricCard label="Spot Tokens" value={String(new Set(allSpot.map(b => b.coin)).size)} sub={`${allSpot.length} holdings`} />
+              {allEvmTokens.length > 0 && <MetricCard label="EVM Tokens" value={String(allEvmTokens.length)} sub="HyperEVM chain" />}
+              {allEvmPositions.length > 0 && <MetricCard label="DeFi Positions" value={String(allEvmPositions.length)} sub="HyperEVM protocols" />}
+            </div>
+
+            {/* Per-wallet breakdown table */}
             <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Wallet Breakdown</div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    {['Wallet', 'Address', 'Perp Equity', 'Positions', 'Unrealized PnL', ''].map((h, i) => (
-                      <th key={i} style={{ textAlign: i >= 2 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)', whiteSpace: 'nowrap' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loaded.map(({ entry, wd }) => {
-                    const isW = entityView.loading.has(entry.addr)
-                    const hasErr = entityView.errors[entry.addr]
-                    const equity = parseFloat(wd?.perps.marginSummary.accountValue ?? '0')
-                    const posCount = (wd?.perps.assetPositions ?? []).filter(ap => parseFloat(ap.position.szi) !== 0).length
-                    const upnl = (wd?.perps.assetPositions ?? []).reduce((s, ap) => s + parseFloat(ap.position.unrealizedPnl || '0'), 0)
-                    return (
-                      <tr key={entry.addr} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
-                        <td style={{ padding: '10px 12px', fontWeight: 700 }}>{entry.label}</td>
-                        <td style={{ padding: '10px 12px', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{shortAddr(entry.addr)}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>
-                          {isW ? <span style={{ color: 'var(--ink-mute)' }}>…</span> : hasErr ? <span style={{ color: 'var(--red)', fontSize: 11 }}>Error</span> : fmtUsd(equity)}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>
-                          {isW ? '…' : posCount}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: pnlColor(upnl) }}>
-                          {isW ? '…' : fmtUsd(upnl)}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                          <button
-                            onClick={() => { setEntityView(null); lookup(entry.addr) }}
-                            style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 10px' }}
-                          >
-                            Deep dive →
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {['Wallet', 'Address', 'Total', 'Perp Equity', 'Spot', 'EVM', 'Staked HYPE', 'Positions', 'Unr. PnL', ''].map((h, i) => (
+                        <th key={i} style={{ textAlign: i >= 2 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {walletValues.map(({ entry, wd, perpEquity, spotVal, evmVal, stakedVal, staking, total }) => {
+                      const isW    = entityView.loading.has(entry.addr)
+                      const hasErr = entityView.errors[entry.addr]
+                      const posCount = (wd?.perps.assetPositions ?? []).filter(ap => parseFloat(ap.position.szi) !== 0).length
+                      const upnl     = (wd?.perps.assetPositions ?? []).reduce((s, ap) => s + parseFloat(ap.position.unrealizedPnl || '0'), 0)
+                      const stakedHype = parseFloat(staking?.delegated ?? '0')
+                      return (
+                        <tr key={entry.addr} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                          <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>{entry.label}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{shortAddr(entry.addr)}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', fontWeight: 700 }}>
+                            {isW ? <span style={{ color: 'var(--ink-mute)' }}>…</span> : hasErr ? <span style={{ color: 'var(--red)', fontSize: 11 }}>Error</span> : fmtUsd(total)}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--ink-soft)' }}>
+                            {isW ? '…' : fmtUsd(perpEquity)}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--ink-soft)' }}>
+                            {isW ? '…' : fmtUsd(spotVal)}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--ink-soft)' }}>
+                            {isW ? '…' : entityView.evmData[entry.addr] === undefined ? <span style={{ color: 'var(--ink-mute)' }}>…</span> : fmtUsd(evmVal)}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: 'var(--ink-soft)' }}>
+                            {isW ? '…' : stakedHype > 0 ? `${fmtNum(stakedHype, 2)} HYPE` : '—'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>
+                            {isW ? '…' : posCount}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: pnlColor(upnl) }}>
+                            {isW ? '…' : fmtUsd(upnl)}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                            <button
+                              onClick={() => { setEntityView(null); lookup(entry.addr) }}
+                              style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 10px', whiteSpace: 'nowrap' }}
+                            >
+                              Deep dive →
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* All open positions */}
@@ -1800,12 +1922,12 @@ function HLTraderDashboard() {
 
             {/* All spot holdings */}
             {allSpot.length > 0 && (
-              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>All Spot Holdings ({allSpot.length})</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr>
-                      {['Wallet', 'Token', 'Balance', 'Entry Value'].map((h, i) => (
+                      {['Wallet', 'Token', 'Balance', 'USD Value'].map((h, i) => (
                         <th key={i} style={{ textAlign: i >= 2 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)' }}>{h}</th>
                       ))}
                     </tr>
@@ -1818,7 +1940,7 @@ function HLTraderDashboard() {
                           <CoinIcon symbol={b.coin} size={18} />{b.coin}
                         </td>
                         <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtNum(b.total, 4)}</td>
-                        <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtUsd(b.entryNtl)}</td>
+                        <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{b._usdVal !== null ? fmtUsd(b._usdVal) : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1826,8 +1948,82 @@ function HLTraderDashboard() {
               </div>
             )}
 
-            {!isLoading && allPositions.length === 0 && allSpot.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-mute)', fontSize: 14 }}>No open positions or spot holdings across this entity</div>
+            {/* HyperEVM tokens */}
+            {allEvmTokens.length > 0 && (
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  HyperEVM Tokens ({allEvmTokens.length})
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#9333ea', background: 'rgba(147,51,234,0.10)', borderRadius: 4, padding: '1px 6px' }}>Chain 999</span>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {['Wallet', 'Token', 'Protocol', 'Balance', 'USD Value'].map((h, i) => (
+                        <th key={i} style={{ textAlign: i >= 3 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allEvmTokens.map((t, i) => {
+                      const usdVal = tokenUsd(t.symbol, t.formatted)
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                          <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--ink-mute)' }}>{t._wallet}</td>
+                          <td style={{ padding: '9px 12px', fontWeight: 700, fontFamily: 'var(--mono)' }}>{t.symbol}</td>
+                          <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--ink-mute)' }}>{t.protocol || '—'}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtNum(t.formatted, 4)}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{usdVal !== null ? fmtUsd(usdVal) : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* HyperEVM DeFi positions */}
+            {allEvmPositions.length > 0 && (
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  HyperEVM DeFi Positions ({allEvmPositions.length})
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#9333ea', background: 'rgba(147,51,234,0.10)', borderRadius: 4, padding: '1px 6px' }}>Chain 999</span>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {['Wallet', 'Protocol', 'Asset', 'Type', 'Amount', 'USD Value'].map((h, i) => (
+                        <th key={i} style={{ textAlign: i >= 4 ? 'right' : 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allEvmPositions.map((p, i) => {
+                      const usdVal = tokenUsd(p.asset, p.amount)
+                      const isBorrow = p.type === 'borrow'
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                          <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--ink-mute)' }}>{p._wallet}</td>
+                          <td style={{ padding: '9px 12px', fontWeight: 700 }}>{p.protocol}</td>
+                          <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontWeight: 700 }}>{p.asset}</td>
+                          <td style={{ padding: '9px 12px' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: isBorrow ? 'var(--red)' : 'var(--green)', background: isBorrow ? 'rgba(244,63,94,0.08)' : 'rgba(34,197,94,0.08)', borderRadius: 4, padding: '1px 7px' }}>
+                              {isBorrow ? 'Borrow' : 'Supply'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)' }}>{fmtNum(p.amount, 4)}</td>
+                          <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'var(--mono)', color: isBorrow ? 'var(--red)' : 'var(--ink)' }}>
+                            {usdVal !== null ? (isBorrow ? '-' : '') + fmtUsd(usdVal) : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {!isLoading && allPositions.length === 0 && allSpot.length === 0 && allEvmTokens.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-mute)', fontSize: 14 }}>No open positions or holdings across this entity</div>
             )}
           </div>
         )

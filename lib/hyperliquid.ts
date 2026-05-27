@@ -228,6 +228,13 @@ export interface HLUserFees {
   activeReferralDiscount: string
 }
 
+export interface HLDelegatorSummary {
+  delegated: string
+  undelegating: string
+  totalPendingRewards: string
+  nValidators: number
+}
+
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
 export const getUserRole = (address: string) =>
@@ -293,6 +300,9 @@ export const getTwapHistory = (address: string) =>
 
 export const getUserFees = (address: string) =>
   post<HLUserFees>({ type: 'userFees', user: address })
+
+export const getDelegatorSummary = (address: string) =>
+  post<HLDelegatorSummary>({ type: 'delegatorSummary', user: address })
 
 // ── All-in-one fetch ──────────────────────────────────────────────────────────
 
