@@ -33,8 +33,10 @@ export async function GET(req: NextRequest) {
       net_pnl:             Number(row.net_pnl          ?? 0),
       deposit_count:       Number(row.deposit_count    ?? 0),
       withdrawal_count:    Number(row.withdrawal_count ?? 0),
-      funding_received:    Number(row.funding_received ?? 0),
-      funding_events:      Number(row.funding_events   ?? 0),
+      funding_received:    Number(row.funding_received    ?? 0),
+      funding_events:      Number(row.funding_events      ?? 0),
+      funding_efficiency:  Number(row.funding_efficiency  ?? 0),
+      is_likely_bot:       Boolean(row.is_likely_bot      ?? false),
       first_activity:      row.first_activity ? String(row.first_activity) : null,
       last_activity:       row.last_activity  ? String(row.last_activity)  : null,
     }))

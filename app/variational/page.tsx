@@ -81,6 +81,8 @@ type LeaderboardRow = {
   withdrawal_count: number
   funding_received: number
   funding_events: number
+  funding_efficiency: number
+  is_likely_bot: boolean
   first_activity: string | null
   last_activity: string | null
 }
@@ -906,6 +908,7 @@ export default function VariationalExplorer() {
                           ['Withdrawn', 'right'], ['Net PnL', 'right'],
                           ['Deps', 'right'], ['Wdrs', 'right'],
                           ['Funding Rcvd', 'right'], ['Funding Events', 'right'],
+                          ['Funding Eff.', 'right'], ['Bot?', 'center'],
                           ['First Active', 'left'],
                         ].map(([h, align]) => (
                           <th key={h} style={{
@@ -958,6 +961,14 @@ export default function VariationalExplorer() {
                           </td>
                           <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--ink-soft)' }}>
                             {row.funding_events > 0 ? row.funding_events.toLocaleString() : '—'}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'right', color: row.funding_efficiency > 1 ? 'var(--green)' : row.funding_efficiency > 0 ? 'var(--ink-soft)' : 'var(--ink-mute)' }}>
+                            {row.funding_efficiency > 0 ? row.funding_efficiency.toFixed(3) + 'x' : '—'}
+                          </td>
+                          <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                            {row.is_likely_bot ? (
+                              <span style={{ color: 'var(--red)', fontWeight: 700, fontSize: 11 }} title="withdrawal_count > 100,000">⚠ BOT</span>
+                            ) : ''}
                           </td>
                           <td style={{ padding: '7px 10px', color: 'var(--ink-soft)', whiteSpace: 'nowrap', fontSize: 11 }}>
                             {row.first_activity ? fmtDate(new Date(row.first_activity).getTime()) : '—'}
