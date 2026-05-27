@@ -17,6 +17,7 @@ import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, groupByProtocol, type EvmW
 
 const HISTORY_KEY = 'hl-trader-history'
 const WATCHLIST_KEY = 'hl-trader-watchlist'
+const ENTITIES_KEY  = 'hl-trader-entities'
 const MAX_HISTORY = 8
 
 function loadHistory(): string[] {
@@ -29,15 +30,24 @@ function saveHistory(addr: string) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(h.slice(0, MAX_HISTORY)))
 }
 
-type WatchEntry = { addr: string; label: string }
+type WatchEntry  = { addr: string; label: string; entityId?: string }
+type WatchEntity = { id: string; name: string }
 
 function loadWatchlist(): WatchEntry[] {
   try { return JSON.parse(localStorage.getItem(WATCHLIST_KEY) ?? '[]') } catch { return [] }
 }
-
 function saveWatchlist(list: WatchEntry[]) {
   localStorage.setItem(WATCHLIST_KEY, JSON.stringify(list))
 }
+function loadEntities(): WatchEntity[] {
+  try { return JSON.parse(localStorage.getItem(ENTITIES_KEY) ?? '[]') } catch { return [] }
+}
+function saveEntities(list: WatchEntity[]) {
+  localStorage.setItem(ENTITIES_KEY, JSON.stringify(list))
+}
+
+const ENTITY_COLORS = ['#0d9488','#3b82f6','#9333ea','#f59e0b','#ef4444','#10b981','#f97316','#06b6d4']
+function entityColor(index: number) { return ENTITY_COLORS[index % ENTITY_COLORS.length] }
 
 function pnlColor(v: string | number): string {
   const n = parseFloat(String(v))
@@ -1290,12 +1300,18 @@ function HLTraderDashboard() {
   const [evmError, setEvmError] = useState<string | null>(null)
   const [tradeFilter, setTradeFilter] = useState<'perps' | 'spot'>('perps')
   const [showAllOrders, setShowAllOrders] = useState(false)
-  const [watchlist, setWatchlist] = useState<WatchEntry[]>([])
-  const [addingLabel, setAddingLabel] = useState<string | null>(null)
+  const [watchlist, setWatchlist]         = useState<WatchEntry[]>([])
+  const [entities, setEntities]           = useState<WatchEntity[]>([])
+  const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set())
+  const [adding, setAdding] = useState<{ label: string; entityId: string; newEntityName: string } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
 
-  useEffect(() => { setHistory(loadHistory()); setWatchlist(loadWatchlist()) }, [])
+  useEffect(() => {
+    setHistory(loadHistory())
+    setWatchlist(loadWatchlist())
+    setEntities(loadEntities())
+  }, [])
 
   useEffect(() => {
     if (address) {
@@ -1358,21 +1374,52 @@ function HLTraderDashboard() {
   function stopSnoop() {
     setData(null); setAddress(''); setInput(''); setError(null); currentAddr.current = ''
     setEvmData(null); setEvmError(null); setEvmLoading(false); setTab('overview')
-    setAddingLabel(null)
+    setAdding(null)
   }
 
-  function addToWatchlist(addr: string, label: string) {
-    const trimmed = label.trim() || shortAddr(addr)
-    const next = [{ addr, label: trimmed }, ...watchlist.filter(e => e.addr !== addr)]
+  function addToWatchlist(addr: string, label: string, entityId: string, newEntityName: string) {
+    let finalEntityId = entityId
+    let finalEntities = entities
+    if (entityId === '__new__' && newEntityName.trim()) {
+      const newEnt: WatchEntity = { id: crypto.randomUUID(), name: newEntityName.trim() }
+      finalEntities = [...entities, newEnt]
+      saveEntities(finalEntities)
+      setEntities(finalEntities)
+      finalEntityId = newEnt.id
+      setExpandedEntities(prev => new Set([...prev, newEnt.id]))
+    }
+    const entry: WatchEntry = {
+      addr,
+      label: label.trim() || shortAddr(addr),
+      ...(finalEntityId && finalEntityId !== '__none__' ? { entityId: finalEntityId } : {}),
+    }
+    const next = [entry, ...watchlist.filter(e => e.addr !== addr)]
     saveWatchlist(next)
     setWatchlist(next)
-    setAddingLabel(null)
+    setAdding(null)
   }
 
   function removeFromWatchlist(addr: string) {
     const next = watchlist.filter(e => e.addr !== addr)
     saveWatchlist(next)
     setWatchlist(next)
+  }
+
+  function deleteEntity(id: string) {
+    const nextEntities = entities.filter(e => e.id !== id)
+    const nextList = watchlist.map(e => e.entityId === id ? { ...e, entityId: undefined } : e)
+    saveEntities(nextEntities)
+    saveWatchlist(nextList)
+    setEntities(nextEntities)
+    setWatchlist(nextList)
+  }
+
+  function toggleEntity(id: string) {
+    setExpandedEntities(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -1462,41 +1509,86 @@ function HLTraderDashboard() {
       </div>
 
       {/* Watchlist */}
-      {watchlist.length > 0 && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, marginBottom: 20, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>Whale Watchlist</span>
-            <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, padding: '1px 6px' }}>{watchlist.length}</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {watchlist.map((e, i) => (
-              <div key={e.addr} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < watchlist.length - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
-                <button
-                  onClick={() => lookup(e.addr)}
-                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}
-                >
+      {(watchlist.length > 0 || entities.length > 0) && (() => {
+        const standalone = watchlist.filter(e => !e.entityId)
+        const totalAddrs = watchlist.length
+        return (
+          <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, marginBottom: 20, overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>Whale Watchlist</span>
+              <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, padding: '1px 6px' }}>{totalAddrs}</span>
+              <button
+                onClick={() => {
+                  const name = prompt('Entity name:')
+                  if (!name?.trim()) return
+                  const newEnt: WatchEntity = { id: crypto.randomUUID(), name: name.trim() }
+                  const next = [...entities, newEnt]
+                  saveEntities(next); setEntities(next)
+                  setExpandedEntities(prev => new Set([...prev, newEnt.id]))
+                }}
+                style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 10px' }}
+              >
+                + Entity
+              </button>
+            </div>
+
+            {/* Entity groups */}
+            {entities.map((ent, ei) => {
+              const members = watchlist.filter(e => e.entityId === ent.id)
+              const col = entityColor(ei)
+              const expanded = expandedEntities.has(ent.id)
+              return (
+                <div key={ent.id} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                  {/* Entity row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: `${col}08` }}>
+                    <button onClick={() => toggleEntity(ent.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, flex: 1, textAlign: 'left' }}>
+                      <span style={{ fontSize: 10, color: col, minWidth: 10 }}>{expanded ? '▼' : '▶'}</span>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                      <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>{ent.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>{members.length} wallet{members.length !== 1 ? 's' : ''}</span>
+                    </button>
+                    <button
+                      onClick={() => deleteEntity(ent.id)}
+                      title="Delete entity (addresses become standalone)"
+                      style={{ background: 'transparent', border: 'none', color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {/* Entity members */}
+                  {expanded && members.map((e, mi) => (
+                    <div key={e.addr} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px 8px 40px', borderTop: '1px solid var(--rule-soft)', background: `${col}04` }}>
+                      <span style={{ width: 3, height: 3, borderRadius: '50%', background: col, flexShrink: 0 }} />
+                      <button onClick={() => lookup(e.addr)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--ink)', minWidth: 100 }}>{e.label}</span>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{e.addr}</span>
+                      </button>
+                      <button onClick={() => lookup(e.addr)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '2px 8px', flexShrink: 0 }}>Load</button>
+                      <button onClick={() => removeFromWatchlist(e.addr)} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '2px 6px', flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                  {expanded && members.length === 0 && (
+                    <div style={{ padding: '8px 40px', borderTop: '1px solid var(--rule-soft)', fontSize: 12, color: 'var(--ink-mute)', fontStyle: 'italic' }}>No wallets yet — use ☆ Watch on any address and assign to this entity</div>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Standalone entries */}
+            {standalone.map((e, i) => (
+              <div key={e.addr} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: i < standalone.length - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
+                <button onClick={() => lookup(e.addr)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', minWidth: 120 }}>{e.label}</span>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{e.addr}</span>
                 </button>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button
-                    onClick={() => lookup(e.addr)}
-                    style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 10px' }}
-                  >
-                    Load
-                  </button>
-                  <button
-                    onClick={() => removeFromWatchlist(e.addr)}
-                    style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '3px 8px' }}
-                  >
-                    ✕
-                  </button>
-                </div>
+                <button onClick={() => lookup(e.addr)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '3px 10px', flexShrink: 0 }}>Load</button>
+                <button onClick={() => removeFromWatchlist(e.addr)} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '3px 8px', flexShrink: 0 }}>✕</button>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* History chips */}
       {history.length > 0 && (
@@ -1554,24 +1646,44 @@ function HLTraderDashboard() {
                 <button onClick={() => removeFromWatchlist(address)} style={{ background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.4)', borderRadius: 4, color: '#b2740d', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
                   ★ Watching
                 </button>
-              ) : addingLabel !== null ? (
-                <form onSubmit={e => { e.preventDefault(); addToWatchlist(address, addingLabel) }} style={{ display: 'flex', gap: 4 }}>
+              ) : adding !== null ? (
+                <form onSubmit={ev => { ev.preventDefault(); addToWatchlist(address, adding.label, adding.entityId, adding.newEntityName) }} style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
                     autoFocus
-                    value={addingLabel}
-                    onChange={ev => setAddingLabel(ev.target.value)}
+                    value={adding.label}
+                    onChange={ev => setAdding(a => a && ({ ...a, label: ev.target.value }))}
                     placeholder="Label (e.g. Whale #1)"
-                    style={{ background: 'var(--card)', border: '1px solid var(--blue)', borderRadius: 4, color: 'var(--ink)', fontFamily: 'var(--sans)', fontSize: 11, padding: '4px 8px', width: 160, outline: 'none' }}
+                    style={{ background: 'var(--card)', border: '1px solid var(--blue)', borderRadius: 4, color: 'var(--ink)', fontFamily: 'var(--sans)', fontSize: 11, padding: '4px 8px', width: 150, outline: 'none' }}
                   />
+                  <select
+                    value={adding.entityId}
+                    onChange={ev => setAdding(a => a && ({ ...a, entityId: ev.target.value, newEntityName: '' }))}
+                    style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink)', fontFamily: 'var(--sans)', fontSize: 11, padding: '4px 6px', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value="__none__">No entity</option>
+                    {entities.map(ent => (
+                      <option key={ent.id} value={ent.id}>{ent.name}</option>
+                    ))}
+                    <option value="__new__">+ New entity…</option>
+                  </select>
+                  {adding.entityId === '__new__' && (
+                    <input
+                      autoFocus
+                      value={adding.newEntityName}
+                      onChange={ev => setAdding(a => a && ({ ...a, newEntityName: ev.target.value }))}
+                      placeholder="Entity name"
+                      style={{ background: 'var(--card)', border: '1px solid var(--blue)', borderRadius: 4, color: 'var(--ink)', fontFamily: 'var(--sans)', fontSize: 11, padding: '4px 8px', width: 130, outline: 'none' }}
+                    />
+                  )}
                   <button type="submit" style={{ background: 'var(--blue-soft)', border: '1px solid var(--blue)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
                     Save
                   </button>
-                  <button type="button" onClick={() => setAddingLabel(null)} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '4px 8px' }}>
+                  <button type="button" onClick={() => setAdding(null)} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 11, padding: '4px 8px' }}>
                     ✕
                   </button>
                 </form>
               ) : (
-                <button onClick={() => setAddingLabel(shortAddr(address))} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
+                <button onClick={() => setAdding({ label: shortAddr(address), entityId: '__none__', newEntityName: '' })} style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}>
                   ☆ Watch
                 </button>
               )}
