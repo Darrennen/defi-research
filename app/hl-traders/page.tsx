@@ -1312,6 +1312,8 @@ function HLTraderDashboard() {
   } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentAddr = useRef<string>('')
+  const entityAccum = useRef<Record<string, HLWalletData | null>>({})
+  const entityErrAccum = useRef<Record<string, string>>({})
 
   useEffect(() => {
     setHistory(loadHistory())
@@ -1431,26 +1433,27 @@ function HLTraderDashboard() {
   async function openEntityView(entityId: string) {
     const members = watchlist.filter(e => e.entityId === entityId)
     if (!members.length) return
-    const loadingSet = new Set(members.map(m => m.addr))
-    setEntityView({ entityId, walletData: {}, loading: loadingSet, errors: {} })
     stopSnoop()
+    entityAccum.current = {}
+    entityErrAccum.current = {}
+    setEntityView({ entityId, walletData: {}, loading: new Set(members.map(m => m.addr)), errors: {} })
     await Promise.all(members.map(async ({ addr }) => {
       try {
         const result = await fetchWallet(addr)
-        setEntityView(prev => {
-          if (!prev || prev.entityId !== entityId) return prev
-          const next = { ...prev, walletData: { ...prev.walletData, [addr]: result } }
-          next.loading = new Set([...next.loading].filter(a => a !== addr))
-          return next
-        })
+        entityAccum.current[addr] = result
       } catch {
-        setEntityView(prev => {
-          if (!prev || prev.entityId !== entityId) return prev
-          const next = { ...prev, errors: { ...prev.errors, [addr]: 'Failed' } }
-          next.loading = new Set([...next.loading].filter(a => a !== addr))
-          return next
-        })
+        entityErrAccum.current[addr] = 'Failed'
+        entityAccum.current[addr] = null
       }
+      setEntityView(prev => {
+        if (!prev || prev.entityId !== entityId) return prev
+        return {
+          ...prev,
+          walletData: { ...entityAccum.current },
+          loading: new Set([...prev.loading].filter(a => a !== addr)),
+          errors: { ...prev.errors, ...entityErrAccum.current },
+        }
+      })
     }))
   }
 
@@ -1681,13 +1684,25 @@ function HLTraderDashboard() {
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: col, flexShrink: 0 }} />
               <span style={{ fontWeight: 700, fontSize: 14, color: col }}>{ent.name}</span>
               <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>{members.length} wallets</span>
-              {isLoading && <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontStyle: 'italic' }}>Loading {entityView.loading.size} wallet{entityView.loading.size !== 1 ? 's' : ''}…</span>}
-              <button
-                onClick={() => setEntityView(null)}
-                style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
-              >
-                ← Back
-              </button>
+              {isLoading
+                ? <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontStyle: 'italic' }}>Loading {entityView.loading.size} of {members.length}…</span>
+                : <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>{Object.keys(entityView.walletData).filter(k => entityView.walletData[k]).length} loaded</span>
+              }
+              <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+                <button
+                  onClick={() => openEntityView(entityView.entityId)}
+                  disabled={isLoading}
+                  style={{ background: `${col}15`, border: `1px solid ${col}40`, borderRadius: 4, color: col, cursor: isLoading ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px', opacity: isLoading ? 0.5 : 1 }}
+                >
+                  ↻ Refresh
+                </button>
+                <button
+                  onClick={() => setEntityView(null)}
+                  style={{ background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 10px' }}
+                >
+                  ← Back
+                </button>
+              </div>
             </div>
 
             {/* Aggregate metrics */}
