@@ -7,20 +7,20 @@ query UserPositions($address: String!, $chainId: Int!) {
   userByAddress(address: $address, chainId: $chainId) {
     marketPositions {
       market {
-        uniqueKey
+        marketId
         lltv
         collateralAsset { address symbol decimals priceUsd }
         loanAsset { symbol decimals priceUsd }
         state { borrowApy supplyApy }
       }
-      borrowAssets
-      borrowAssetsUsd
-      collateral
-      collateralUsd
       healthFactor
-      supplyAssets
-      supplyAssetsUsd
       state {
+        borrowAssets
+        borrowAssetsUsd
+        collateral
+        collateralUsd
+        supplyAssets
+        supplyAssetsUsd
         borrowPnlUsd
         borrowRoe
         timestamp
@@ -64,11 +64,12 @@ export async function GET(req: Request) {
   const positions = json.data?.userByAddress?.marketPositions ?? []
 
   const parsed = positions
-    .filter((p: any) => parseFloat(p.borrowAssetsUsd) > 1 || parseFloat(p.supplyAssetsUsd) > 1 || parseFloat(p.collateralUsd) > 1)
+    .filter((p: any) => parseFloat(p.state?.borrowAssetsUsd) > 1 || parseFloat(p.state?.supplyAssetsUsd) > 1 || parseFloat(p.state?.collateralUsd) > 1)
     .map((p: any) => {
-      const collUsd = parseFloat(p.collateralUsd) || 0
-      const borrowUsd = parseFloat(p.borrowAssetsUsd) || 0
-      const supplyUsd = parseFloat(p.supplyAssetsUsd) || 0
+      const st = p.state ?? {}
+      const collUsd = parseFloat(st.collateralUsd) || 0
+      const borrowUsd = parseFloat(st.borrowAssetsUsd) || 0
+      const supplyUsd = parseFloat(st.supplyAssetsUsd) || 0
       const lltv = parseFloat(p.market.lltv) / 1e18
       const ltv = collUsd > 0 ? borrowUsd / collUsd : 0
       const hf = parseFloat(p.healthFactor) || 0
@@ -111,12 +112,12 @@ export async function GET(req: Request) {
       const entryTs = firstPt?.ts ?? null
       const currentEquity = collUsd - borrowUsd
       const daysHeld = entryTs ? (Date.now() / 1000 - entryTs) / 86400 : null
-      const pnlUsd = entryEquity != null ? currentEquity - entryEquity : (parseFloat(p.state?.borrowPnlUsd) || null)
+      const pnlUsd = entryEquity != null ? currentEquity - entryEquity : (parseFloat(st.borrowPnlUsd) || null)
       const returnPct = entryEquity != null && entryEquity > 0 ? (pnlUsd! / entryEquity) * 100 : null
       const apr = returnPct != null && daysHeld != null && daysHeld > 0 ? (returnPct / daysHeld) * 365 : null
 
       return {
-        market: p.market.uniqueKey,
+        market: p.market.marketId,
         collateralAddress: (p.market.collateralAsset?.address || '').toLowerCase(),
         collateralSymbol: p.market.collateralAsset?.symbol || '—',
         loanSymbol: p.market.loanAsset?.symbol || '—',
