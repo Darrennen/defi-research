@@ -276,6 +276,17 @@ function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
 export const getMetaAndAssetCtxs = () =>
   post<[{ universe: HLPerpMeta[]; marginTables: unknown[] }, HLAssetCtx[]]>({ type: 'metaAndAssetCtxs' })
 
+// Builder-deployed (HIP-3) perp dexs — e.g. "xyz" (equities), "km" (Kinetiq).
+export interface HLPerpDex { name: string; fullName: string }
+export const getPerpDexs = () =>
+  post<(HLPerpDex | null)[]>({ type: 'perpDexs' })
+
+export const getClearinghouseStateDex = (address: string, dex: string) =>
+  post<HLClearinghouseState>({ type: 'clearinghouseState', user: address, dex })
+
+export const getMetaAndAssetCtxsDex = (dex: string) =>
+  post<[{ universe: HLPerpMeta[]; marginTables: unknown[] }, HLAssetCtx[]]>({ type: 'metaAndAssetCtxs', dex })
+
 export const getSpotMetaAndAssetCtxs = () =>
   post<[HLSpotMeta, HLSpotAssetCtx[]]>({ type: 'spotMetaAndAssetCtxs' })
 
@@ -306,10 +317,20 @@ export const getDelegatorSummary = (address: string) =>
 
 // ── All-in-one fetch ──────────────────────────────────────────────────────────
 
+// A builder (HIP-3) perp dex the wallet has an account on. Its positions use
+// dex-prefixed coin names (e.g. "xyz:MU"), so their asset contexts are merged
+// into the main assetCtxMap without collision.
+export interface HLBuilderDex {
+  name: string
+  fullName: string
+  perps: HLClearinghouseState
+}
+
 export interface HLWalletData {
   role: HLUserRole
   subAccounts: HLSubAccount[]
   perps: HLClearinghouseState
+  builderDexes: HLBuilderDex[]
   spot: HLSpotState
   orders: HLOpenOrder[]
   fills: HLFill[]
@@ -372,8 +393,37 @@ export async function fetchWallet(address: string): Promise<HLWalletData> {
     }
   }
 
+  // Builder (HIP-3) dexs — discover any the wallet trades and merge their positions.
+  // Coin names are dex-prefixed (e.g. "xyz:MU"), so their ctxs share assetCtxMap
+  // without colliding with main-dex coins. Best-effort: failures are ignored.
+  let builderDexes: HLBuilderDex[] = []
+  try {
+    const dexs = await getPerpDexs()
+    const named = dexs.filter((d): d is HLPerpDex => !!d?.name)
+    const states = await Promise.all(
+      named.map(d => safe(getClearinghouseStateDex(address, d.name), null as HLClearinghouseState | null))
+    )
+    const active = named
+      .map((d, i) => ({ d, state: states[i] }))
+      .filter((x): x is { d: HLPerpDex; state: HLClearinghouseState } =>
+        !!x.state && (parseFloat(x.state.marginSummary?.accountValue ?? '0') > 0 || (x.state.assetPositions?.length ?? 0) > 0))
+    const dexCtxs = await Promise.all(
+      active.map(({ d }) =>
+        safe(
+          getMetaAndAssetCtxsDex(d.name),
+          [{ universe: [], marginTables: [] }, [] as HLAssetCtx[]] as [{ universe: HLPerpMeta[]; marginTables: unknown[] }, HLAssetCtx[]],
+        ))
+    )
+    dexCtxs.forEach(([meta, cs]) => {
+      for (let i = 0; i < meta.universe.length; i++) {
+        if (cs[i]) assetCtxMap.set(meta.universe[i].name, cs[i])
+      }
+    })
+    builderDexes = active.map(({ d, state }) => ({ name: d.name, fullName: d.fullName, perps: state }))
+  } catch { /* builder dexs are best-effort */ }
+
   return {
-    role, subAccounts, perps, spot, orders, fills, ledger, spotTokenMap, portfolio,
+    role, subAccounts, perps, builderDexes, spot, orders, fills, ledger, spotTokenMap, portfolio,
     assetCtxMap, spotAssetCtxMap, predictedFundings, userFunding, historicalOrders,
     twapOrders, twapHistory, fees,
   }

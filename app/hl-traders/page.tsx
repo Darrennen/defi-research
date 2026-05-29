@@ -8,7 +8,7 @@ import {
 import {
   fetchWallet, getDelegatorSummary, getSubAccounts, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
   fmtFundingRate, annualizedFunding, fundingDirection,
-  type HLWalletData, type HLRole, type HLPortfolioSeries, type HLPredictedFundings, type HLFill,
+  type HLWalletData, type HLRole, type HLPosition, type HLPortfolioSeries, type HLPredictedFundings, type HLFill,
   type HLTwapOrder, type HLTwapHistoryEntry, type HLDelegatorSummary,
 } from '@/lib/hyperliquid'
 import { fetchEvmWallet, fmtEvmAmount, HEVM_EXPLORER, groupByProtocol, type EvmWalletData } from '@/lib/hyperevm'
@@ -72,6 +72,46 @@ function relatedAccounts(data: HLWalletData, address: string): RelatedAccount[] 
 
 const ENTITY_COLORS = ['#0d9488','#3b82f6','#9333ea','#f59e0b','#ef4444','#10b981','#f97316','#06b6d4']
 function entityColor(index: number) { return ENTITY_COLORS[index % ENTITY_COLORS.length] }
+
+// ── Multi-dex helpers ───────────────────────────────────────────────────────
+// Main-dex + builder-dex (HIP-3) perps are merged so positions, equity, leverage
+// and margin reflect the whole account. Builder positions carry a `_dex` tag and
+// dex-prefixed coin names (e.g. "xyz:MU"); main-dex positions have `_dex === ''`.
+
+type TaggedPosition = HLPosition & { _dex: string }
+
+function allPerpPositions(data: HLWalletData): TaggedPosition[] {
+  const main = data.perps.assetPositions.map(ap => ({ ...ap.position, _dex: '' }))
+  const builder = data.builderDexes.flatMap(bd =>
+    bd.perps.assetPositions.map(ap => ({ ...ap.position, _dex: bd.name }))
+  )
+  return [...main, ...builder]
+}
+
+function combinedPerpEquity(data: HLWalletData): number {
+  return parseFloat(data.perps.marginSummary.accountValue ?? '0') +
+    data.builderDexes.reduce((s, bd) => s + parseFloat(bd.perps.marginSummary.accountValue ?? '0'), 0)
+}
+
+function combinedMarginUsed(data: HLWalletData): number {
+  return parseFloat(data.perps.marginSummary.totalMarginUsed ?? '0') +
+    data.builderDexes.reduce((s, bd) => s + parseFloat(bd.perps.marginSummary.totalMarginUsed ?? '0'), 0)
+}
+
+// Split a perp coin into its dex tag and bare symbol: "xyz:MU" → {dex:'xyz', sym:'MU'}.
+function splitCoin(coin: string): { dex: string; sym: string } {
+  const i = coin.indexOf(':')
+  return i === -1 ? { dex: '', sym: coin } : { dex: coin.slice(0, i), sym: coin.slice(i + 1) }
+}
+
+function DexTag({ dex }: { dex: string }) {
+  if (!dex) return null
+  return (
+    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9333ea', background: 'rgba(147,51,234,0.10)', border: '1px solid rgba(147,51,234,0.25)', borderRadius: 3, padding: '1px 5px', fontFamily: 'var(--mono)' }}>
+      {dex}
+    </span>
+  )
+}
 
 function pnlColor(v: string | number): string {
   const n = parseFloat(String(v))
@@ -339,7 +379,7 @@ function PortfolioChart({ title, series, color, range }: {
 function FundingTab({ data }: { data: HLWalletData }) {
   const [showAll, setShowAll] = useState(false)
 
-  const positions = data.perps.assetPositions.map(ap => ap.position)
+  const positions = allPerpPositions(data)
   const positionCoins = new Set(positions.map(p => p.coin))
 
   // Summarise payment history
@@ -829,7 +869,7 @@ function ConcentrationBars({ positions }: { positions: Array<{ coin: string; pos
         const isLong = parseFloat(p.szi) > 0
         return (
           <div key={p.coin} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 42, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--ink)', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.coin}</div>
+            <div style={{ width: 42, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--ink)', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{splitCoin(p.coin).sym}</div>
             <div style={{ flex: 1, height: 5, background: 'var(--rule-soft)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${pct}%`, background: isLong ? 'var(--green)' : 'var(--red)', borderRadius: 3 }} />
             </div>
@@ -970,7 +1010,7 @@ function OverviewPanel({
   range: ChartRange
   setRange: (r: ChartRange) => void
 }) {
-  const positions = data.perps.assetPositions.map(ap => ap.position)
+  const positions = allPerpPositions(data)
   const spotBalances = (data.spot.balances ?? []).filter(b => parseFloat(b.total) > 0)
   const orders = data.orders ?? []
   const fundingPayments = data.userFunding ?? []
@@ -997,7 +1037,7 @@ function OverviewPanel({
     return null
   }
 
-  const perpEquity = parseFloat(data.perps.marginSummary.accountValue ?? '0')
+  const perpEquity = combinedPerpEquity(data)
   const spotValue  = spotBalances.reduce((s, b) => {
     const amount = parseFloat(b.total)
     const v = tokenUsd(b.coin, amount)
@@ -1027,7 +1067,7 @@ function OverviewPanel({
   const totalNetWorth = hyperCoreValue + hyperEvmValue
   const showEvmTotal  = evmData && !evmLoading
 
-  const marginUsed    = parseFloat(data.perps.marginSummary.totalMarginUsed ?? '0')
+  const marginUsed    = combinedMarginUsed(data)
   const marginUsedPct = perpEquity > 0 ? marginUsed / perpEquity * 100 : 0
   const freeMargin    = perpEquity - marginUsed
   const longNtl       = positions.filter(p => parseFloat(p.szi) > 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
@@ -1221,11 +1261,13 @@ function OverviewPanel({
             const isLong = parseFloat(p.szi) >= 0
             const ctx = data.assetCtxMap.get(p.coin)
             const risk = liqRisk(ctx?.markPx, p.liquidationPx ?? undefined, isLong)
+            const { dex, sym } = splitCoin(p.coin)
             return (
               <div key={p.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(positions.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <CoinIcon symbol={p.coin} size={24} />
-                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{p.coin}</span>
+                  <CoinIcon symbol={sym} size={24} />
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{sym}</span>
+                  <DexTag dex={dex} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)', background: isLong ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '1px 7px' }}>
                     {isLong ? 'Long' : 'Short'} {p.leverage.value}×
                   </span>
@@ -1668,7 +1710,7 @@ function HLTraderDashboard() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const positions = data?.perps.assetPositions.map(ap => ap.position) ?? []
+  const positions = data ? allPerpPositions(data) : []
   const spotBalances = (data?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0)
   const orders = data?.orders ?? []
   const fills = data?.fills ?? []
@@ -1679,7 +1721,7 @@ function HLTraderDashboard() {
   const twapOrders = data?.twapOrders ?? []
   const twapHistory = data?.twapHistory ?? []
 
-  const perpEquity = parseFloat(data?.perps.marginSummary.accountValue ?? '0')
+  const perpEquity = data ? combinedPerpEquity(data) : 0
   const spotEquity = spotBalances.reduce((s, b) => {
     const n = parseFloat(b.entryNtl)
     return s + (isNaN(n) ? 0 : n)
@@ -1901,7 +1943,7 @@ function HLTraderDashboard() {
 
         // Per-wallet value breakdown
         const walletValues = loaded.map(({ entry, wd, evm, staking }) => {
-          const perpEquity = parseFloat(wd?.perps.marginSummary.accountValue ?? '0')
+          const perpEquity = wd ? combinedPerpEquity(wd) : 0
           const spotVal = (wd?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0).reduce((s, b) => {
             const v = tokenUsd(b.coin, parseFloat(b.total))
             if (v !== null) return s + v
@@ -1929,9 +1971,9 @@ function HLTraderDashboard() {
         const totalSpotVal  = walletValues.reduce((s, w) => s + w.spotVal, 0)
         const totalEvmVal   = walletValues.reduce((s, w) => s + w.evmVal, 0)
         const totalStakedVal = walletValues.reduce((s, w) => s + w.stakedVal, 0)
-        const totalPnl      = loaded.reduce((s, { wd }) => s + (wd?.perps.assetPositions ?? []).reduce((ss, ap) => ss + parseFloat(ap.position.unrealizedPnl || '0'), 0), 0)
+        const totalPnl      = loaded.reduce((s, { wd }) => s + (wd ? allPerpPositions(wd) : []).reduce((ss, p) => ss + parseFloat(p.unrealizedPnl || '0'), 0), 0)
         const allPositions  = loaded.flatMap(({ entry, wd }) =>
-          (wd?.perps.assetPositions ?? []).map(ap => ({ ...ap.position, _wallet: entry.label, _addr: entry.addr, _ctx: wd?.assetCtxMap.get(ap.position.coin) }))
+          (wd ? allPerpPositions(wd) : []).map(p => ({ ...p, _wallet: entry.label, _addr: entry.addr, _ctx: wd?.assetCtxMap.get(p.coin) }))
         ).filter(p => parseFloat(p.szi) !== 0)
         const allSpot = loaded.flatMap(({ entry, wd }) =>
           (wd?.spot.balances ?? []).filter(b => parseFloat(b.total) > 0).map(b => {
@@ -2036,8 +2078,8 @@ function HLTraderDashboard() {
                     {walletValues.map(({ entry, wd, perpEquity, spotVal, evmVal, stakedVal, staking, total }) => {
                       const isW    = entityView.loading.has(entry.addr)
                       const hasErr = entityView.errors[entry.addr]
-                      const posCount = (wd?.perps.assetPositions ?? []).filter(ap => parseFloat(ap.position.szi) !== 0).length
-                      const upnl     = (wd?.perps.assetPositions ?? []).reduce((s, ap) => s + parseFloat(ap.position.unrealizedPnl || '0'), 0)
+                      const posCount = (wd ? allPerpPositions(wd) : []).filter(p => parseFloat(p.szi) !== 0).length
+                      const upnl     = (wd ? allPerpPositions(wd) : []).reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
                       const stakedHype = parseFloat(staking?.delegated ?? '0')
                       return (
                         <tr key={entry.addr} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
@@ -2100,8 +2142,10 @@ function HLTraderDashboard() {
                         return (
                           <tr key={i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
                             <td style={{ padding: '9px 12px', fontSize: 11, color: 'var(--ink-mute)' }}>{p._wallet}</td>
-                            <td style={{ padding: '9px 12px', fontWeight: 700, fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <CoinIcon symbol={p.coin} size={18} />{p.coin}
+                            <td style={{ padding: '9px 12px', fontWeight: 700, fontFamily: 'var(--mono)' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <CoinIcon symbol={splitCoin(p.coin).sym} size={18} />{splitCoin(p.coin).sym}<DexTag dex={splitCoin(p.coin).dex} />
+                              </span>
                             </td>
                             <td style={{ padding: '9px 12px' }}>
                               <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)' }}>{isLong ? 'Long' : 'Short'}</span>
@@ -2424,6 +2468,7 @@ function HLTraderDashboard() {
                     rows={positions.map(p => {
                       const size = parseFloat(p.szi)
                       const isLong = size >= 0
+                      const { dex, sym } = splitCoin(p.coin)
                       const ctx = data.assetCtxMap.get(p.coin)
                       const fundingRate = ctx?.funding ?? '0'
                       const dir = ctx ? fundingDirection(p.szi, fundingRate) : 'neutral'
@@ -2437,9 +2482,9 @@ function HLTraderDashboard() {
                         : null
                       return [
                         <div key="sym" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <CoinIcon symbol={p.coin} />
+                          <CoinIcon symbol={sym} />
                           <div>
-                            <div style={{ fontWeight: 700, fontFamily: 'var(--mono)' }}>{p.coin}</div>
+                            <div style={{ fontWeight: 700, fontFamily: 'var(--mono)', display: 'flex', alignItems: 'center', gap: 6 }}>{sym}<DexTag dex={dex} /></div>
                             <div style={{ fontSize: 11, color: pxChgNum >= 0 ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>{pxChange}</div>
                           </div>
                         </div>,
