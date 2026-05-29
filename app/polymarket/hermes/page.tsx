@@ -19,12 +19,16 @@ interface HermesData {
     patterns: Pattern[]
   }
   signal: { side: 'UP' | 'DOWN' | 'NONE'; edge: number; modelProb: number; marketPrice: number; stake: number
-    kellyFull: number; tradable: boolean; conviction: string; patternsAgree: number }
+    kellyFull: number; tradable: boolean; conviction: string; patternsAgree: number
+    tokenId: string | null; outcome: string | null }
   performance: { backtest: { windows: number; winRate: number; sharpe: number }
     realized: null | { pnl: number; trades: number; winRate: number; biggestWin: number; dayPnl: number } }
   priceSeries: { t: number; c: number }[]
   configured: boolean
+  tradeDryRun: boolean
 }
+
+interface TradeResult { ts: string; outcome: string; size: number; price: number; status: 'ok' | 'error'; dryRun: boolean; message?: string; orderId?: string }
 
 const fmtUsd = (n: number, d = 2) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -39,7 +43,29 @@ export default function HermesPage() {
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [now, setNow] = useState(0)
+  const [confirm, setConfirm] = useState(false)
+  const [placing, setPlacing] = useState(false)
+  const [lastTrade, setLastTrade] = useState<TradeResult | null>(null)
   const fetchedAt = useRef(0)
+
+  const placeOrder = useCallback(async () => {
+    const s = data?.signal
+    if (!s?.tokenId || s.side === 'NONE') return
+    setPlacing(true)
+    try {
+      const res = await fetch('/api/polymarket/trade', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tokenId: s.tokenId, size: s.stake, price: s.marketPrice, outcome: s.outcome }),
+      })
+      const j = await res.json()
+      setLastTrade({
+        ts: new Date().toISOString().slice(11, 19), outcome: s.outcome ?? s.side, size: s.stake, price: s.marketPrice,
+        status: j.success ? 'ok' : 'error', dryRun: !!j.dryRun, message: j.message ?? j.error, orderId: j.orderId,
+      })
+    } catch (e: any) {
+      setLastTrade({ ts: new Date().toISOString().slice(11, 19), outcome: s.outcome ?? s.side, size: s.stake, price: s.marketPrice, status: 'error', dryRun: true, message: e?.message ?? 'request failed' })
+    } finally { setPlacing(false); setConfirm(false) }
+  }, [data])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,10 +126,15 @@ export default function HermesPage() {
         </div>
       )}
 
+      {confirm && data?.signal.tokenId && (
+        <ConfirmModal data={data} placing={placing} onConfirm={placeOrder} onCancel={() => setConfirm(false)} />
+      )}
+
       {data && <>
         <PerfRow data={data} />
+        {lastTrade && <TradeBanner t={lastTrade} onDismiss={() => setLastTrade(null)} />}
         <PulsePanel data={data} secsLeft={secsLeft} />
-        <ConvictionStrip data={data} />
+        <ConvictionStrip data={data} onEnter={() => setConfirm(true)} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 20, margin: '20px 0' }}>
           <MarkovPanel data={data} />
           <MonteCarloPanel data={data} />
@@ -259,10 +290,11 @@ function PriceChart({ data }: { data: HermesData }) {
 }
 
 // ── conviction strip ───────────────────────────────────────────────────────────
-function ConvictionStrip({ data }: { data: HermesData }) {
+function ConvictionStrip({ data, onEnter }: { data: HermesData; onEnter: () => void }) {
   const s = data.signal
   const isUp = s.side === 'UP'
   const clr = s.side === 'NONE' ? 'var(--ink-mute)' : isUp ? 'var(--green)' : 'var(--red)'
+  const canTrade = s.tradable && data.configured && !!s.tokenId
   return (
     <div className="panel" style={{ margin: '20px 0', borderColor: s.tradable ? clr : 'var(--rule)' }}>
       <div className="ph"><span className="t">Live Conviction</span>
@@ -275,13 +307,78 @@ function ConvictionStrip({ data }: { data: HermesData }) {
         <KB label="Edge" value={`${s.edge >= 0 ? '+' : ''}${s.edge}%`} color={s.edge >= 0 ? 'var(--green)' : 'var(--red)'} />
         <KB label="¼ Kelly stake" value={fmtUsd(s.stake)} color="var(--blue)" d={`full ${fmtUsd(s.kellyFull)}`} />
         <KB label="Patterns agree" value={`${s.patternsAgree}/3`} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
           <div style={{ ...lbl }}>Action</div>
-          <span className={s.tradable ? 'badge-live' : 'badge-mech'}
-            style={{ alignSelf: 'flex-start', color: s.tradable ? 'var(--green)' : 'var(--ink-mute)', borderColor: 'var(--rule)', border: '1px solid var(--rule)' }}>
-            {s.tradable ? `▶ Enter ${s.side}` : '◼ Stand down'}</span>
+          {canTrade ? (
+            <button onClick={onEnter} style={{
+              alignSelf: 'flex-start', fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', padding: '7px 14px', cursor: 'pointer', borderRadius: 3, color: '#fff',
+              background: isUp ? 'var(--green)' : 'var(--red)', border: `1px solid ${isUp ? 'var(--green)' : 'var(--red)'}`,
+            }}>▶ Enter {s.side}</button>
+          ) : (
+            <span className="badge-mech" style={{ alignSelf: 'flex-start', color: 'var(--ink-mute)', border: '1px solid var(--rule)' }}
+              title={!data.configured ? 'Set POLYMARKET_PRIVATE_KEY + API creds to enable trading' : s.side === 'NONE' ? 'No positive edge' : 'Round not live / edge below threshold'}>
+              ◼ {!data.configured ? 'Not configured' : 'Stand down'}</span>
+          )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── confirm modal ────────────────────────────────────────────────────────────────
+function ConfirmModal({ data, placing, onConfirm, onCancel }: { data: HermesData; placing: boolean; onConfirm: () => void; onCancel: () => void }) {
+  const s = data.signal
+  const live = !data.tradeDryRun
+  const shares = s.marketPrice > 0 ? (s.stake / (s.marketPrice / 100)) : 0
+  return (
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--paper)', border: '2px solid var(--ink)', borderRadius: 4, padding: '28px 32px', maxWidth: 440, width: '100%' }}>
+        <div style={{ ...lbl, color: live ? 'var(--red)' : 'var(--amber)', marginBottom: 14 }}>
+          {live ? '● Live order — real money' : '⚠ Dry-run order — simulation'}
+        </div>
+        <h3 style={{ fontFamily: 'var(--serif)', fontWeight: 500, fontSize: 24, margin: '0 0 16px' }}>
+          Buy {s.side} · {data.market?.asset} 5-min
+        </h3>
+        {([
+          ['Outcome', s.outcome ?? s.side],
+          ['Round', data.market?.question ?? '—'],
+          ['Price', `${s.marketPrice}¢`],
+          ['Model P', `${s.modelProb}%`],
+          ['Edge', `+${s.edge}%`],
+          ['Stake', `${fmtUsd(s.stake)} (¼ Kelly)`],
+          ['~Shares', shares.toFixed(1)],
+        ] as [string, string][]).map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--rule-soft)' }}>
+            <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-soft)' }}>{k}</span>
+            <span style={{ ...mono, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{v}</span>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+          <button className="btn primary" style={{ flex: 1, opacity: placing ? 0.6 : 1 }} disabled={placing} onClick={onConfirm}>
+            {placing ? 'Placing…' : live ? 'Place live order' : 'Simulate order'}
+          </button>
+          <button className="btn ghost" disabled={placing} onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── last-trade banner ──────────────────────────────────────────────────────────────
+function TradeBanner({ t, onDismiss }: { t: TradeResult; onDismiss: () => void }) {
+  const ok = t.status === 'ok'
+  const clr = ok ? (t.dryRun ? 'var(--amber)' : 'var(--green)') : 'var(--red)'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', margin: '20px 0 0', borderRadius: 4,
+      border: `1px solid ${clr}`, background: ok ? (t.dryRun ? 'rgba(178,116,13,0.06)' : 'rgba(31,138,91,0.06)') : 'rgba(192,57,43,0.06)' }}>
+      <span style={{ ...mono, fontSize: 11, color: 'var(--ink-mute)' }}>{t.ts}</span>
+      <span style={{ fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: clr }}>
+        {ok ? (t.dryRun ? 'Dry-run' : 'Live') + ' order placed' : 'Order failed'}</span>
+      <span style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink-soft)' }}>
+        {t.outcome} · {fmtUsd(t.size)} @ {t.price}¢{t.message ? ` — ${t.message}` : ''}</span>
+      <button onClick={onDismiss} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-mute)', fontSize: 16 }}>×</button>
     </div>
   )
 }

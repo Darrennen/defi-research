@@ -196,10 +196,13 @@ export async function GET(req: Request) {
         marketPrice: Math.round(marketPrice * 100), stake: Math.round(stake * 100) / 100,
         kellyFull: Math.round(kellyFull * 100) / 100, tradable, conviction,
         patternsAgree: patAgree,
+        tokenId: pulse ? (side === 'DOWN' ? pulse.downTokenId : pulse.upTokenId) : null,
+        outcome: side === 'NONE' ? null : `${asset.toUpperCase()} ${side}`,
       },
       performance: { backtest: bt, realized },
       priceSeries,
       configured: !!(process.env.POLYMARKET_PRIVATE_KEY && process.env.POLYMARKET_API_KEY),
+      tradeDryRun: process.env.POLYMARKET_DRY_RUN !== 'false',
       fetchedAt: new Date(now).toISOString(),
     })
   } catch (err: any) {
