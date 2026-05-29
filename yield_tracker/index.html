@@ -2390,6 +2390,72 @@ footer.site ul a:hover { color: var(--blue); }
   @media (max-width: 600px) {
     .now-grid { grid-template-columns: 1fr 1fr; }
   }
+
+  /* ---- Net worth banner ---- */
+  .nw-banner {
+    background: var(--card); border: 1px solid var(--rule);
+    padding: 18px 20px 16px; margin-bottom: 18px;
+  }
+  html[data-theme="dark"] .nw-banner { background: var(--paper-2); }
+  .nw-banner .nwb-label {
+    font-family: var(--sans); font-size: 9px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-mute);
+    margin-bottom: 6px;
+  }
+  .nw-banner .nwb-total {
+    font-family: var(--mono); font-size: 32px; font-weight: 700;
+    color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1;
+    margin-bottom: 14px;
+  }
+  .nw-banner .nwb-row {
+    display: flex; gap: 0; border-top: 1px solid var(--rule); padding-top: 12px;
+    flex-wrap: wrap; gap: 0;
+  }
+  .nw-banner .nwb-item {
+    flex: 1; min-width: 100px;
+    padding-right: 16px; margin-right: 16px;
+    border-right: 1px solid var(--rule);
+  }
+  .nw-banner .nwb-item:last-child { border-right: 0; padding-right: 0; margin-right: 0; }
+  .nw-banner .nwb-item .ni-l {
+    font-family: var(--sans); font-size: 9px; color: var(--ink-mute);
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 3px;
+  }
+  .nw-banner .nwb-item .ni-v { font-family: var(--mono); font-size: 15px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .nw-banner .nwb-item .ni-v.loading { color: var(--ink-mute); font-size: 11px; font-style: italic; }
+
+  /* ---- HF danger / warning flash ---- */
+  @keyframes hf-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  .hf-alert-banner {
+    padding: 12px 16px; margin-bottom: 16px;
+    border-left: 3px solid currentColor; display: flex;
+    align-items: flex-start; gap: 10px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  }
+  .hf-alert-banner.danger  { color: #f87171; background: rgba(248,113,113,0.06); }
+  .hf-alert-banner.warning { color: #fb923c; background: rgba(251,146,60,0.06); }
+  .hf-alert-banner .ha-icon { font-size: 18px; flex-shrink: 0; animation: hf-pulse 1.1s ease-in-out infinite; }
+  .hf-alert-banner.warning .ha-icon { animation-duration: 2.2s; }
+  .hf-alert-banner .ha-title { font-weight: 700; font-size: 13px; }
+  .hf-alert-banner .ha-list  { display: flex; flex-direction: column; gap: 1px; }
+
+  /* ---- Aave per-asset table ---- */
+  .aave-mkt-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; margin-top: 14px; }
+  .aave-mkt-table th {
+    font-family: var(--sans); font-size: 9px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-mute);
+    padding: 0 8px 8px; border-bottom: 1px solid var(--rule); text-align: right;
+  }
+  .aave-mkt-table th:first-child { text-align: left; }
+  .aave-mkt-table td {
+    padding: 7px 8px; border-bottom: 1px solid var(--rule);
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .aave-mkt-table td:first-child { text-align: left; font-weight: 600; color: var(--ink); }
+  .aave-mkt-table .sup { color: var(--blue); }
+  .aave-mkt-table .brw { color: #f87171; }
+  .aave-mkt-table .coll-yes { color: var(--green, #22c55e); }
+  .aave-mkt-table .coll-no  { color: var(--ink-mute); }
 </style>
 </head>
 <body>
@@ -2482,7 +2548,22 @@ footer.site ul a:hover { color: var(--blue); }
     </select>
     <button id="pos-fetch-btn" type="button">Fetch</button>
   </div>
+  <div id="pos-refresh-status" style="display:none;font-family:var(--mono);font-size:11px;color:var(--ink-mute);padding:4px 0;"></div>
   <div id="pos-error" style="display:none;font-family:var(--mono);font-size:12px;color:var(--red);padding:6px 0;"></div>
+
+  <!-- Net worth banner (fills incrementally: Morpho first, wallet data async) -->
+  <div id="net-worth-banner" style="display:none" class="nw-banner">
+    <div class="nwb-label">DeFi Net Worth</div>
+    <div class="nwb-total" id="nwb-total">$—</div>
+    <div class="nwb-row">
+      <div class="nwb-item"><div class="ni-l">Morpho equity</div><div class="ni-v" id="nwb-morpho">—</div></div>
+      <div class="nwb-item"><div class="ni-l">Aave V3 equity</div><div class="ni-v loading" id="nwb-aave">scanning…</div></div>
+      <div class="nwb-item"><div class="ni-l">Pendle</div><div class="ni-v loading" id="nwb-pendle">scanning…</div></div>
+      <div class="nwb-item"><div class="ni-l">PT wallet</div><div class="ni-v loading" id="nwb-pt">scanning…</div></div>
+    </div>
+  </div>
+  <!-- HF liquidation alert (pulsing) -->
+  <div id="hf-danger-banner" style="display:none"></div>
 
   <div id="pos-summary" class="pos-summary" style="display:none">
     <div class="b"><div class="l">Total collateral</div><div class="v" id="ps-coll">—</div></div>
@@ -2523,6 +2604,7 @@ footer.site ul a:hover { color: var(--blue); }
   <div id="aave-pos-wrap" style="display:none;margin-top:28px;">
     <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;padding-top:16px;border-top:1px solid var(--rule);">Aave V3 Position</div>
     <div id="aave-pos-kpis" class="pos-summary" style="grid-template-columns:repeat(7,1fr)"></div>
+    <div id="aave-markets-wrap"></div>
   </div>
 
   <!-- PT wallet balances -->
@@ -3142,7 +3224,7 @@ footer.site ul a:hover { color: var(--blue); }
         ${retStr ? `<div class="nc-ret">${retStr}</div>` : ''}
         <div class="nc-meta">${N(lp.leverage)}× · HF ${N(lp.hf)} · LLTV ${P(bestLoop.lltv,1)}</div>
       `));
-    } else cards.push(empty('Loop Strategy', 'No loops'));
+    } else cards.push(empty('Loop Strategy', 'Low liquidity in PT×Morpho markets'));
 
     // 4 – LP Provision
     if (bestLP) {
@@ -3334,6 +3416,13 @@ footer.site ul a:hover { color: var(--blue); }
     else rows.sort((a,b) => (b.loop.net_apy??-999) - (a.loop.net_apy??-999));
     const countEl = document.getElementById('loops-count');
     if (countEl) countEl.textContent = rows.length + ' results';
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:32px 0;color:var(--ink-mute)">
+        <div style="font-size:14px;margin-bottom:6px">No Pendle PT × Morpho loop opportunities found</div>
+        <div style="font-size:12px">PT-backed Morpho Blue markets have low liquidity right now. Try the calculator below to model a custom strategy.</div>
+      </td></tr>`;
+      return;
+    }
     tbody.innerHTML = rows.map(l => {
       const lp = l.loop;
       const profitCls = lp.net_profit >= 0 ? 'pos-cell' : 'bad';
@@ -3940,6 +4029,8 @@ footer.site ul a:hover { color: var(--blue); }
       grid.innerHTML = '';
       summary.style.display = 'none';
       empty.style.display = 'block';
+      document.getElementById('net-worth-banner').style.display = 'none';
+      document.getElementById('hf-danger-banner').style.display = 'none';
       return;
     }
     empty.style.display = 'none';
@@ -3962,6 +4053,39 @@ footer.site ul a:hover { color: var(--blue); }
     document.getElementById('ps-daily').textContent = (netDaily >= 0 ? '+' : '') + U(netDaily);
     document.getElementById('ps-count').textContent = positions.length;
     summary.style.display = '';
+
+    // Net worth banner — partial (Morpho only until wallet fills in)
+    const nwBanner = document.getElementById('net-worth-banner');
+    document.getElementById('nwb-morpho').textContent = U(equity);
+    document.getElementById('nwb-morpho').classList.remove('loading');
+    document.getElementById('nwb-total').textContent = U(equity);
+    nwBanner.style.display = '';
+
+    // HF danger / warning flash
+    const hfDanger  = positions.filter(p => p.hf > 0 && p.hf < 1.2);
+    const hfWarning = positions.filter(p => p.hf >= 1.2 && p.hf < 1.5);
+    const alertEl   = document.getElementById('hf-danger-banner');
+    if (hfDanger.length > 0) {
+      alertEl.className = 'hf-alert-banner danger';
+      alertEl.innerHTML = `
+        <div class="ha-icon">⚠</div>
+        <div class="ha-list">
+          <div class="ha-title">LIQUIDATION RISK — ${hfDanger.length} position${hfDanger.length > 1 ? 's' : ''} below HF 1.2</div>
+          ${hfDanger.map(p => `<div>${p.collateralSymbol}/${p.loanSymbol} · HF <strong>${p.hf.toFixed(2)}</strong> · ${U(p.borrowUsd)} borrowed · ${p.dropToLiq > 0 ? p.dropToLiq + '% drop to liq' : ''}</div>`).join('')}
+        </div>`;
+      alertEl.style.display = '';
+    } else if (hfWarning.length > 0) {
+      alertEl.className = 'hf-alert-banner warning';
+      alertEl.innerHTML = `
+        <div class="ha-icon">⚠</div>
+        <div class="ha-list">
+          <div class="ha-title">CAUTION — ${hfWarning.length} position${hfWarning.length > 1 ? 's' : ''} between HF 1.2 – 1.5</div>
+          ${hfWarning.map(p => `<div>${p.collateralSymbol}/${p.loanSymbol} · HF <strong>${p.hf.toFixed(2)}</strong> · ${U(p.borrowUsd)} borrowed</div>`).join('')}
+        </div>`;
+      alertEl.style.display = '';
+    } else {
+      alertEl.style.display = 'none';
+    }
 
     // Portfolio growth block
     const portHistory = portfolioHistory(positions);
@@ -4245,10 +4369,12 @@ footer.site ul a:hover { color: var(--blue); }
     }).join('');
   }
 
-  function renderAavePosition(aave) {
+  function renderAavePosition(aave, markets) {
     const wrap = document.getElementById('aave-pos-wrap');
     const kpis = document.getElementById('aave-pos-kpis');
+    const mktWrap = document.getElementById('aave-markets-wrap');
     wrap.style.display = 'block';
+    mktWrap.innerHTML = '';
     if (!aave) {
       kpis.innerHTML = `<div style="padding:14px 16px;font-family:var(--mono);font-size:12px;color:var(--ink-mute);">No Aave V3 position found</div>`;
       return;
@@ -4264,6 +4390,29 @@ footer.site ul a:hover { color: var(--blue); }
       <div class="b"><div class="l">LTV</div><div class="v">${aave.ltv_pct}%</div></div>
       <div class="b"><div class="l">Liq Threshold</div><div class="v">${aave.liq_threshold_pct}%</div></div>
       <div class="b"><div class="l">Health Factor</div><div class="v" style="color:${hfColor};">${aave.health_factor != null ? aave.health_factor.toFixed(2) : '∞'}</div></div>`;
+
+    if (markets && markets.length > 0) {
+      mktWrap.innerHTML = `
+        <div style="font-family:var(--sans);font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-mute);margin-top:16px;margin-bottom:6px;">Asset Breakdown</div>
+        <div class="tbl-wrap"><table class="aave-mkt-table">
+          <thead><tr>
+            <th>Asset</th>
+            <th>Supplied</th><th>Supply $</th>
+            <th>Borrowed</th><th>Borrow $</th>
+            <th>Collateral</th>
+          </tr></thead>
+          <tbody>
+            ${markets.map(m => `<tr>
+              <td>${m.symbol}</td>
+              <td class="sup">${m.supply_amount > 0 ? m.supply_amount.toLocaleString(undefined,{maximumFractionDigits:4}) : '—'}</td>
+              <td class="sup">${m.supply_usd > 0.01 ? '$' + m.supply_usd.toLocaleString(undefined,{maximumFractionDigits:2}) : '—'}</td>
+              <td class="brw">${m.borrow_amount > 0 ? m.borrow_amount.toLocaleString(undefined,{maximumFractionDigits:4}) : '—'}</td>
+              <td class="brw">${m.borrow_usd > 0.01 ? '$' + m.borrow_usd.toLocaleString(undefined,{maximumFractionDigits:2}) : '—'}</td>
+              <td class="${m.is_collateral ? 'coll-yes' : 'coll-no'}">${m.is_collateral ? '✓' : '—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>`;
+    }
   }
 
   function renderPtBalances(ptBal) {
@@ -4290,6 +4439,28 @@ footer.site ul a:hover { color: var(--blue); }
         <td style="color:var(--green,#22c55e);">${mat ? '+' + mat.retPct.toFixed(2) + '%' : '—'}</td>
       </tr>`;
     }).join('');
+  }
+
+  function renderNetWorthBanner(morphoEquity, aave, pendle, ptBal) {
+    const aaveEquity  = aave   ? (aave.net_equity || 0) : 0;
+    const pendleTotal = (pendle || []).reduce((s, p) => s + (p.total_value_usd || 0), 0);
+    const ptTotal     = (ptBal  || []).reduce((s, p) => s + (p.value_usd      || 0), 0);
+    const total = morphoEquity + aaveEquity + pendleTotal + ptTotal;
+
+    document.getElementById('nwb-total').textContent = U(total);
+    const aaveEl = document.getElementById('nwb-aave');
+    aaveEl.textContent = aave ? U(aaveEquity) : '$0';
+    aaveEl.classList.remove('loading');
+    const pendleEl = document.getElementById('nwb-pendle');
+    pendleEl.textContent = pendleTotal > 0 ? U(pendleTotal) : '$0';
+    pendleEl.classList.remove('loading');
+    const ptEl = document.getElementById('nwb-pt');
+    ptEl.textContent = ptTotal > 0 ? U(ptTotal) : '$0';
+    ptEl.classList.remove('loading');
+    // Always show the banner once wallet data is in, even if Morpho had no positions
+    if (total > 0.01) {
+      document.getElementById('net-worth-banner').style.display = '';
+    }
   }
 
   function renderMaturitySummary(pendle, ptBal, morpho) {
@@ -4344,6 +4515,32 @@ footer.site ul a:hover { color: var(--blue); }
       : 'Assumes underlying asset prices remain constant at current levels.';
   }
 
+  // Auto-refresh state
+  let _posRefreshTimer = null;
+  let _posCountdownTimer = null;
+  let _posLastFetch = 0;
+  const POS_REFRESH_SECS = 120;
+
+  function startPosCountdown() {
+    clearInterval(_posCountdownTimer);
+    const statusEl = document.getElementById('pos-refresh-status');
+    if (!statusEl) return;
+    _posCountdownTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - _posLastFetch) / 1000);
+      const remaining = POS_REFRESH_SECS - elapsed;
+      if (remaining <= 0) {
+        clearInterval(_posCountdownTimer);
+        statusEl.textContent = 'Auto-refreshing…';
+        return;
+      }
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      const ago = elapsed < 60 ? elapsed + 's' : Math.floor(elapsed / 60) + 'm ' + (elapsed % 60) + 's';
+      statusEl.textContent = `Refreshed ${ago} ago · auto-refresh in ${m > 0 ? m + ':' + String(s).padStart(2,'0') : s + 's'}`;
+      statusEl.style.display = '';
+    }, 1000);
+  }
+
   async function fetchPositions() {
     const addr = document.getElementById('pos-addr').value.trim();
     const chainId = document.getElementById('pos-chain').value;
@@ -4355,21 +4552,31 @@ footer.site ul a:hover { color: var(--blue); }
       errEl.style.display = 'block';
       return;
     }
+    // Persist address + chain to localStorage
+    try { localStorage.setItem('yt_pos_addr', addr); localStorage.setItem('yt_pos_chain', chainId); } catch(e) {}
     btn.textContent = 'Loading…';
     btn.disabled = true;
     const walletStatus = document.getElementById('wallet-status');
-    // Reset wallet sections to hidden while new fetch loads
+    // Reset wallet sections and banners while new fetch loads
     document.getElementById('pendle-pos-wrap').style.display = 'none';
     document.getElementById('aave-pos-wrap').style.display = 'none';
     document.getElementById('pt-bal-wrap').style.display = 'none';
     document.getElementById('maturity-summary-wrap').style.display = 'none';
+    document.getElementById('net-worth-banner').style.display = 'none';
+    document.getElementById('hf-danger-banner').style.display = 'none';
+    // Reset wallet items to "scanning…"
+    ['nwb-aave','nwb-pendle','nwb-pt'].forEach(id => {
+      const el = document.getElementById(id);
+      el.textContent = 'scanning…';
+      el.classList.add('loading');
+    });
     walletStatus.style.display = 'block';
     walletStatus.textContent = '⏳ Scanning wallet for Pendle / Aave / PT positions…';
 
     // Fire both fetches concurrently but render Morpho immediately —
     // wallet-positions (PT balance scan) can take 10-20 s and must not block Morpho.
     const morphoFetch = fetch(`/api/morpho-positions?address=${addr}&chainId=${chainId}`);
-    const walletFetch = fetch(`/api/wallet-positions?address=${addr}`);
+    const walletFetch = fetch(`/api/wallet-positions?address=${addr}&chainId=${chainId}`);
 
     let morphoPositions = [];
     try {
@@ -4392,22 +4599,47 @@ footer.site ul a:hover { color: var(--blue); }
         const pendleData = w.pendle || [];
         const ptBalData  = w.pt_balances || [];
         renderPendlePositions(pendleData);
-        renderAavePosition(w.aave || null);
+        renderAavePosition(w.aave || null, w.aave_markets || []);
         renderPtBalances(ptBalData);
         renderMaturitySummary(pendleData, ptBalData, morphoPositions);
+        // Update net worth banner with all protocol data
+        const morphoEq = morphoPositions.reduce((s, p) => s + p.collUsd - p.borrowUsd, 0);
+        renderNetWorthBanner(morphoEq, w.aave || null, pendleData, ptBalData);
         walletStatus.style.display = 'none';
       })
       .catch(e => {
         walletStatus.textContent = '⚠ Wallet scan failed: ' + (e.message || 'network error') + '. Pendle API may be temporarily down.';
         walletStatus.style.color = 'var(--red)';
       });
+
+    // Mark fetch time and schedule auto-refresh
+    _posLastFetch = Date.now();
+    startPosCountdown();
+    clearTimeout(_posRefreshTimer);
+    _posRefreshTimer = setTimeout(fetchPositions, POS_REFRESH_SECS * 1000);
   }
 
   document.addEventListener('DOMContentLoaded', function() {
     const btn = document.getElementById('pos-fetch-btn');
-    if (btn) btn.addEventListener('click', fetchPositions);
+    if (btn) btn.addEventListener('click', () => {
+      // Manual click resets auto-refresh timer
+      clearTimeout(_posRefreshTimer);
+      clearInterval(_posCountdownTimer);
+      fetchPositions();
+    });
     const addr = document.getElementById('pos-addr');
     if (addr) addr.addEventListener('keydown', function(e) { if (e.key === 'Enter') fetchPositions(); });
+
+    // Restore saved address + chain from localStorage
+    try {
+      const savedAddr  = localStorage.getItem('yt_pos_addr');
+      const savedChain = localStorage.getItem('yt_pos_chain');
+      if (savedAddr && /^0x[0-9a-fA-F]{40}$/.test(savedAddr)) {
+        document.getElementById('pos-addr').value = savedAddr;
+        if (savedChain) document.getElementById('pos-chain').value = savedChain;
+        fetchPositions();
+      }
+    } catch(e) {}
   });
 
   document.addEventListener('DOMContentLoaded', function() {

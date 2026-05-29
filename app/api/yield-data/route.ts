@@ -6,7 +6,7 @@ const PENDLE_CHAIN    = 1
 const PENDLE_MIN_LIQ  = 500_000
 const PENDLE_MIN_DAYS = 5
 const MORPHO_GQL      = 'https://blue-api.morpho.org/graphql'
-const MORPHO_MIN_LIQ  = 10_000
+const MORPHO_MIN_LIQ  = 5_000
 const MORPHO_LENDING_MIN_LIQ = 500_000
 const CAPITAL         = 10_000
 const HF              = 2.0
@@ -157,7 +157,7 @@ async function fetchPendleHistory(markets: any[]): Promise<Record<string, any>> 
 
 async function morphoQuery(skip: number) {
   const query = `{
-    markets(where:{whitelisted:true},first:200,skip:${skip}) {
+    markets(first:200,skip:${skip}) {
       items {
         marketId lltv
         state { borrowApy supplyApy utilization
@@ -179,7 +179,8 @@ async function morphoQuery(skip: number) {
 async function fetchMorphoAll() {
   const all: any[] = []
   let skip = 0
-  while (true) {
+  const MAX_PAGES = 15
+  for (let page = 0; page < MAX_PAGES; page++) {
     const items = await morphoQuery(skip)
     all.push(...items)
     if (items.length < 200) break
