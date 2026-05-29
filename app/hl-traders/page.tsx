@@ -141,7 +141,7 @@ const ROLE_META: Record<HLRole, { label: string; color: string; bg: string }> = 
   missing:    { label: 'Unknown',     color: 'var(--ink-soft)', bg: 'var(--rule-soft)' },
 }
 
-type Tab = 'overview' | 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'transactions' | 'subaccounts' | 'evm' | 'hypeflow'
+type Tab = 'overview' | 'positions' | 'spot' | 'orders' | 'trades' | 'funding' | 'staking' | 'transactions' | 'subaccounts' | 'evm' | 'hypeflow'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -540,6 +540,101 @@ function FundingTab({ data }: { data: HLWalletData }) {
               {parseFloat(p.delta.usdc) >= 0 ? '+' : ''}{fmtUsd(p.delta.usdc)}
             </span>,
           ])}
+        />
+      </div>
+    </div>
+  )
+}
+
+// ── Staking Tab ───────────────────────────────────────────────────────────────
+
+function StakingTab({ data }: { data: HLWalletData }) {
+  const summary = data.delegatorSummary
+  const delegations = data.delegations
+  const rewards = data.delegatorRewards
+  const history = data.delegatorHistory
+  const hypePrice = parseFloat(data.assetCtxMap.get('HYPE')?.markPx ?? '0')
+
+  const delegated   = parseFloat(summary?.delegated ?? '0')
+  const undelegated = parseFloat(summary?.undelegated ?? '0')
+  const pending     = parseFloat(summary?.totalPendingWithdrawal ?? '0')
+  const totalRewards = rewards.reduce((s, r) => s + parseFloat(r.totalAmount), 0)
+  const usd = (h: number) => hypePrice > 0 ? fmtUsd(h * hypePrice) : '—'
+
+  if (!summary && delegations.length === 0 && rewards.length === 0 && history.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--ink-mute)', fontSize: 14 }}>
+        No HYPE staking activity for this wallet
+      </div>
+    )
+  }
+
+  const histLabel = (h: typeof history[number]): { action: string; amount: string; detail: string; color: string } => {
+    const d = h.delta
+    if (d.delegate) return {
+      action: d.delegate.isUndelegate ? 'Undelegate' : 'Delegate',
+      amount: `${fmtNum(d.delegate.amount, 4)} HYPE`,
+      detail: shortAddr(d.delegate.validator),
+      color: d.delegate.isUndelegate ? 'var(--red)' : 'var(--green)',
+    }
+    if (d.withdrawal) return { action: 'Withdrawal', amount: `${fmtNum(d.withdrawal.amount, 4)} HYPE`, detail: d.withdrawal.phase, color: 'var(--ink-soft)' }
+    if (d.cDeposit)  return { action: 'Deposit to staking', amount: `${fmtNum(d.cDeposit.amount, 4)} HYPE`, detail: '', color: 'var(--blue)' }
+    return { action: '—', amount: '—', detail: '', color: 'var(--ink)' }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+        <MetricCard label="Delegated" value={`${fmtNum(delegated, 2)} HYPE`} sub={usd(delegated)} />
+        <MetricCard label="Rewards Earned" value={`${fmtNum(totalRewards, 4)} HYPE`} valueColor="var(--green)" sub={`${usd(totalRewards)} · ${rewards.length} payouts`} />
+        <MetricCard label="Pending Withdrawal" value={`${fmtNum(pending, 2)} HYPE`} sub={`${summary?.nPendingWithdrawals ?? 0} pending · ${fmtNum(undelegated, 2)} undelegated`} />
+        <MetricCard label="Validators" value={String(delegations.length)} sub="delegated to" />
+      </div>
+
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Delegations ({delegations.length})</div>
+        <Table
+          headers={['Validator', 'Amount', 'USD Value', 'Locked Until']}
+          alignRight={[1, 2, 3]}
+          empty="No active delegations"
+          rows={[...delegations].sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount)).map(d => [
+            <span key="v" style={{ fontFamily: 'var(--mono)' }}>{shortAddr(d.validator)}</span>,
+            `${fmtNum(d.amount, 4)} HYPE`,
+            usd(parseFloat(d.amount)),
+            d.lockedUntilTimestamp ? fmtTime(d.lockedUntilTimestamp) : '—',
+          ])}
+        />
+      </div>
+
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Reward History ({rewards.length}) · {fmtNum(totalRewards, 4)} HYPE total</div>
+        <Table
+          headers={['Time', 'Source', 'Amount']}
+          alignRight={[2]}
+          empty="No staking rewards yet"
+          rows={[...rewards].sort((a, b) => b.time - a.time).slice(0, 200).map(r => [
+            fmtTime(r.time),
+            <span key="s" style={{ textTransform: 'capitalize', color: 'var(--ink-soft)' }}>{r.source}</span>,
+            <span key="a" style={{ color: 'var(--green)', fontWeight: 600 }}>+{fmtNum(r.totalAmount, 6)} HYPE</span>,
+          ])}
+        />
+      </div>
+
+      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Staking History ({history.length})</div>
+        <Table
+          headers={['Time', 'Action', 'Amount', 'Detail']}
+          alignRight={[2]}
+          empty="No staking transactions"
+          rows={[...history].sort((a, b) => b.time - a.time).map(h => {
+            const l = histLabel(h)
+            return [
+              fmtTime(h.time),
+              <span key="act" style={{ fontWeight: 600, color: l.color }}>{l.action}</span>,
+              l.amount,
+              <span key="d" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{l.detail}</span>,
+            ]
+          })}
         />
       </div>
     </div>
@@ -1045,7 +1140,9 @@ function OverviewPanel({
     const ctx = data.spotAssetCtxMap.get(b.coin)
     return s + (ctx ? amount * parseFloat(ctx.markPx) : 0)
   }, 0)
-  const hyperCoreValue = perpEquity + spotValue
+  const vaultEquityUsd   = (data.vaultEquities ?? []).reduce((s, v) => s + parseFloat(v.equity || '0'), 0)
+  const stakedHypeValue  = parseFloat(data.delegatorSummary?.delegated ?? '0') * hypePrice
+  const hyperCoreValue   = perpEquity + spotValue + vaultEquityUsd + stakedHypeValue
 
   let hyperEvmValue = 0
   let evmApprox = false
@@ -1153,7 +1250,7 @@ function OverviewPanel({
             {(showEvmTotal ? evmApprox : false) ? '~' : ''}{fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}
           </div>
           <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
-            L1 {fmtUsd(hyperCoreValue)}{showEvmTotal && hyperEvmValue > 0 ? ` · EVM ${fmtUsd(hyperEvmValue)}` : ''}
+            L1 {fmtUsd(hyperCoreValue)}{stakedHypeValue > 0 ? ` · Staked ${fmtUsd(stakedHypeValue)}` : ''}{vaultEquityUsd > 0 ? ` · Vaults ${fmtUsd(vaultEquityUsd)}` : ''}{showEvmTotal && hyperEvmValue > 0 ? ` · EVM ${fmtUsd(hyperEvmValue)}` : ''}
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 130, paddingRight: 24, borderRight: '1px solid var(--rule)', marginRight: 24, marginBottom: 4 }}>
@@ -1360,6 +1457,27 @@ function OverviewPanel({
           </div>
           <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
         </div>
+        {parseFloat(data.delegatorSummary?.delegated ?? '0') > 0 && (
+          <div
+            onClick={() => setTab('staking')}
+            style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Staked HYPE</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{fmtNum(data.delegatorSummary?.delegated, 2)}</div>
+            </div>
+            <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
+          </div>
+        )}
+        {data.referral && parseFloat(data.referral.unclaimedRewards) > 0 && (
+          <div style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Unclaimed Referral</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: 'var(--green)' }}>{fmtUsd(data.referral.unclaimedRewards)}</div>
+              <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>Vol {fmtUsd(data.referral.cumVlm)}</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── HyperCore ──────────────────────────────────────────────── */}
@@ -1720,6 +1838,9 @@ function HLTraderDashboard() {
   const historicalOrders = data?.historicalOrders ?? []
   const twapOrders = data?.twapOrders ?? []
   const twapHistory = data?.twapHistory ?? []
+  const frontendOrders = data?.frontendOrders ?? []
+  const twapSliceFills = data?.twapSliceFills ?? []
+  const delegations = data?.delegations ?? []
 
   const perpEquity = data ? combinedPerpEquity(data) : 0
   const spotEquity = spotBalances.reduce((s, b) => {
@@ -1741,6 +1862,7 @@ function HLTraderDashboard() {
     { id: 'orders',       label: 'Orders',       count: orders.length + twapOrders.length },
     { id: 'trades',       label: 'Trades',       count: fills.length },
     { id: 'funding',      label: 'Funding',      count: fundingPayments.length },
+    { id: 'staking',      label: '◈ Staking',    count: delegations.length },
     { id: 'transactions', label: 'Transactions', count: ledger.length },
     { id: 'subaccounts',  label: 'Sub-Accounts', count: subs.length },
     { id: 'evm',          label: '⬡ HyperEVM' },
@@ -2370,7 +2492,8 @@ function HLTraderDashboard() {
           {/* Related accounts → entity */}
           {(() => {
             const related = relatedAccounts(data, address)
-            if (related.length < 2) return null
+            const agents = data.extraAgents ?? []
+            if (related.length < 2 && agents.length === 0) return null
             const lower = address.toLowerCase()
             const equityOf = (addr: string): string | null => {
               if (addr === lower) return data.perps.marginSummary.accountValue ?? null
@@ -2403,16 +2526,34 @@ function HLTraderDashboard() {
                     </div>
                   )
                 })}
-                <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-                  {existingEntity ? (
-                    <>
-                      <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>✓ Grouped as <b style={{ color: 'var(--ink)' }}>{existingEntity.name}</b></span>
-                      <button onClick={() => openEntityView(existingEntity.id)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 12px' }}>View entity →</button>
-                    </>
-                  ) : (
-                    <button onClick={groupRelatedAsEntity} style={{ background: 'var(--blue)', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: '5px 14px' }}>+ Group as entity</button>
-                  )}
-                </div>
+                {agents.length > 0 && (
+                  <>
+                    <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--rule-soft)', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-mute)', background: 'var(--rule-soft)' }}>API / Agent Wallets ({agents.length})</div>
+                    {agents.map(a => {
+                      const expired = a.validUntil < Date.now()
+                      return (
+                        <div key={a.address} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--rule-soft)', flexWrap: 'wrap' }}>
+                          <RoleBadge role="agent" />
+                          <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--ink)', minWidth: 110 }}>{a.name || 'Agent'}</span>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{shortAddr(a.address)}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: 10, color: expired ? 'var(--red)' : 'var(--ink-mute)' }}>{expired ? 'expired' : `valid → ${fmtTime(a.validUntil)}`}</span>
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
+                {related.length >= 2 && (
+                  <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                    {existingEntity ? (
+                      <>
+                        <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>✓ Grouped as <b style={{ color: 'var(--ink)' }}>{existingEntity.name}</b></span>
+                        <button onClick={() => openEntityView(existingEntity.id)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 12px' }}>View entity →</button>
+                      </>
+                    ) : (
+                      <button onClick={groupRelatedAsEntity} style={{ background: 'var(--blue)', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: '5px 14px' }}>+ Group as entity</button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })()}
@@ -2582,26 +2723,71 @@ function HLTraderDashboard() {
                 </div>
               )}
 
-              {/* Open limit/stop orders */}
+              {/* Open limit/stop orders — uses frontendOpenOrders for TP/SL + trigger detail */}
               <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Open Orders ({orders.length})</div>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>Open Orders ({frontendOrders.length || orders.length})</div>
                 <Table
-                  headers={['Symbol', 'Side', 'Size', 'Filled', 'Limit Price', 'Time']}
-                  alignRight={[2, 3, 4]}
+                  headers={['Symbol', 'Side', 'Type', 'Size', 'Filled', 'Limit / Trigger', 'Flags', 'Time']}
+                  alignRight={[3, 4, 5]}
                   empty="No open orders"
-                  rows={[...orders].sort((a, b) => b.timestamp - a.timestamp).map(o => {
+                  rows={[...frontendOrders].sort((a, b) => b.timestamp - a.timestamp).map(o => {
+                    const { dex, sym } = splitCoin(resolveCoins(o.coin, data.spotTokenMap))
                     const filled = parseFloat(o.origSz) - parseFloat(o.sz)
+                    const flags = [
+                      o.reduceOnly ? 'Reduce' : null,
+                      o.isPositionTpsl ? 'Pos TP/SL' : null,
+                      o.tif && o.tif !== 'Gtc' ? o.tif : null,
+                    ].filter(Boolean) as string[]
                     return [
-                      <span key="coin" style={{ fontWeight: 600 }}>{resolveCoins(o.coin, data.spotTokenMap)}</span>,
+                      <span key="coin" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>{sym}<DexTag dex={dex} /></span>,
                       <span key="side" style={{ color: o.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{o.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                      <span key="type" style={{ fontSize: 11, color: o.isTrigger ? 'var(--amber)' : 'var(--ink-soft)' }}>{o.orderType}</span>,
                       fmtNum(o.sz),
                       filled > 0 ? fmtNum(filled) : '—',
-                      fmtUsd(o.limitPx),
+                      o.isTrigger && parseFloat(o.triggerPx) > 0
+                        ? <span key="px" style={{ color: 'var(--amber)' }}>{o.triggerCondition !== 'N/A' ? `${o.triggerCondition} ` : ''}{fmtUsd(o.triggerPx)}</span>
+                        : fmtUsd(o.limitPx),
+                      flags.length > 0
+                        ? <span key="fl" style={{ display: 'flex', gap: 4, justifyContent: 'flex-start', flexWrap: 'wrap' }}>{flags.map(f => <span key={f} style={{ fontSize: 10, fontWeight: 600, color: 'var(--ink-soft)', background: 'var(--rule-soft)', border: '1px solid var(--rule)', borderRadius: 3, padding: '1px 5px' }}>{f}</span>)}</span>
+                        : '—',
                       fmtTime(o.timestamp),
                     ]
                   })}
                 />
               </div>
+
+              {/* TWAP slice executions */}
+              {twapSliceFills.length > 0 && (
+                <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', fontWeight: 700, fontSize: 13 }}>TWAP Slice Fills ({twapSliceFills.length})</div>
+                  <Table
+                    headers={['Symbol', 'Side', 'Size', 'Price', 'Direction', 'Closed PnL', 'TWAP ID', 'Time']}
+                    alignRight={[2, 3, 5]}
+                    empty="No TWAP slice fills"
+                    rows={[...twapSliceFills].sort((a, b) => b.fill.time - a.fill.time).slice(0, showAllOrders ? undefined : 100).map(({ fill: f, twapId }) => {
+                      const { dex, sym } = splitCoin(resolveCoins(f.coin, data.spotTokenMap))
+                      const cpnl = parseFloat(f.closedPnl || '0')
+                      return [
+                        <span key="coin" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>{sym}<DexTag dex={dex} /></span>,
+                        <span key="side" style={{ color: f.side === 'B' ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{f.side === 'B' ? 'Buy' : 'Sell'}</span>,
+                        fmtNum(f.sz),
+                        fmtUsd(f.px),
+                        <span key="dir" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>{f.dir}</span>,
+                        <span key="pnl" style={{ color: cpnl !== 0 ? pnlColor(cpnl) : 'var(--ink-mute)', fontWeight: cpnl !== 0 ? 600 : 400 }}>{cpnl !== 0 ? (cpnl >= 0 ? '+' : '') + fmtUsd(cpnl) : '—'}</span>,
+                        <span key="tid" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{twapId ?? '—'}</span>,
+                        fmtTime(f.time),
+                      ]
+                    })}
+                  />
+                  {twapSliceFills.length > 100 && (
+                    <div style={{ padding: '10px 16px', borderTop: '1px solid var(--rule-soft)', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setShowAllOrders(v => !v)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 12px' }}>
+                        {showAllOrders ? 'Show less' : `Show all ${twapSliceFills.length}`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Historical TWAP orders */}
               {twapHistory.length > 0 && (
@@ -2744,6 +2930,9 @@ function HLTraderDashboard() {
 
           {/* Funding */}
           {tab === 'funding' && <FundingTab data={data} />}
+
+          {/* Staking */}
+          {tab === 'staking' && <StakingTab data={data} />}
 
           {/* Transactions */}
           {tab === 'transactions' && (

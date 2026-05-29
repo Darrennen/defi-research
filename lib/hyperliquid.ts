@@ -230,9 +230,9 @@ export interface HLUserFees {
 
 export interface HLDelegatorSummary {
   delegated: string
-  undelegating: string
-  totalPendingRewards: string
-  nValidators: number
+  undelegated: string
+  totalPendingWithdrawal: string
+  nPendingWithdrawals: number
 }
 
 // ── Fetchers ──────────────────────────────────────────────────────────────────
@@ -315,6 +315,62 @@ export const getUserFees = (address: string) =>
 export const getDelegatorSummary = (address: string) =>
   post<HLDelegatorSummary>({ type: 'delegatorSummary', user: address })
 
+// ── Staking detail ──────────────────────────────────────────────────────────
+export interface HLDelegation { validator: string; amount: string; lockedUntilTimestamp: number }
+export interface HLDelegatorReward { time: number; source: string; totalAmount: string }
+export interface HLDelegatorHistoryEntry {
+  time: number
+  hash: string
+  delta: {
+    delegate?: { validator: string; amount: string; isUndelegate: boolean }
+    withdrawal?: { amount: string; phase: string }
+    cDeposit?: { amount: string }
+  }
+}
+export const getDelegations = (a: string) => post<HLDelegation[]>({ type: 'delegations', user: a })
+export const getDelegatorHistory = (a: string) => post<HLDelegatorHistoryEntry[]>({ type: 'delegatorHistory', user: a })
+export const getDelegatorRewards = (a: string) => post<HLDelegatorReward[]>({ type: 'delegatorRewards', user: a })
+
+// ── Richer orders + TWAP execution ────────────────────────────────────────────
+export interface HLFrontendOrder {
+  coin: string; side: 'B' | 'A'; limitPx: string; sz: string; oid: number; timestamp: number
+  triggerCondition: string; isTrigger: boolean; triggerPx: string
+  isPositionTpsl: boolean; reduceOnly: boolean; orderType: string; origSz: string
+  tif: string | null; cloid: string | null
+}
+export interface HLTwapSliceFill { fill: HLFill; twapId: number | null }
+export const getFrontendOpenOrders = (a: string) => post<HLFrontendOrder[]>({ type: 'frontendOpenOrders', user: a })
+export const getUserTwapSliceFills = (a: string) => post<HLTwapSliceFill[]>({ type: 'userTwapSliceFills', user: a })
+
+// ── Agents + referral ─────────────────────────────────────────────────────────
+export interface HLExtraAgent { name: string; address: string; validUntil: number }
+export interface HLReferral {
+  referredBy: { referrer: string; code: string } | null
+  cumVlm: string
+  unclaimedRewards: string
+  claimedRewards: string
+  builderRewards: string
+  referrerState?: { stage: string; data?: { code?: string; nReferrals?: number } }
+}
+export const getExtraAgents = (a: string) => post<HLExtraAgent[]>({ type: 'extraAgents', user: a })
+export const getReferral = (a: string) => post<HLReferral>({ type: 'referral', user: a })
+
+// ── Vault deposits + native borrow/lend ───────────────────────────────────────
+export interface HLVaultEquity { vaultAddress: string; equity: string; lockedUntilTimestamp?: number }
+export interface HLBorrowLendTokenState {
+  token: number
+  supplied?: string
+  borrowed?: string
+  [k: string]: unknown
+}
+export interface HLBorrowLendUserState {
+  tokenToState: [number, HLBorrowLendTokenState][]
+  health: string
+  healthFactor: number | null
+}
+export const getUserVaultEquities = (a: string) => post<HLVaultEquity[]>({ type: 'userVaultEquities', user: a })
+export const getBorrowLendUserState = (a: string) => post<HLBorrowLendUserState>({ type: 'borrowLendUserState', user: a })
+
 // ── All-in-one fetch ──────────────────────────────────────────────────────────
 
 // A builder (HIP-3) perp dex the wallet has an account on. Its positions use
@@ -345,9 +401,34 @@ export interface HLWalletData {
   twapOrders: HLTwapOrder[]
   twapHistory: HLTwapHistoryEntry[]
   fees: HLUserFees | null
+  // Extended detail
+  delegations: HLDelegation[]
+  delegatorSummary: HLDelegatorSummary | null
+  delegatorHistory: HLDelegatorHistoryEntry[]
+  delegatorRewards: HLDelegatorReward[]
+  frontendOrders: HLFrontendOrder[]
+  twapSliceFills: HLTwapSliceFill[]
+  extraAgents: HLExtraAgent[]
+  referral: HLReferral | null
+  vaultEquities: HLVaultEquity[]
+  borrowLend: HLBorrowLendUserState | null
 }
 
 export async function fetchWallet(address: string): Promise<HLWalletData> {
+  // Extended-detail endpoints fetched concurrently with everything else (best-effort).
+  const detailP = Promise.all([
+    safe(getDelegations(address), [] as HLDelegation[]),
+    safe(getDelegatorSummary(address), null as HLDelegatorSummary | null),
+    safe(getDelegatorHistory(address), [] as HLDelegatorHistoryEntry[]),
+    safe(getDelegatorRewards(address), [] as HLDelegatorReward[]),
+    safe(getFrontendOpenOrders(address), [] as HLFrontendOrder[]),
+    safe(getUserTwapSliceFills(address), [] as HLTwapSliceFill[]),
+    safe(getExtraAgents(address), [] as HLExtraAgent[]),
+    safe(getReferral(address), null as HLReferral | null),
+    safe(getUserVaultEquities(address), [] as HLVaultEquity[]),
+    safe(getBorrowLendUserState(address), null as HLBorrowLendUserState | null),
+  ])
+
   const [
     role, subAccounts, perps, spot, orders, fills, ledger, spotMeta, portfolio,
     metaAndCtxs, spotMetaAndCtxs, predictedFundings, userFunding, historicalOrders,
@@ -422,10 +503,17 @@ export async function fetchWallet(address: string): Promise<HLWalletData> {
     builderDexes = active.map(({ d, state }) => ({ name: d.name, fullName: d.fullName, perps: state }))
   } catch { /* builder dexs are best-effort */ }
 
+  const [
+    delegations, delegatorSummary, delegatorHistory, delegatorRewards, frontendOrders,
+    twapSliceFills, extraAgents, referral, vaultEquities, borrowLend,
+  ] = await detailP
+
   return {
     role, subAccounts, perps, builderDexes, spot, orders, fills, ledger, spotTokenMap, portfolio,
     assetCtxMap, spotAssetCtxMap, predictedFundings, userFunding, historicalOrders,
     twapOrders, twapHistory, fees,
+    delegations, delegatorSummary, delegatorHistory, delegatorRewards, frontendOrders,
+    twapSliceFills, extraAgents, referral, vaultEquities, borrowLend,
   }
 }
 
