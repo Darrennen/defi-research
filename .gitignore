@@ -5,3 +5,8 @@ node_modules/
 .env*.local
 tsconfig.tsbuildinfo
 .vercel
+
+# Polymarket bot
+polymarket_bot/.env
+polymarket_bot/trades.log
+polymarket_bot/state.json

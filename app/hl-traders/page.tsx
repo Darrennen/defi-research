@@ -1007,7 +1007,7 @@ function OverviewPanel({
   const marginUsedPct = perpEquity > 0 ? marginUsed / perpEquity * 100 : 0
   const freeMargin    = perpEquity - marginUsed
   const longNtl       = positions.filter(p => parseFloat(p.szi) > 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
-  const shortNtl      = positions.filter(p => parseFloat(p.szi) < 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
+  const shortNtl      = positions.filter(p => parseFloat(p.szi) < 0).reduce((s, p) => s + Math.abs(parseFloat(p.positionValue)), 0)
   const totalNtl      = longNtl + shortNtl
   const acctLeverage  = perpEquity > 0 ? totalNtl / perpEquity : 0
 
@@ -1139,7 +1139,7 @@ function OverviewPanel({
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
               <span style={{ color: 'var(--ink-mute)' }}>Short</span>
-              <span style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontWeight: 600 }}>{fmtUsd(shortNtl)}</span>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontWeight: 600 }}>{fmtUsd(Math.abs(shortNtl))}</span>
             </div>
           </div>
         </div>
@@ -2336,7 +2336,7 @@ function HLTraderDashboard() {
                         <span key="side" style={{ color: isLong ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{isLong ? 'Long' : 'Short'}</span>,
                         fmtNum(Math.abs(size)),
                         fmtUsd(p.entryPx),
-                        fmtUsd(p.positionValue),
+                        fmtUsd(Math.abs(parseFloat(p.positionValue))),
                         <div key="pnl" style={{ textAlign: 'right' }}>
                           <div style={{ color: pnlColor(p.unrealizedPnl) }}>{fmtUsd(p.unrealizedPnl)}</div>
                           <div style={{ fontSize: 11, color: pnlColor(p.returnOnEquity), marginTop: 2 }}>{fmtPct(p.returnOnEquity)}</div>
