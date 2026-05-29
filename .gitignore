@@ -10,3 +10,5 @@ tsconfig.tsbuildinfo
 polymarket_bot/.env
 polymarket_bot/trades.log
 polymarket_bot/state.json
+polymarket_bot/hermes_trades.log
+polymarket_bot/hermes_state.json

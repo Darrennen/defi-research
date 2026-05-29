@@ -362,6 +362,9 @@ export default function PolymarketPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
+            <a href="/polymarket/hermes" className="btn ghost" style={{ fontSize: 12, padding: '10px 18px' }}>
+              Hermes Engine <span className="arr">→</span>
+            </a>
             <button
               onClick={load}
               disabled={loading}
