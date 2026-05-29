@@ -1440,6 +1440,41 @@ footer.site ul a:hover { color: var(--blue); }
   }
   .pos-summary .b .v.blue { color: var(--blue); }
 
+  /* Compact at-a-glance position list (overview row) */
+  .pos-overview {
+    border: 1px solid var(--rule); background: var(--card); margin-bottom: 18px;
+  }
+  html[data-theme="dark"] .pos-overview { background: var(--paper-2); }
+  .pos-overview .po-row {
+    display: grid; grid-template-columns: 1.5fr 0.9fr 1fr 1fr; gap: 14px;
+    align-items: center; padding: 11px 16px; border-top: 1px solid var(--rule-soft);
+  }
+  .pos-overview .po-row:first-child { border-top: 0; }
+  .pos-overview .po-pair {
+    font-family: var(--serif); font-weight: 500; font-size: 15px; letter-spacing: -0.01em;
+  }
+  .pos-overview .po-pair .sl { color: var(--ink-soft); }
+  .pos-overview .po-hf {
+    font-family: var(--mono); font-size: 15px; color: var(--blue);
+    font-variant-numeric: tabular-nums;
+  }
+  .pos-overview .po-hf.warn { color: var(--amber, #f59e0b); }
+  .pos-overview .po-hf.bad  { color: var(--red); }
+  .pos-overview .po-hf .lbl {
+    font-family: var(--sans); font-size: 8px; color: var(--ink-mute);
+    letter-spacing: 0.12em; text-transform: uppercase; display: block;
+  }
+  .pos-overview .po-cell { display: flex; flex-direction: column; gap: 2px; text-align: right; }
+  .pos-overview .po-cell .pl {
+    font-family: var(--sans); font-size: 9px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-mute);
+  }
+  .pos-overview .po-cell .pv {
+    font-family: var(--mono); font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .pos-overview .po-cell .pv.blue { color: var(--blue); }
+  .pos-overview .po-cell .pv.neg  { color: var(--red); }
+
   .pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .pos-card {
     background: var(--card); border: 1px solid var(--rule);
@@ -2293,6 +2328,8 @@ footer.site ul a:hover { color: var(--blue); }
     .pos-summary .b { border-right: 0; border-bottom: 1px solid var(--rule); }
     .pos-card .borrow-cost { flex-wrap: wrap; gap: 6px; }
     .pos-input-row { grid-template-columns: 1fr 1fr; }
+    .pos-overview .po-row { grid-template-columns: 1.3fr 0.8fr 1fr 1fr; gap: 8px; padding: 10px 12px; }
+    .pos-overview .po-pair { font-size: 13px; }
 
     /* --- STRC --- */
     .strc-kpi { grid-template-columns: repeat(2, 1fr); }
@@ -2308,7 +2345,19 @@ footer.site ul a:hover { color: var(--blue); }
   }
   @media (max-width: 480px) {
     .yt-header .kpi-strip { grid-template-columns: repeat(2, 1fr); }
-    .pos-summary { grid-template-columns: 1fr; }
+    /* Keep the positions overview within one screen: 3-col KPIs + 2x2 row cards */
+    .pos-summary { grid-template-columns: repeat(3, 1fr); }
+    .pos-summary .b { padding: 10px 8px; }
+    .pos-summary .b .v { font-size: 15px; }
+    .pos-overview .po-row {
+      grid-template-columns: 1fr auto;
+      grid-template-areas: "pair hf" "eq nd";
+      gap: 6px 10px; padding: 11px 13px;
+    }
+    .pos-overview .po-pair { grid-area: pair; }
+    .pos-overview .po-hf { grid-area: hf; text-align: right; }
+    .pos-overview .po-cell:nth-child(3) { grid-area: eq; text-align: left; }
+    .pos-overview .po-cell:nth-child(4) { grid-area: nd; text-align: right; }
     .strc-kpi { grid-template-columns: 1fr; }
     /* keep 4-col calc output — tighten further */
     .calc-out .top-row .b { padding: 8px 5px; }
@@ -2573,6 +2622,9 @@ footer.site ul a:hover { color: var(--blue); }
     <div class="b"><div class="l">Net daily (est.)</div><div class="v blue" id="ps-daily">—</div></div>
     <div class="b"><div class="l">Positions</div><div class="v" id="ps-count">—</div></div>
   </div>
+
+  <!-- Compact at-a-glance list — fits the overview on one screen; full cards below -->
+  <div id="pos-overview" class="pos-overview" style="display:none"></div>
 
   <div id="pos-grid" class="pos-grid"></div>
   <div id="pos-empty" style="display:none;font-family:var(--mono);font-size:13px;color:var(--ink-mute);padding:32px 0;text-align:center;">No Morpho positions found for this address.</div>
@@ -4028,6 +4080,7 @@ footer.site ul a:hover { color: var(--blue); }
     if (!positions.length) {
       grid.innerHTML = '';
       summary.style.display = 'none';
+      document.getElementById('pos-overview').style.display = 'none';
       empty.style.display = 'block';
       document.getElementById('net-worth-banner').style.display = 'none';
       document.getElementById('hf-danger-banner').style.display = 'none';
@@ -4053,6 +4106,23 @@ footer.site ul a:hover { color: var(--blue); }
     document.getElementById('ps-daily').textContent = (netDaily >= 0 ? '+' : '') + U(netDaily);
     document.getElementById('ps-count').textContent = positions.length;
     summary.style.display = '';
+
+    // Compact at-a-glance list — keeps the overview to one screen; full cards render below
+    const overview = document.getElementById('pos-overview');
+    overview.innerHTML = positions.map(p => {
+      const eq = p.collUsd - p.borrowUsd;
+      const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
+      const netApyPct = (p.supplyApy) * lev - (p.borrowApy) * (lev - 1);
+      const netDailyEst = eq * netApyPct / 100 / 365;
+      return `
+      <div class="po-row">
+        <div class="po-pair">${p.collateralSymbol}<span class="sl"> / ${p.loanSymbol}</span></div>
+        <div class="po-hf ${hfClass(p.hf)}">${p.hf > 0 ? p.hf.toFixed(2) + '×' : '—'}<span class="lbl">Health</span></div>
+        <div class="po-cell"><div class="pl">Equity</div><div class="pv">${U(eq)}</div></div>
+        <div class="po-cell"><div class="pl">Net / day</div><div class="pv ${netDailyEst >= 0 ? 'blue' : 'neg'}">${netDailyEst >= 0 ? '+' : ''}${U(netDailyEst)}</div></div>
+      </div>`;
+    }).join('');
+    overview.style.display = '';
 
     // Net worth banner — partial (Morpho only until wallet fills in)
     const nwBanner = document.getElementById('net-worth-banner');
