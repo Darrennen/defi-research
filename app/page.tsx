@@ -135,6 +135,15 @@ const dashboards = [
     chips: ['RFQ Markets', 'Wallet Lookup', 'Arbitrum'],
     status: 'live' as const,
   },
+  {
+    href: '/polymarket',
+    category: 'Prediction Markets',
+    num: '12',
+    title: 'Polymarket Bot',
+    desc: 'Live Polymarket odds vs ELO model for every 2026 FIFA World Cup match. Surfaces mispriced markets with ¼ Kelly stake sizing. Connects to an auto-trading bot with full safety rails.',
+    chips: ['Polymarket', 'ELO Model', 'Auto-Trade'],
+    status: 'live' as const,
+  },
 ]
 
 const methods = [

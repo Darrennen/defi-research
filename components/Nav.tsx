@@ -15,6 +15,7 @@ const links = [
   { href: '/whale-tracker',  label: 'Whale Tracker' },
   { href: '/hl-traders',    label: 'HL Traders' },
   { href: '/lighter',       label: 'Lighter DEX' },
+  { href: '/polymarket',    label: 'Polymarket Bot' },
 ]
 
 function Mark({ size = 56 }: { size?: number }) {
