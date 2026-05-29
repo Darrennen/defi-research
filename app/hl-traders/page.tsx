@@ -6,7 +6,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import {
-  fetchWallet, getDelegatorSummary, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
+  fetchWallet, getDelegatorSummary, getSubAccounts, fmtUsd, fmtNum, fmtPct, fmtTime, shortAddr, resolveCoins,
   fmtFundingRate, annualizedFunding, fundingDirection,
   type HLWalletData, type HLRole, type HLPortfolioSeries, type HLPredictedFundings, type HLFill,
   type HLTwapOrder, type HLTwapHistoryEntry, type HLDelegatorSummary,
@@ -44,6 +44,30 @@ function loadEntities(): WatchEntity[] {
 }
 function saveEntities(list: WatchEntity[]) {
   localStorage.setItem(ENTITIES_KEY, JSON.stringify(list))
+}
+
+// On-chain account relationships visible from a single wallet: itself, its master
+// (if it's an agent/sub-account), and any sub-accounts it owns. These are the same
+// real-world entity, so we can offer to group them automatically.
+type RelatedAccount = { addr: string; label: string; role: HLRole }
+function relatedAccounts(data: HLWalletData, address: string): RelatedAccount[] {
+  const seen = new Set<string>()
+  const out: RelatedAccount[] = []
+  const push = (addr: string | undefined | null, label: string, role: HLRole) => {
+    if (!addr) return
+    const a = addr.toLowerCase()
+    if (seen.has(a)) return
+    seen.add(a)
+    out.push({ addr: a, label, role })
+  }
+  const selfLabel =
+    data.role.role === 'subAccount' ? 'This Sub-account' :
+    data.role.role === 'agent'      ? 'API Wallet' :
+    data.role.role === 'vault'      ? 'Vault' : 'Main Wallet'
+  push(address, selfLabel, data.role.role)
+  push(data.role.user, 'Master', 'user')
+  data.subAccounts.forEach((s, i) => push(s.subAccountUser, s.name || `Sub #${i + 1}`, 'subAccount'))
+  return out
 }
 
 const ENTITY_COLORS = ['#0d9488','#3b82f6','#9333ea','#f59e0b','#ef4444','#10b981','#f97316','#06b6d4']
@@ -1550,6 +1574,42 @@ function HLTraderDashboard() {
     setAdding(null)
   }
 
+  // Turn the snooped wallet's on-chain relationships into a watchlist entity in one click.
+  // If the wallet has a master, we fetch the master's full sub-account list so sibling
+  // sub-accounts aren't missed when snooping from a sub-account rather than the master.
+  async function groupRelatedAsEntity() {
+    if (!data) return
+    const master = data.role.user
+    const name = prompt('Name this entity:', `${shortAddr(master ?? address)} Group`)
+    if (!name?.trim()) return
+
+    const members = relatedAccounts(data, address)
+    if (master) {
+      try {
+        const masterSubs = await getSubAccounts(master)
+        const seen = new Set(members.map(m => m.addr))
+        masterSubs.forEach((s, i) => {
+          const a = s.subAccountUser?.toLowerCase()
+          if (a && !seen.has(a)) { seen.add(a); members.push({ addr: a, label: s.name || `Sub #${i + 1}`, role: 'subAccount' }) }
+        })
+      } catch { /* fall back to the relationships already visible */ }
+    }
+
+    const newEnt: WatchEntity = { id: crypto.randomUUID(), name: name.trim() }
+    const nextEntities = [...entities, newEnt]
+    saveEntities(nextEntities)
+    setEntities(nextEntities)
+
+    const memberAddrs = new Set(members.map(m => m.addr))
+    const have = new Set(watchlist.map(e => e.addr))
+    const reassigned = watchlist.map(e => memberAddrs.has(e.addr) ? { ...e, entityId: newEnt.id } : e)
+    const added = members.filter(m => !have.has(m.addr)).map(m => ({ addr: m.addr, label: m.label, entityId: newEnt.id }))
+    const next = [...added, ...reassigned]
+    saveWatchlist(next)
+    setWatchlist(next)
+    setExpandedEntities(prev => new Set([...prev, newEnt.id]))
+  }
+
   function removeFromWatchlist(addr: string) {
     const next = watchlist.filter(e => e.addr !== addr)
     saveWatchlist(next)
@@ -2262,6 +2322,56 @@ function HLTraderDashboard() {
               </div>
             )}
           </div>
+
+          {/* Related accounts → entity */}
+          {(() => {
+            const related = relatedAccounts(data, address)
+            if (related.length < 2) return null
+            const lower = address.toLowerCase()
+            const equityOf = (addr: string): string | null => {
+              if (addr === lower) return data.perps.marginSummary.accountValue ?? null
+              const sub = data.subAccounts.find(s => s.subAccountUser?.toLowerCase() === addr)
+              return sub?.clearinghouseState?.marginSummary?.accountValue ?? null
+            }
+            // If every related wallet already shares one entity, surface it instead of re-grouping.
+            const entityIds = related.map(r => watchlist.find(e => e.addr === r.addr)?.entityId)
+            const grouped = entityIds[0] && entityIds.every(id => id === entityIds[0])
+            const existingEntity = grouped ? entities.find(e => e.id === entityIds[0]) : null
+            return (
+              <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>⬡ Related Accounts Detected</span>
+                  <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{related.length}</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>on-chain links · master &amp; sub-accounts</span>
+                </div>
+                {related.map(r => {
+                  const eq = equityOf(r.addr)
+                  const isSelf = r.addr === lower
+                  return (
+                    <div key={r.addr} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--rule-soft)', flexWrap: 'wrap' }}>
+                      <RoleBadge role={r.role} />
+                      <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--ink)', minWidth: 110 }}>{r.label}</span>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-mute)' }}>{shortAddr(r.addr)}</span>
+                      {eq != null && <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)' }}>{fmtUsd(eq)}</span>}
+                      {isSelf
+                        ? <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--ink-mute)', fontStyle: 'italic' }}>viewing</span>
+                        : <button onClick={() => lookup(r.addr)} style={{ marginLeft: 'auto', background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '2px 10px' }}>Snoop →</button>}
+                    </div>
+                  )
+                })}
+                <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                  {existingEntity ? (
+                    <>
+                      <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>✓ Grouped as <b style={{ color: 'var(--ink)' }}>{existingEntity.name}</b></span>
+                      <button onClick={() => openEntityView(existingEntity.id)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 12px' }}>View entity →</button>
+                    </>
+                  ) : (
+                    <button onClick={groupRelatedAsEntity} style={{ background: 'var(--blue)', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: '5px 14px' }}>+ Group as entity</button>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: 24, overflowX: 'auto' }}>
