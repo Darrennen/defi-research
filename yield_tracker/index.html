@@ -1474,6 +1474,45 @@ footer.site ul a:hover { color: var(--blue); }
   }
   .pos-overview .po-cell .pv.blue { color: var(--blue); }
   .pos-overview .po-cell .pv.neg  { color: var(--red); }
+  .pos-overview .po-cell .pv.muted { color: var(--ink-mute); font-size: 12px; }
+
+  /* Loop profitability verdict box */
+  .pos-card .verdict-box {
+    border: 1px solid var(--rule); background: var(--paper);
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  html[data-theme="dark"] .pos-card .verdict-box { background: var(--paper-2); }
+  .pos-card .verdict-box .title {
+    font-family: var(--sans); font-size: 9px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--ink-mute);
+  }
+  .verdict-box .vd-input-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .verdict-box .vd-input-row label {
+    font-family: var(--sans); font-size: 11px; color: var(--ink-mute); white-space: nowrap;
+  }
+  .verdict-box .vd-input-row input {
+    font-family: var(--mono); font-size: 13px; padding: 4px 8px; width: 80px;
+    border: 1px solid var(--rule); background: transparent; color: var(--ink); outline: none;
+  }
+  .verdict-box .vd-input-row input:focus { border-color: var(--blue); }
+  .verdict-box .vd-input-row .u { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+  .verdict-box .vd-hint { font-family: var(--mono); font-size: 11px; color: var(--ink-mute); }
+  .verdict-box .vd-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .verdict-box .vd-badge {
+    font-family: var(--sans); font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 3px;
+  }
+  .verdict-box .vd-badge.earning { background: rgba(34,197,94,0.14); color: var(--green, #16a34a); }
+  .verdict-box .vd-badge.losing  { background: rgba(239,68,68,0.14); color: var(--red); }
+  .verdict-box .vd-badge.flat    { background: var(--rule-soft); color: var(--ink-mute); }
+  .verdict-box .vd-spread { font-family: var(--mono); font-size: 11px; color: var(--ink-soft); }
+  .verdict-box .kvs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .verdict-box .vd-explain, .verdict-box .vd-mat {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-soft); line-height: 1.5;
+    padding-top: 8px; border-top: 1px solid var(--rule-soft);
+  }
+  .verdict-box .pos { color: var(--green, #16a34a); }
+  .verdict-box .neg { color: var(--red); }
 
   .pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .pos-card {
@@ -4068,6 +4107,98 @@ footer.site ul a:hover { color: var(--blue); }
     }).filter(pt => pt.equity > 0);
   }
 
+  // ── Loop profitability ──────────────────────────────────────────────
+  // "Loop APY" = the yield your COLLATERAL earns. For Pendle PT collateral
+  // that's the PT fixed (implied) APY. For other collateral it isn't in the
+  // Morpho data, so the user enters it (stored here, survives auto-refresh).
+  const loopApyOverrides = {};
+  function getLoopApy(p) {
+    if (p.pt_implied_apy != null) return p.pt_implied_apy;
+    const o = loopApyOverrides[p.market];
+    return (o != null && !isNaN(o)) ? o : null;
+  }
+  // Live carry: earn loopApy on full collateral, pay borrowApy on the borrow.
+  function loopEconomics(p, loopApy) {
+    const eq = p.collUsd - p.borrowUsd;
+    const earnYr = p.collUsd * (loopApy / 100);
+    const costYr = p.borrowUsd * (p.borrowApy / 100);
+    const netYr = earnYr - costYr;
+    const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
+    return {
+      eq, earnYr, costYr, netYr, lev,
+      netDay: netYr / 365,
+      netApyEq: eq > 0 ? (netYr / eq) * 100 : 0,
+      spread: loopApy - p.borrowApy,
+    };
+  }
+  function loopVerdict(netApyEq) {
+    return netApyEq >= 0.5 ? 'earning' : netApyEq <= -0.5 ? 'losing' : 'flat';
+  }
+
+  // Inner HTML of a card's verdict result (live carry + PT maturity line)
+  function verdictResultHTML(p, loopApy) {
+    if (loopApy == null || isNaN(loopApy)) {
+      return `<div class="vd-hint">Enter the collateral / loop APY above to see whether this loop is net profitable.</div>`;
+    }
+    const e = loopEconomics(p, loopApy);
+    const v = loopVerdict(e.netApyEq);
+    const vlabel = v === 'earning' ? 'EARNING' : v === 'losing' ? 'LOSING MONEY' : 'BREAK-EVEN';
+    const matLine = p.pt_net_at_maturity != null && p.pt_days_left != null ? `
+      <div class="vd-mat">Hold to expiry (${p.pt_days_left}d): <strong class="${p.pt_net_at_maturity - e.eq >= 0 ? 'pos' : 'neg'}">${(p.pt_net_at_maturity - e.eq) >= 0 ? '+' : ''}${U(p.pt_net_at_maturity - e.eq)}</strong> net (equity ${U(e.eq)} → ${U(p.pt_net_at_maturity)})</div>` : '';
+    return `
+      <div class="vd-head">
+        <span class="vd-badge ${v}">${vlabel}</span>
+        <span class="vd-spread">loop ${P(loopApy)} vs borrow ${P(p.borrowApy)} · ${e.spread >= 0 ? '+' : ''}${e.spread.toFixed(2)}% spread</span>
+      </div>
+      <div class="kvs">
+        <div class="kv"><div class="l">Net carry / day</div><div class="v ${e.netDay >= 0 ? 'blue' : 'bad'}">${e.netDay >= 0 ? '+' : ''}${U(e.netDay)}</div></div>
+        <div class="kv"><div class="l">Net carry / yr</div><div class="v ${e.netYr >= 0 ? 'blue' : 'bad'}">${e.netYr >= 0 ? '+' : ''}${U(e.netYr)}</div></div>
+        <div class="kv"><div class="l">Net APY on equity</div><div class="v ${e.netApyEq >= 0 ? 'blue' : 'bad'}">${e.netApyEq >= 0 ? '+' : ''}${P(e.netApyEq)}</div></div>
+        <div class="kv"><div class="l">Leverage</div><div class="v">${e.lev.toFixed(2)}×</div></div>
+      </div>
+      <div class="vd-explain">Earn <strong>${U(e.earnYr)}</strong>/yr on ${U(p.collUsd)} collateral − pay <strong>${U(e.costYr)}</strong>/yr borrow = <strong class="${e.netYr >= 0 ? 'pos' : 'neg'}">${e.netYr >= 0 ? '+' : ''}${U(e.netYr)}/yr</strong>${e.spread < 0 ? ' · borrow rate exceeds loop yield — leverage works against you' : ''}</div>
+      ${matLine}`;
+  }
+
+  // Aggregate net carry/day across positions whose loop APY is known
+  function updateNetDaily(positions) {
+    let nd = 0, unknown = 0;
+    positions.forEach(p => {
+      const la = getLoopApy(p);
+      if (la == null) { unknown++; return; }
+      nd += loopEconomics(p, la).netDay;
+    });
+    const el = document.getElementById('ps-daily');
+    el.textContent = (nd >= 0 ? '+' : '') + U(nd);
+    el.classList.toggle('blue', nd >= 0);
+    el.title = unknown > 0 ? `${unknown} position(s) excluded — enter their collateral APY` : '';
+  }
+
+  // Compact at-a-glance list — keeps the overview to one screen; full cards below
+  function renderOverview(positions) {
+    const overview = document.getElementById('pos-overview');
+    overview.innerHTML = positions.map(p => {
+      const eq = p.collUsd - p.borrowUsd;
+      const loopApy = getLoopApy(p);
+      let netCell;
+      if (loopApy == null) {
+        netCell = `<div class="po-cell"><div class="pl">Carry / day</div><div class="pv muted">— set APY ↓</div></div>`;
+      } else {
+        const e = loopEconomics(p, loopApy);
+        const v = loopVerdict(e.netApyEq);
+        netCell = `<div class="po-cell"><div class="pl">Carry / day · ${v === 'earning' ? 'earning' : v === 'losing' ? 'losing' : 'flat'}</div><div class="pv ${e.netDay >= 0 ? 'blue' : 'neg'}">${e.netDay >= 0 ? '+' : ''}${U(e.netDay)}</div></div>`;
+      }
+      return `
+      <div class="po-row">
+        <div class="po-pair">${p.collateralSymbol}<span class="sl"> / ${p.loanSymbol}</span></div>
+        <div class="po-hf ${hfClass(p.hf)}">${p.hf > 0 ? p.hf.toFixed(2) + '×' : '—'}<span class="lbl">Health</span></div>
+        <div class="po-cell"><div class="pl">Equity</div><div class="pv">${U(eq)}</div></div>
+        ${netCell}
+      </div>`;
+    }).join('');
+    overview.style.display = '';
+  }
+
   function renderPositions(positions) {
     const grid = document.getElementById('pos-grid');
     const summary = document.getElementById('pos-summary');
@@ -4093,36 +4224,15 @@ footer.site ul a:hover { color: var(--blue); }
     const totalBorrow = positions.reduce((s, p) => s + p.borrowUsd, 0);
     const equity = totalColl - totalBorrow;
     const lowestHf = Math.min(...positions.map(p => p.hf).filter(h => h > 0));
-    const netDaily = positions.reduce((s, p) => {
-      const eq = p.collUsd - p.borrowUsd;
-      const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
-      const netApy = (p.supplyApy / 100) * lev - (p.borrowApy / 100) * (lev - 1);
-      return s + eq * netApy / 365;
-    }, 0);
     document.getElementById('ps-coll').textContent = U(totalColl);
     document.getElementById('ps-borrow').textContent = U(totalBorrow);
     document.getElementById('ps-equity').textContent = U(equity);
     document.getElementById('ps-hf').textContent = lowestHf > 0 && lowestHf < 999 ? lowestHf.toFixed(2) + '×' : '—';
-    document.getElementById('ps-daily').textContent = (netDaily >= 0 ? '+' : '') + U(netDaily);
     document.getElementById('ps-count').textContent = positions.length;
     summary.style.display = '';
 
-    // Compact at-a-glance list — keeps the overview to one screen; full cards render below
-    const overview = document.getElementById('pos-overview');
-    overview.innerHTML = positions.map(p => {
-      const eq = p.collUsd - p.borrowUsd;
-      const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
-      const netApyPct = (p.supplyApy) * lev - (p.borrowApy) * (lev - 1);
-      const netDailyEst = eq * netApyPct / 100 / 365;
-      return `
-      <div class="po-row">
-        <div class="po-pair">${p.collateralSymbol}<span class="sl"> / ${p.loanSymbol}</span></div>
-        <div class="po-hf ${hfClass(p.hf)}">${p.hf > 0 ? p.hf.toFixed(2) + '×' : '—'}<span class="lbl">Health</span></div>
-        <div class="po-cell"><div class="pl">Equity</div><div class="pv">${U(eq)}</div></div>
-        <div class="po-cell"><div class="pl">Net / day</div><div class="pv ${netDailyEst >= 0 ? 'blue' : 'neg'}">${netDailyEst >= 0 ? '+' : ''}${U(netDailyEst)}</div></div>
-      </div>`;
-    }).join('');
-    overview.style.display = '';
+    updateNetDaily(positions);
+    renderOverview(positions);
 
     // Net worth banner — partial (Morpho only until wallet fills in)
     const nwBanner = document.getElementById('net-worth-banner');
@@ -4265,9 +4375,8 @@ footer.site ul a:hover { color: var(--blue); }
     // (initSparklines called after innerHTML set below)
     grid.innerHTML = positions.map((p, i) => {
       const eq = p.collUsd - p.borrowUsd;
-      const lev = p.collUsd > 0 ? p.collUsd / Math.max(eq, 1) : 1;
-      const netApyPct = (p.supplyApy) * lev - (p.borrowApy) * (lev - 1);
-      const netDailyEst = eq * netApyPct / 100 / 365;
+      const isPT = p.pt_implied_apy != null;
+      const loopApy = getLoopApy(p);
       const hfPct = hfBarPct(p.hf);
       const hfCls = hfClass(p.hf);
       const pnlCls = p.pnlUsd == null ? '' : p.pnlUsd >= 0 ? 'pos' : 'neg';
@@ -4297,16 +4406,16 @@ footer.site ul a:hover { color: var(--blue); }
     <span>Monthly <strong>${U(p.monthlyCost)}</strong></span>
     <span>Annual <strong>${U(p.annualCost)}</strong></span>
   </div>
-  ${p.supplyApy > 0 ? `
-  <div class="returns-box">
-    <div class="title">Estimated forward returns</div>
-    <div class="kvs">
-      <div class="kv"><div class="l">Supply APY</div><div class="v blue">+${P(p.supplyApy)}</div></div>
-      <div class="kv"><div class="l">Leverage</div><div class="v">${lev.toFixed(2)}×</div></div>
-      <div class="kv"><div class="l">Est. net APY</div><div class="v ${netApyPct >= 0 ? 'blue' : 'bad'}">${netApyPct >= 0 ? '+' : ''}${P(netApyPct)}</div></div>
-      <div class="kv"><div class="l">Est. net/day</div><div class="v ${netDailyEst >= 0 ? 'blue' : 'bad'}">${netDailyEst >= 0 ? '+' : ''}${U(netDailyEst)}</div></div>
-    </div>
-  </div>` : ''}
+  <div class="verdict-box" data-mkt="${p.market}">
+    <div class="title">Profitability — live carry${isPT ? ' (PT fixed yield)' : ''}</div>
+    ${isPT ? '' : `<div class="vd-input-row">
+      <label>Collateral / loop APY</label>
+      <input type="number" class="loop-apy-in" data-idx="${i}" step="0.01" min="0" value="${loopApyOverrides[p.market] != null ? loopApyOverrides[p.market] : ''}" placeholder="e.g. 9.5">
+      <span class="u">%</span>
+      <span class="vd-hint">borrow ${P(p.borrowApy)}</span>
+    </div>`}
+    <div class="vd-result" id="vd-result-${i}">${verdictResultHTML(p, loopApy)}</div>
+  </div>
   ${p.pt_implied_apy != null ? `
   <div class="returns-box" style="border-color:var(--blue);background:rgba(59,130,246,0.04);">
     <div class="title" style="color:var(--blue);">PT Collateral — Pendle Fixed Yield</div>
@@ -4353,6 +4462,20 @@ footer.site ul a:hover { color: var(--blue); }
     }).join('');
     initSparklines();
     initHfCalcs(positions);
+
+    // Manual loop-APY inputs (non-PT collateral) → live-update verdict + overview
+    grid.querySelectorAll('.loop-apy-in').forEach(input => {
+      input.addEventListener('input', () => {
+        const i = parseInt(input.dataset.idx);
+        const p = positions[i];
+        const val = parseFloat(input.value);
+        if (input.value === '' || isNaN(val)) delete loopApyOverrides[p.market];
+        else loopApyOverrides[p.market] = val;
+        document.getElementById('vd-result-' + i).innerHTML = verdictResultHTML(p, getLoopApy(p));
+        renderOverview(positions);
+        updateNetDaily(positions);
+      });
+    });
   }
 
   function initHfCalcs(positions) {
