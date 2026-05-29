@@ -759,6 +759,115 @@ function HypeFlowTab({ data }: { data: HLWalletData }) {
   )
 }
 
+// ── Health Ring ───────────────────────────────────────────────────────────────
+
+function HealthRing({ pct, label, sub, color }: { pct: number; label: string; sub: string; color: string }) {
+  const r = 44, cx = 52, cy = 52
+  const circ = 2 * Math.PI * r
+  const offset = circ - (Math.min(Math.max(pct, 0), 100) / 100) * circ
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <div style={{ position: 'relative', width: 104, height: 104 }}>
+        <svg viewBox="0 0 104 104" style={{ width: 104, height: 104, display: 'block' }}>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--rule)" strokeWidth={9} />
+          <circle
+            cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={9}
+            strokeDasharray={`${circ}`} strokeDashoffset={`${offset}`}
+            transform="rotate(-90 52 52)" strokeLinecap="round"
+          />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 20, lineHeight: 1, color: 'var(--ink)' }}>{pct.toFixed(0)}%</div>
+          <div style={{ fontSize: 9, color: 'var(--ink-mute)', letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 2 }}>used</div>
+        </div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>{label}</div>
+        <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 1 }}>{sub}</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Concentration Bars ────────────────────────────────────────────────────────
+
+function ConcentrationBars({ positions }: { positions: Array<{ coin: string; positionValue: string; szi: string }> }) {
+  if (positions.length === 0) return (
+    <div style={{ color: 'var(--ink-mute)', fontSize: 12, padding: '8px 0' }}>No open positions</div>
+  )
+  const total = positions.reduce((s, p) => s + Math.abs(parseFloat(p.positionValue)), 0) || 1
+  const sorted = [...positions].sort((a, b) => Math.abs(parseFloat(b.positionValue)) - Math.abs(parseFloat(a.positionValue))).slice(0, 9)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 7, width: '100%' }}>
+      {sorted.map(p => {
+        const val = Math.abs(parseFloat(p.positionValue))
+        const pct = val / total * 100
+        const isLong = parseFloat(p.szi) > 0
+        return (
+          <div key={p.coin} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 42, fontFamily: 'var(--mono)', fontSize: 10, fontWeight: 700, color: 'var(--ink)', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.coin}</div>
+            <div style={{ flex: 1, height: 5, background: 'var(--rule-soft)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: isLong ? 'var(--green)' : 'var(--red)', borderRadius: 3 }} />
+            </div>
+            <div style={{ width: 32, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-soft)', textAlign: 'right', flexShrink: 0 }}>{pct.toFixed(0)}%</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Liq Gauge Mini ────────────────────────────────────────────────────────────
+
+function LiqGaugeMini({ markPx, liqPx, isLong }: { markPx: string | undefined; liqPx: string | undefined; isLong: boolean }) {
+  if (!markPx || !liqPx) return null
+  const mark = parseFloat(markPx), liq = parseFloat(liqPx)
+  if (!mark || !liq || liq <= 0) return null
+  const dist = isLong ? (mark - liq) / mark * 100 : (liq - mark) / mark * 100
+  const filled = Math.min(dist / 30, 1) * 100
+  const color = dist < 5 ? '#ef4444' : dist < 10 ? '#f97316' : dist < 20 ? '#eab308' : 'var(--green)'
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90 }}>
+      <div style={{ width: 56, height: 3, background: 'var(--rule-soft)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+        <div style={{ height: '100%', width: `${filled}%`, background: color, borderRadius: 2 }} />
+      </div>
+      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color, fontWeight: 600, whiteSpace: 'nowrap' }}>{dist.toFixed(1)}%</span>
+    </div>
+  )
+}
+
+// ── Activity Feed ─────────────────────────────────────────────────────────────
+
+function ActivityFeed({ fills, spotTokenMap }: { fills: HLFill[]; spotTokenMap: Map<string, string> }) {
+  const recent = [...fills].sort((a, b) => b.time - a.time).slice(0, 20)
+  if (recent.length === 0) return (
+    <div style={{ color: 'var(--ink-mute)', fontSize: 12, padding: '8px 0', textAlign: 'center' }}>No recent fills</div>
+  )
+  return (
+    <div>
+      {recent.map((f, i) => {
+        const name = f.coin.startsWith('@') ? resolveCoins(f.coin, spotTokenMap) : f.coin
+        const usd = parseFloat(f.px) * parseFloat(f.sz)
+        const isBuy = f.side === 'B'
+        const pnl = parseFloat(f.closedPnl || '0')
+        const ts = new Date(f.time)
+        return (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 0', borderBottom: i < recent.length - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: isBuy ? 'var(--green)' : 'var(--red)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--ink)', minWidth: 42 }}>{name}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: isBuy ? 'var(--green)' : 'var(--red)' }}>{isBuy ? 'B' : 'S'}</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)', flex: 1 }}>{fmtUsd(usd)}</span>
+            {pnl !== 0 && <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: pnlColor(pnl), fontWeight: 600 }}>{pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}</span>}
+            <span style={{ fontSize: 10, color: 'var(--ink-mute)', whiteSpace: 'nowrap' }}>
+              {ts.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Overview panel (DeBank-style) ─────────────────────────────────────────────
 
 function ChainBadge({ label, color }: { label: string; color: string }) {
@@ -827,13 +936,15 @@ function ViewAllFooter({ label, onClick }: { label: string; onClick: () => void 
 }
 
 function OverviewPanel({
-  data, evmData, evmLoading, evmError, setTab,
+  data, evmData, evmLoading, evmError, setTab, range, setRange,
 }: {
   data: HLWalletData
   evmData: EvmWalletData | null
   evmLoading: boolean
   evmError: string | null
   setTab: (t: Tab) => void
+  range: ChartRange
+  setRange: (r: ChartRange) => void
 }) {
   const positions = data.perps.assetPositions.map(ap => ap.position)
   const spotBalances = (data.spot.balances ?? []).filter(b => parseFloat(b.total) > 0)
@@ -842,13 +953,13 @@ function OverviewPanel({
   const totalPnl = positions.reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
   const totalFunding = positions.reduce((s, p) => s + parseFloat(p.cumFunding?.sinceOpen || '0'), 0)
   const netFunding90d = fundingPayments.reduce((s, p) => s + parseFloat(p.delta.usdc), 0)
+  const fills = data.fills ?? []
 
-  // ── Net worth calculation ──────────────────────────────
   const hypePrice = parseFloat(data.assetCtxMap.get('HYPE')?.markPx ?? '0')
   const btcPrice  = parseFloat(data.assetCtxMap.get('BTC')?.markPx  ?? '0')
   const ethPrice  = parseFloat(data.assetCtxMap.get('ETH')?.markPx  ?? '0')
 
-  const STABLES   = new Set(['USDC','USDT0','USDT','FEUSD','USH','USDHL','USDE','SUSDE','USR','USDH','USDH'])
+  const STABLES   = new Set(['USDC','USDT0','USDT','FEUSD','USH','USDHL','USDE','SUSDE','USR','USDH','USDHL'])
   const HYPE_LIKE = new Set(['WHYPE','KHYPE','STHYPE','WSTHYPE','LSTHYPE','BEHYPE','HBHYPE','FLOWHYPE','HIHYPE','KMHYPE'])
 
   function tokenUsd(symbol: string, amount: number): number | null {
@@ -862,11 +973,9 @@ function OverviewPanel({
     return null
   }
 
-  // HyperCore: perp equity (includes unrealized PnL) + spot current value
   const perpEquity = parseFloat(data.perps.marginSummary.accountValue ?? '0')
   const spotValue  = spotBalances.reduce((s, b) => {
     const amount = parseFloat(b.total)
-    // tokenUsd handles stables (USDC = $1) and HYPE — spotAssetCtxMap misses USDC (quote currency)
     const v = tokenUsd(b.coin, amount)
     if (v !== null) return s + v
     const ctx = data.spotAssetCtxMap.get(b.coin)
@@ -874,7 +983,6 @@ function OverviewPanel({
   }, 0)
   const hyperCoreValue = perpEquity + spotValue
 
-  // HyperEVM: native HYPE + wallet tokens + protocol positions (supply − borrow)
   let hyperEvmValue = 0
   let evmApprox = false
   if (evmData) {
@@ -895,20 +1003,17 @@ function OverviewPanel({
   const totalNetWorth = hyperCoreValue + hyperEvmValue
   const showEvmTotal  = evmData && !evmLoading
 
-  // ── Derived account stats ──────────────────────────────
-  const marginUsed   = parseFloat(data.perps.marginSummary.totalMarginUsed ?? '0')
+  const marginUsed    = parseFloat(data.perps.marginSummary.totalMarginUsed ?? '0')
   const marginUsedPct = perpEquity > 0 ? marginUsed / perpEquity * 100 : 0
-  const freeMargin   = perpEquity - marginUsed
-  const longNtl      = positions.filter(p => parseFloat(p.szi) > 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
-  const shortNtl     = positions.filter(p => parseFloat(p.szi) < 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
-  const totalNtl     = longNtl + shortNtl
-  const acctLeverage = perpEquity > 0 ? totalNtl / perpEquity : 0
+  const freeMargin    = perpEquity - marginUsed
+  const longNtl       = positions.filter(p => parseFloat(p.szi) > 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
+  const shortNtl      = positions.filter(p => parseFloat(p.szi) < 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
+  const totalNtl      = longNtl + shortNtl
+  const acctLeverage  = perpEquity > 0 ? totalNtl / perpEquity : 0
 
-  // All-time PnL from portfolio series
   const allTimeSeries = data.portfolio?.allTime?.pnlHistory ?? []
   const allTimePnl = allTimeSeries.length > 0 ? parseFloat(allTimeSeries[allTimeSeries.length - 1][1]) : null
 
-  // Portfolio-level liquidation distance (worst position)
   const liqDistances = positions
     .filter(p => p.liquidationPx)
     .map(p => {
@@ -921,7 +1026,6 @@ function OverviewPanel({
     .filter((v): v is number => v !== null)
   const minLiqDist = liqDistances.length > 0 ? Math.min(...liqDistances) : null
 
-  // EVM staked value
   const stakedValue = evmData
     ? evmData.protocolPositions.filter(p => p.type !== 'borrow').reduce((s, p) => {
         const v = tokenUsd(p.asset, p.amount)
@@ -933,21 +1037,17 @@ function OverviewPanel({
       }, 0)
     : null
 
-  // ── Analysis from fills ────────────────────────────────
-  const fills = data.fills ?? []
   const totalVolume = fills.reduce((s, f) => s + parseFloat(f.px) * parseFloat(f.sz), 0)
   const closingFills = fills.filter(f => parseFloat(f.closedPnl ?? '0') !== 0)
   const winCount = closingFills.filter(f => parseFloat(f.closedPnl) > 0).length
   const winRate  = closingFills.length > 0 ? winCount / closingFills.length * 100 : null
 
-  // Longest win streak
   let maxStreak = 0, streak = 0
   for (const f of [...closingFills].reverse()) {
     if (parseFloat(f.closedPnl) > 0) { streak++; maxStreak = Math.max(maxStreak, streak) }
     else streak = 0
   }
 
-  // Trading style from fills frequency
   const tradingStyle = (() => {
     if (fills.length < 3) return 'Unknown'
     const times = fills.map(f => f.time).sort((a, b) => a - b)
@@ -960,7 +1060,6 @@ function OverviewPanel({
     return 'Position Trader'
   })()
 
-  // PnL cohort
   const pnlCohort = (() => {
     const p = allTimePnl ?? 0
     if (p >= 1_000_000) return 'Extremely Profitable'
@@ -970,7 +1069,6 @@ function OverviewPanel({
     return 'Unprofitable'
   })()
 
-  // Size cohort
   const sizeCohort = (() => {
     if (perpEquity >= 10_000_000) return 'Apex'
     if (perpEquity >= 1_000_000)  return 'Institutional'
@@ -979,113 +1077,120 @@ function OverviewPanel({
     return 'Retail'
   })()
 
-  function StatRow({ label, value, color }: { label: string; value: string; color?: string }) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--rule-soft)' }}>
-        <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{label}</span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 700, color: color ?? 'var(--ink)' }}>{value}</span>
-      </div>
-    )
-  }
+  const healthColor = marginUsedPct > 80 ? 'var(--red)' : marginUsedPct > 60 ? '#f97316' : 'var(--blue)'
 
   return (
     <div>
-      {/* ── Net Worth Banner ──────────────────────────────── */}
-      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '22px 24px', marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: 6 }}>
-          Total Net Worth
-        </div>
-        <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 34, color: 'var(--ink)', lineHeight: 1, marginBottom: 16 }}>
-          {showEvmTotal ? (evmApprox ? '~' : '') : ''}{fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}
-        </div>
-        {/* Chain breakdown */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0, marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--rule-soft)' }}>
-          <div style={{ paddingRight: 24, borderRight: '1px solid var(--rule)' }}>
-            <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)', display: 'inline-block' }} />
-              HyperCore L1
-            </div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>{fmtUsd(hyperCoreValue)}</div>
-            <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Perps <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(perpEquity)}</span></span>
-              <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Spot <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(spotValue)}</span></span>
-            </div>
+      {/* ── Headline Row ─────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 0, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '20px 24px', marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 160, paddingRight: 24, borderRight: '1px solid var(--rule)', marginRight: 24, marginBottom: 4 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Net Worth</div>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: 'var(--ink)', lineHeight: 1 }}>
+            {(showEvmTotal ? evmApprox : false) ? '~' : ''}{fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}
           </div>
-          <div style={{ paddingLeft: 24 }}>
-            <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9333ea', display: 'inline-block' }} />
-              HyperEVM Chain 999
-              {evmApprox && <span style={{ color: 'var(--ink-mute)', fontSize: 10 }}>· approx.</span>}
-            </div>
-            {evmLoading ? (
-              <div style={{ fontSize: 13, color: 'var(--ink-mute)', fontFamily: 'var(--mono)', paddingTop: 4 }}>Loading…</div>
-            ) : showEvmTotal ? (
-              <>
-                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 20 }}>{evmApprox ? '~' : ''}{fmtUsd(hyperEvmValue)}</div>
-                <div style={{ marginTop: 6, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  {stakedValue !== null && stakedValue > 0 && <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Staked <span style={{ color: 'var(--ink-soft)' }}>{fmtUsd(stakedValue)}</span></span>}
-                  <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>Tokens <span style={{ color: 'var(--ink-soft)' }}>{evmData!.tokens.length}</span></span>
-                  {evmData!.protocolPositions.length > 0 && <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>DeFi <span style={{ color: 'var(--ink-soft)' }}>{evmData!.protocolPositions.length} pos.</span></span>}
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 13, color: 'var(--ink-mute)', fontFamily: 'var(--mono)', paddingTop: 4 }}>—</div>
-            )}
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
+            L1 {fmtUsd(hyperCoreValue)}{showEvmTotal && hyperEvmValue > 0 ? ` · EVM ${fmtUsd(hyperEvmValue)}` : ''}
           </div>
         </div>
-        {/* Account stats grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '8px 24px' }}>
-          {[
-            { label: 'Account Leverage', value: `${acctLeverage.toFixed(2)}×` },
-            { label: 'Margin Usage', value: `${marginUsedPct.toFixed(2)}%`, color: marginUsedPct > 80 ? 'var(--red)' : marginUsedPct > 60 ? 'var(--amber)' : undefined },
-            { label: 'Free Margin', value: fmtUsd(freeMargin) },
-            { label: 'All Time PnL', value: allTimePnl !== null ? (allTimePnl >= 0 ? '+' : '') + fmtUsd(allTimePnl) : '—', color: allTimePnl !== null ? pnlColor(allTimePnl) : undefined },
-            { label: 'Long Exposure', value: fmtUsd(longNtl) },
-            { label: 'Short Exposure', value: fmtUsd(shortNtl) },
-            { label: 'Closest to Liq.', value: minLiqDist !== null ? `${minLiqDist.toFixed(1)}% away` : '—', color: minLiqDist !== null && minLiqDist < 10 ? 'var(--red)' : undefined },
-            { label: 'Volume (fills)', value: fmtUsd(totalVolume) },
-          ].map(({ label, value, color }) => (
-            <div key={label}>
-              <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>{label}</div>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: color ?? 'var(--ink)' }}>{value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Analysis ──────────────────────────────────────── */}
-      <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 20px', marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)', marginBottom: 10 }}>Analysis</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
-          <div>
-            <StatRow label="Trading Style"      value={tradingStyle} />
-            <StatRow label="PnL Cohort"         value={pnlCohort} color={allTimePnl !== null && allTimePnl > 0 ? 'var(--green)' : 'var(--red)'} />
-            <StatRow label="Size Cohort"        value={sizeCohort} />
+        <div style={{ flex: 1, minWidth: 130, paddingRight: 24, borderRight: '1px solid var(--rule)', marginRight: 24, marginBottom: 4 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Open PnL</div>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: pnlColor(totalPnl), lineHeight: 1 }}>
+            {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
           </div>
-          <div>
-            <StatRow label="Longest Win Streak" value={maxStreak > 0 ? `${maxStreak} trades` : '—'} />
-            <StatRow label="Win Rate"           value={winRate !== null ? `${winRate.toFixed(1)}%` : '—'} color={winRate !== null ? (winRate >= 50 ? 'var(--green)' : 'var(--red)') : undefined} />
-            <StatRow label="Closing Trades"     value={closingFills.length.toLocaleString()} />
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
+            {positions.length} position{positions.length !== 1 ? 's' : ''} open
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 120, paddingRight: 24, borderRight: '1px solid var(--rule)', marginRight: 24, marginBottom: 4 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Leverage</div>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: acctLeverage > 10 ? 'var(--red)' : 'var(--ink)', lineHeight: 1 }}>
+            {acctLeverage.toFixed(1)}×
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
+            Margin: {marginUsedPct.toFixed(1)}%
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 120, marginBottom: 4 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Closest to Liq.</div>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: minLiqDist !== null && minLiqDist < 10 ? 'var(--red)' : 'var(--ink)', lineHeight: 1 }}>
+            {minLiqDist !== null ? `${minLiqDist.toFixed(1)}%` : '—'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
+            {minLiqDist !== null ? 'away from liquidation' : 'No positions at risk'}
           </div>
         </div>
       </div>
 
-      {/* ── HyperCore ──────────────────────────────────── */}
-      <SectionDivider label="HyperCore" sub="HL L1" />
+      {/* ── 3-col: HealthRing | Chart | Concentration ────────────────── */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        {/* HealthRing */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '18px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, flex: '0 0 auto', minWidth: 180 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Margin Health</div>
+          <HealthRing
+            pct={marginUsedPct}
+            label={fmtUsd(perpEquity)}
+            sub={`Free: ${fmtUsd(freeMargin)}`}
+            color={healthColor}
+          />
+          <div style={{ width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+              <span style={{ color: 'var(--ink-mute)' }}>Long</span>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontWeight: 600 }}>{fmtUsd(longNtl)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+              <span style={{ color: 'var(--ink-mute)' }}>Short</span>
+              <span style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontWeight: 600 }}>{fmtUsd(shortNtl)}</span>
+            </div>
+          </div>
+        </div>
 
-      {/* Perpetuals */}
+        {/* Chart + range */}
+        <div style={{ flex: 1, minWidth: 260, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <PortfolioChart
+            title="Portfolio Value"
+            series={data.portfolio[range === '24h' ? 'day' : range === '7d' ? 'week' : range === '30d' ? 'month' : 'allTime']}
+            color="var(--blue)"
+            range={range}
+          />
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+            {(['24h', '7d', '30d', 'All'] as ChartRange[]).map(r => (
+              <button key={r} onClick={() => setRange(r)} style={{
+                background: range === r ? 'var(--blue-soft)' : 'transparent',
+                border: '1px solid var(--rule)', borderRadius: 4,
+                color: range === r ? 'var(--blue)' : 'var(--ink-soft)',
+                cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, padding: '3px 10px',
+              }}>{r}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* ConcentrationBars */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '18px 20px', flex: '0 0 auto', minWidth: 200, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Position Concentration</div>
+          <ConcentrationBars positions={positions} />
+          {positions.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, fontSize: 10, color: 'var(--ink-mute)', marginTop: 'auto' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 1, background: 'var(--green)', display: 'inline-block' }} /> Long
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: 1, background: 'var(--red)', display: 'inline-block' }} /> Short
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Positions preview with LiqGauge ──────────────────────────── */}
       {positions.length > 0 && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontWeight: 700, fontSize: 14 }}>Perpetuals</span>
               <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{positions.length}</span>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: pnlColor(totalPnl) }}>
-                {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 2 }}>Unrealized PnL</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: pnlColor(totalPnl) }}>
+              {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)} PnL
             </div>
           </div>
           {positions.slice(0, 6).map((p, i) => {
@@ -1093,22 +1198,25 @@ function OverviewPanel({
             const ctx = data.assetCtxMap.get(p.coin)
             const risk = liqRisk(ctx?.markPx, p.liquidationPx ?? undefined, isLong)
             return (
-              <div key={p.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(positions.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <CoinIcon symbol={p.coin} size={24} />
-                <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{p.coin}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)', background: isLong ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '1px 7px' }}>
-                  {isLong ? 'Long' : 'Short'}
-                </span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{fmtUsd(p.positionValue)}</span>
-                {ctx && (
-                  <span style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>
-                    {p.leverage.value}×
+              <div key={p.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(positions.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <CoinIcon symbol={p.coin} size={24} />
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{p.coin}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)', background: isLong ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '1px 7px' }}>
+                    {isLong ? 'Long' : 'Short'} {p.leverage.value}×
                   </span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{fmtUsd(p.positionValue)}</span>
+                  {(risk === 'critical' || risk === 'high') && <LiqBadge risk={risk} />}
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 13, color: pnlColor(p.unrealizedPnl), fontWeight: 600 }}>
+                    {parseFloat(p.unrealizedPnl) >= 0 ? '+' : ''}{fmtUsd(p.unrealizedPnl)}
+                  </span>
+                </div>
+                {p.liquidationPx && ctx && (
+                  <div style={{ marginTop: 5, paddingLeft: 34, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <LiqGaugeMini markPx={ctx.markPx} liqPx={p.liquidationPx} isLong={isLong} />
+                    <span style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>liq {fmtUsd(p.liquidationPx)}</span>
+                  </div>
                 )}
-                {(risk === 'critical' || risk === 'high') && <LiqBadge risk={risk} />}
-                <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 13, color: pnlColor(p.unrealizedPnl), fontWeight: 600 }}>
-                  {parseFloat(p.unrealizedPnl) >= 0 ? '+' : ''}{fmtUsd(p.unrealizedPnl)}
-                </span>
               </div>
             )
           })}
@@ -1121,14 +1229,82 @@ function OverviewPanel({
         </div>
       )}
 
+      {/* ── 2-col: Activity Feed | Analysis ──────────────────────────── */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        {/* Activity Feed */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', flex: 1, minWidth: 260 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 10 }}>Recent Activity</div>
+          <ActivityFeed fills={fills} spotTokenMap={data.spotTokenMap} />
+        </div>
+        {/* Analysis */}
+        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', flex: 1, minWidth: 240 }}>
+          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 10 }}>Analysis</div>
+          {[
+            { label: 'Trading Style', value: tradingStyle },
+            { label: 'PnL Cohort', value: pnlCohort, color: allTimePnl !== null && allTimePnl > 0 ? 'var(--green)' : 'var(--red)' },
+            { label: 'Size Cohort', value: sizeCohort },
+            { label: 'Win Rate', value: winRate !== null ? `${winRate.toFixed(1)}%` : '—', color: winRate !== null ? (winRate >= 50 ? 'var(--green)' : 'var(--red)') : undefined },
+            { label: 'Longest Win Streak', value: maxStreak > 0 ? `${maxStreak} trades` : '—' },
+            { label: 'All Time PnL', value: allTimePnl !== null ? (allTimePnl >= 0 ? '+' : '') + fmtUsd(allTimePnl) : '—', color: allTimePnl !== null ? pnlColor(allTimePnl) : undefined },
+            { label: 'Volume (fills)', value: fmtUsd(totalVolume) },
+            { label: 'Account Leverage', value: `${acctLeverage.toFixed(2)}×` },
+            { label: 'Net Funding (90d)', value: netFunding90d >= 0 ? '+' + fmtUsd(netFunding90d) : fmtUsd(netFunding90d), color: pnlColor(netFunding90d) },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--rule-soft)' }}>
+              <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{label}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: color ?? 'var(--ink)' }}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Quick stats row: Orders · Funding ────────────────────────── */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        {orders.length > 0 && (
+          <div
+            onClick={() => setTab('orders')}
+            style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Open Orders</div>
+              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{orders.length}</div>
+            </div>
+            <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
+          </div>
+        )}
+        <div
+          onClick={() => setTab('funding')}
+          style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Cum. Funding (open)</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: pnlColor(totalFunding) }}>
+              {totalFunding >= 0 ? '+' : ''}{fmtUsd(totalFunding)}
+            </div>
+          </div>
+          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
+        </div>
+        <div
+          onClick={() => setTab('trades')}
+          style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Recent Fills</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{fills.length}</div>
+          </div>
+          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
+        </div>
+      </div>
+
+      {/* ── HyperCore ──────────────────────────────────────────────── */}
+      <SectionDivider label="HyperCore" sub="HL L1" />
+
       {/* Spot */}
       {spotBalances.length > 0 && (
         <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Spot Holdings</span>
-              <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{spotBalances.length}</span>
-            </div>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>Spot Holdings</span>
+            <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{spotBalances.length}</span>
           </div>
           {spotBalances.slice(0, 5).map((b, i) => (
             <div key={b.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(spotBalances.length, 5) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1149,47 +1325,7 @@ function OverviewPanel({
         </div>
       )}
 
-      {/* Quick stats row: Orders · Funding */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        {orders.length > 0 && (
-          <div
-            onClick={() => setTab('orders')}
-            style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-          >
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Open Orders</div>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{orders.length}</div>
-            </div>
-            <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
-          </div>
-        )}
-        <div
-          onClick={() => setTab('funding')}
-          style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Net Funding (90d)</div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: pnlColor(netFunding90d) }}>
-              {netFunding90d >= 0 ? '+' : ''}{fmtUsd(netFunding90d)}
-            </div>
-          </div>
-          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
-        </div>
-        <div
-          onClick={() => setTab('trades')}
-          style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Cum. Funding</div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: pnlColor(totalFunding) }}>
-              {totalFunding >= 0 ? '+' : ''}{fmtUsd(totalFunding)}
-            </div>
-          </div>
-          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
-        </div>
-      </div>
-
-      {/* ── HyperEVM ──────────────────────────────────── */}
+      {/* ── HyperEVM ──────────────────────────────────────────────── */}
       <SectionDivider label="HyperEVM" sub="Chain 999" />
 
       {evmLoading && (
@@ -1208,19 +1344,23 @@ function OverviewPanel({
 
       {evmData && !evmLoading && (
         <>
-          {/* Native HYPE + tx count quick row */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
             <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
-              <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Native HYPE</div>
+              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Native HYPE</div>
               <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtEvmAmount(evmData.nativeFormatted, 4)}</div>
             </div>
             <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
-              <div style={{ fontSize: 11, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>EVM Txns</div>
+              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>EVM Txns</div>
               <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{evmData.txCount.toLocaleString()}</div>
             </div>
+            {showEvmTotal && hyperEvmValue > 0 && (
+              <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
+                <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>EVM Total{evmApprox ? ' (≈)' : ''}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtUsd(hyperEvmValue)}</div>
+              </div>
+            )}
           </div>
 
-          {/* Protocol positions grouped by protocol */}
           {Array.from(groupByProtocol(evmData.protocolPositions).entries()).map(([protocol, pos]) => (
             <div key={protocol} style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1242,7 +1382,6 @@ function OverviewPanel({
             </div>
           ))}
 
-          {/* ERC-20 tokens */}
           {evmData.tokens.length > 0 && (
             <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1509,7 +1648,7 @@ function HLTraderDashboard() {
   // ── Normal page (no data loaded) ─────────────────────────────────────────
 
   return (
-    <div>
+    <div className="hlt-wrap">
       {/* Page header */}
       <div className="page-header" style={{ borderBottom: '3px solid var(--ink)', padding: '40px 0 32px', marginBottom: 40 }}>
         <div className="kicker" style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--blue)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2124,30 +2263,6 @@ function HLTraderDashboard() {
             )}
           </div>
 
-          {/* Metrics */}
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
-            <MetricCard label="Perp Equity" value={fmtUsd(perpEquity)} sub={`Margin used: ${fmtUsd(data.perps.marginSummary.totalMarginUsed)}`} />
-            <MetricCard label="Spot Holdings" value={fmtUsd(spotEquity || null)} sub={`${spotBalances.length} token${spotBalances.length !== 1 ? 's' : ''}`} />
-            <MetricCard label="Unrealized PnL" value={fmtUsd(totalPnl)} valueColor={pnlColor(totalPnl)} sub={`${positions.length} position${positions.length !== 1 ? 's' : ''}`} />
-            <MetricCard label="Funding (open)" value={fmtUsd(totalFunding)} valueColor={pnlColor(totalFunding)} sub={`Net 90d: ${fmtUsd(netFunding90d)}`} />
-          </div>
-
-          {/* Charts */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: 'var(--ink-soft)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>Performance</div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {(['24h', '7d', '30d', 'All'] as ChartRange[]).map(r => (
-                  <button key={r} onClick={() => setRange(r)} style={{ background: range === r ? 'var(--blue-soft)' : 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: range === r ? 'var(--blue)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, padding: '3px 10px' }}>{r}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <PortfolioChart title="Perp + Spot" series={data.portfolio[range === '24h' ? 'day' : range === '7d' ? 'week' : range === '30d' ? 'month' : 'allTime']} color="var(--blue)" range={range} />
-              <PortfolioChart title="Perps Only" series={data.portfolio[range === '24h' ? 'perpDay' : range === '7d' ? 'perpWeek' : range === '30d' ? 'perpMonth' : 'perpAllTime']} color="#9333ea" range={range} />
-            </div>
-          </div>
-
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: 24, overflowX: 'auto' }}>
             {TABS.map(t => (
@@ -2170,6 +2285,8 @@ function HLTraderDashboard() {
               evmLoading={evmLoading}
               evmError={evmError}
               setTab={setTab}
+              range={range}
+              setRange={setRange}
             />
           )}
 
@@ -2227,7 +2344,11 @@ function HLTraderDashboard() {
                         `${p.leverage.value}× ${p.leverage.type}`,
                         <div key="liq" style={{ textAlign: 'right' }}>
                           <div>{p.liquidationPx ? fmtUsd(p.liquidationPx) : '—'}</div>
-                          {liqDistPct !== null && <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>{liqDistPct.toFixed(1)}% away</div>}
+                          {p.liquidationPx && ctx && (
+                            <div style={{ marginTop: 4, display: 'flex', justifyContent: 'flex-end' }}>
+                              <LiqGaugeMini markPx={ctx.markPx} liqPx={p.liquidationPx} isLong={isLong} />
+                            </div>
+                          )}
                         </div>,
                         <LiqBadge key="risk" risk={risk} />,
                         <div key="fund" style={{ textAlign: 'right' }}>
@@ -2675,6 +2796,7 @@ function HLTraderDashboard() {
         @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
         @keyframes ping { 0% { transform: scale(1); opacity: 0.4; } 75%, 100% { transform: scale(2.2); opacity: 0; } }
         input:focus { border-color: var(--blue) !important; }
+        html[data-theme="dark"] .hlt-wrap { --blue: #5b8def; --blue-soft: rgba(91,141,239,0.12); --green: #4ed398; --red: #ff6b6b; }
       `}</style>
     </div>
   )
