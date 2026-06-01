@@ -248,42 +248,74 @@ function Table({ headers, rows, empty, alignRight }: {
   empty: string
   alignRight?: number[]
 }) {
+  const [pageSize, setPageSize] = useState(25)
+  const [page, setPage] = useState(0)
   if (rows.length === 0) {
     return <div style={{ textAlign: 'center', color: 'var(--ink-mute)', padding: '40px 0', fontSize: 14 }}>{empty}</div>
   }
+  const total = rows.length
+  const paginated = total > 10
+  const pages = paginated ? Math.ceil(total / pageSize) : 1
+  const safePage = Math.min(page, pages - 1)
+  const start = paginated ? safePage * pageSize : 0
+  const view = paginated ? rows.slice(start, start + pageSize) : rows
+  const pill = (active: boolean): React.CSSProperties => ({
+    background: active ? 'var(--blue-soft)' : 'transparent', border: '1px solid var(--rule)', borderRadius: 4,
+    color: active ? 'var(--blue)' : 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, padding: '2px 8px',
+  })
+  const navBtn = (disabled: boolean): React.CSSProperties => ({
+    background: 'transparent', border: '1px solid var(--rule)', borderRadius: 4, color: disabled ? 'var(--ink-mute)' : 'var(--ink)',
+    cursor: disabled ? 'default' : 'pointer', fontFamily: 'var(--mono)', fontSize: 12, padding: '2px 9px', opacity: disabled ? 0.4 : 1,
+  })
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr>
-            {headers.map((h, i) => (
-              <th key={h} style={{
-                textAlign: alignRight?.includes(i) ? 'right' : 'left',
-                padding: '8px 12px',
-                fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)',
-                whiteSpace: 'nowrap',
-              }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
-              {row.map((cell, j) => (
-                <td key={j} style={{
-                  padding: '10px 12px', fontFamily: 'var(--mono)', color: 'var(--ink)',
-                  verticalAlign: 'middle', textAlign: alignRight?.includes(j) ? 'right' : 'left',
+    <div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr>
+              {headers.map((h, i) => (
+                <th key={h} style={{
+                  textAlign: alignRight?.includes(i) ? 'right' : 'left',
+                  padding: '8px 12px',
+                  fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                  color: 'var(--ink-soft)', borderBottom: '1px solid var(--rule)',
+                  whiteSpace: 'nowrap',
                 }}>
-                  {cell}
-                </td>
+                  {h}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {view.map((row, i) => (
+              <tr key={start + i} style={{ borderBottom: '1px solid var(--rule-soft)' }}>
+                {row.map((cell, j) => (
+                  <td key={j} style={{
+                    padding: '10px 12px', fontFamily: 'var(--mono)', color: 'var(--ink)',
+                    verticalAlign: 'middle', textAlign: alignRight?.includes(j) ? 'right' : 'left',
+                  }}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {paginated && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 12px', borderTop: '1px solid var(--rule)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[10, 25, 50, 100].map(s => (
+              <button key={s} onClick={() => { setPageSize(s); setPage(0) }} style={pill(s === pageSize)}>{s}</button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>
+            <span>{start + 1}–{Math.min(start + pageSize, total)} of {total}</span>
+            <button disabled={safePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={navBtn(safePage <= 0)}>←</button>
+            <button disabled={safePage >= pages - 1} onClick={() => setPage(p => Math.min(pages - 1, p + 1))} style={navBtn(safePage >= pages - 1)}>→</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -2600,6 +2632,9 @@ function HLTraderDashboard() {
               const r = liqRisk(ctx?.markPx, p.liquidationPx ?? undefined, parseFloat(p.szi) >= 0)
               return r === 'critical' || r === 'high'
             })
+            const posLongNtl = positions.filter(p => parseFloat(p.szi) > 0).reduce((s, p) => s + parseFloat(p.positionValue), 0)
+            const posShortNtl = positions.filter(p => parseFloat(p.szi) < 0).reduce((s, p) => s + Math.abs(parseFloat(p.positionValue)), 0)
+            const posUPnl = positions.reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {atRisk.length > 0 && (
@@ -2610,6 +2645,13 @@ function HLTraderDashboard() {
                   </div>
                 )}
                 <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden' }}>
+                  {positions.length > 0 && (
+                    <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--rule)', display: 'flex', gap: 16, fontFamily: 'var(--mono)', fontSize: 12, flexWrap: 'wrap' }}>
+                      <span style={{ color: 'var(--green)' }}>{fmtUsd(posLongNtl)} long</span>
+                      <span style={{ color: 'var(--red)' }}>{fmtUsd(posShortNtl)} short</span>
+                      <span style={{ color: 'var(--ink-soft)' }}>uPnL <span style={{ color: pnlColor(posUPnl) }}>{posUPnl >= 0 ? '+' : ''}{fmtUsd(posUPnl)}</span></span>
+                    </div>
+                  )}
                   <Table
                     headers={['Symbol', 'Side', 'Size', 'Entry', 'Mark Value', 'Unr. PnL / ROE', 'Leverage', 'Liq. Price', 'Risk', 'Fund Rate / Cum.', 'OI', '24h Vol']}
                     alignRight={[2, 3, 4, 5, 7, 9, 10, 11]}
