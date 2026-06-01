@@ -531,8 +531,8 @@ html[data-theme="dark"] input[type="search"] {
 @media (max-width: 1100px) { .hlt-hero { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 720px)  { .hlt-hero { grid-template-columns: 1fr; } }
 
-/* ── hl-traders · Hyperliquid teal theme (scoped to this page) ────── */
-.hlt-wrap {
+/* ── hl-traders/eco · Hyperliquid teal theme (scoped to /hl-traders/eco) ── */
+.hlt-eco {
   --paper:     #061514;
   --paper-2:   #0a1f1d;
   --card:      #0c211f;
@@ -554,10 +554,10 @@ html[data-theme="dark"] input[type="search"] {
   color: var(--ink);
   min-height: 100vh;
 }
-.hlt-wrap ::selection { background: rgba(152,252,228,0.22); }
+.hlt-eco ::selection { background: rgba(152,252,228,0.22); }
 /* filled mint buttons need dark text, not white */
-.hlt-wrap button.hlt-accent-btn { color: #04211c !important; }
+.hlt-eco button.hlt-accent-btn { color: #04211c !important; }
 /* mint-tinted scrollbars inside scrollable panels */
-.hlt-wrap *::-webkit-scrollbar { width: 8px; height: 8px; }
-.hlt-wrap *::-webkit-scrollbar-thumb { background: rgba(152,252,228,0.16); border-radius: 4px; }
-.hlt-wrap *::-webkit-scrollbar-track { background: transparent; }
+.hlt-eco *::-webkit-scrollbar { width: 8px; height: 8px; }
+.hlt-eco *::-webkit-scrollbar-thumb { background: rgba(152,252,228,0.16); border-radius: 4px; }
+.hlt-eco *::-webkit-scrollbar-track { background: transparent; }
