@@ -497,3 +497,32 @@ html[data-theme="dark"] input[type="search"] {
   .wt-analysis-full { grid-column: 1; }
   .wt-entity-grid { grid-template-columns: 1fr; }
 }
+
+/* ── HL Traders single-screen overview ───────────────────────────── */
+.ov-root {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-areas:
+    "kpi    kpi    kpi    kpi    kpi    kpi    kpi    kpi    kpi    kpi    kpi    kpi"
+    "health health health chart  chart  chart  chart  chart  chart  conc   conc   conc"
+    "pos    pos    pos    pos    pos    act    act    act    anly   anly   anly   anly"
+    "spot   spot   spot   spot   evm    evm    evm    evm    evm    evm    evm    evm";
+}
+.ov-kpi { grid-area: kpi; display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+@media (max-width: 1100px) {
+  .ov-root {
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-areas:
+      "kpi    kpi    kpi    kpi    kpi    kpi"
+      "health health chart  chart  conc   conc"
+      "pos    pos    pos    act    act    act"
+      "anly   anly   anly   anly   anly   anly"
+      "spot   spot   spot   evm    evm    evm";
+  }
+  .ov-kpi { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 720px) {
+  .ov-root { display: flex; flex-direction: column; }
+  .ov-kpi { grid-template-columns: repeat(2, 1fr); }
+}

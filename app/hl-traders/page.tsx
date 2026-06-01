@@ -1029,24 +1029,6 @@ function ActivityFeed({ fills, spotTokenMap }: { fills: HLFill[]; spotTokenMap: 
 
 // ── Overview panel (DeBank-style) ─────────────────────────────────────────────
 
-function ChainBadge({ label, color }: { label: string; color: string }) {
-  return (
-    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color, background: `${color}18`, border: `1px solid ${color}40`, borderRadius: 4, padding: '2px 7px', fontFamily: 'var(--mono)' }}>
-      {label}
-    </span>
-  )
-}
-
-function SectionDivider({ label, sub }: { label: string; sub: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, marginTop: 8 }}>
-      <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-soft)' }}>{label}</span>
-      <ChainBadge label={sub} color="var(--blue)" />
-      <div style={{ flex: 1, height: 1, background: 'var(--rule)' }} />
-    </div>
-  )
-}
-
 // ── Liquidation risk ──────────────────────────────────────────────────────────
 
 type LiqRisk = 'critical' | 'high' | 'medium' | 'safe' | 'none'
@@ -1080,17 +1062,6 @@ function LiqBadge({ risk }: { risk: LiqRisk }) {
     <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: m.color, background: m.bg, borderRadius: 4, padding: '2px 7px', whiteSpace: 'nowrap' }}>
       {m.label}
     </span>
-  )
-}
-
-function ViewAllFooter({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <div
-      onClick={onClick}
-      style={{ padding: '10px 16px', borderTop: '1px solid var(--rule-soft)', cursor: 'pointer', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, color: 'var(--blue)', fontSize: 12, fontWeight: 600 }}
-    >
-      {label} →
-    </div>
   )
 }
 
@@ -1240,142 +1211,126 @@ function OverviewPanel({
 
   const healthColor = marginUsedPct > 80 ? 'var(--red)' : marginUsedPct > 60 ? '#f97316' : 'var(--blue)'
 
+  const panel: React.CSSProperties = { background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }
+  const phead: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 14px 8px', flexShrink: 0 }
+  const ptitle: React.CSSProperties = { fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }
+  const pbody: React.CSSProperties = { overflowY: 'auto', minHeight: 0, flex: 1 }
+  const footerLink = (label: string, t: Tab) => (
+    <div onClick={() => setTab(t)} style={{ flexShrink: 0, borderTop: '1px solid var(--rule-soft)', padding: '7px 14px', textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--blue)', cursor: 'pointer' }}>{label} →</div>
+  )
+
+  const netWorthSub = `L1 ${fmtUsd(hyperCoreValue)}${stakedHypeValue > 0 ? ` · Staked ${fmtUsd(stakedHypeValue)}` : ''}${vaultEquityUsd > 0 ? ` · Vaults ${fmtUsd(vaultEquityUsd)}` : ''}${showEvmTotal && hyperEvmValue > 0 ? ` · EVM ${fmtUsd(hyperEvmValue)}` : ''}`
+  const kpis: Array<{ label: string; value: string; sub: string; color?: string }> = [
+    { label: 'Net Worth', value: `${(showEvmTotal ? evmApprox : false) ? '~' : ''}${fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}`, sub: netWorthSub },
+    { label: 'Open PnL', value: `${totalPnl >= 0 ? '+' : ''}${fmtUsd(totalPnl)}`, color: pnlColor(totalPnl), sub: `${positions.length} position${positions.length !== 1 ? 's' : ''} open` },
+    { label: 'Leverage', value: `${acctLeverage.toFixed(1)}×`, color: acctLeverage > 10 ? 'var(--red)' : 'var(--ink)', sub: `Margin ${marginUsedPct.toFixed(1)}%` },
+    { label: 'Closest to Liq.', value: minLiqDist !== null ? `${minLiqDist.toFixed(1)}%` : '—', color: minLiqDist !== null && minLiqDist < 10 ? 'var(--red)' : 'var(--ink)', sub: minLiqDist !== null ? 'to liquidation' : 'none at risk' },
+    { label: 'All-Time PnL', value: allTimePnl !== null ? `${allTimePnl >= 0 ? '+' : ''}${fmtUsd(allTimePnl)}` : '—', color: allTimePnl !== null ? pnlColor(allTimePnl) : undefined, sub: pnlCohort },
+    { label: 'Win Rate', value: winRate !== null ? `${winRate.toFixed(1)}%` : '—', color: winRate !== null ? (winRate >= 50 ? 'var(--green)' : 'var(--red)') : undefined, sub: tradingStyle },
+  ]
+
   return (
-    <div>
-      {/* ── Headline Row ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 0, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '20px 24px', marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 160, paddingRight: 24, borderRight: '1px solid var(--rule)', marginRight: 24, marginBottom: 4 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Net Worth</div>
-          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: 'var(--ink)', lineHeight: 1 }}>
-            {(showEvmTotal ? evmApprox : false) ? '~' : ''}{fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}
+    <div className="ov-root">
+      {/* ── KPI strip ─────────────────────────────────────────────────── */}
+      <div className="ov-kpi">
+        {kpis.map(k => (
+          <div key={k.label} style={{ ...panel, padding: '10px 14px', gap: 4, justifyContent: 'center' }}>
+            <div style={ptitle}>{k.label}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 20, lineHeight: 1, color: k.color ?? 'var(--ink)' }}>{k.value}</div>
+            <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={k.sub}>{k.sub}</div>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
-            L1 {fmtUsd(hyperCoreValue)}{stakedHypeValue > 0 ? ` · Staked ${fmtUsd(stakedHypeValue)}` : ''}{vaultEquityUsd > 0 ? ` · Vaults ${fmtUsd(vaultEquityUsd)}` : ''}{showEvmTotal && hyperEvmValue > 0 ? ` · EVM ${fmtUsd(hyperEvmValue)}` : ''}
+        ))}
+      </div>
+
+      {/* ── Margin Health ─────────────────────────────────────────────── */}
+      <div style={{ ...panel, gridArea: 'health', padding: '14px 16px', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <div style={ptitle}>Margin Health</div>
+        <HealthRing pct={marginUsedPct} label={fmtUsd(perpEquity)} sub={`Free: ${fmtUsd(freeMargin)}`} color={healthColor} />
+        <div style={{ width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+            <span style={{ color: 'var(--ink-mute)' }}>Long</span>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontWeight: 600 }}>{fmtUsd(longNtl)}</span>
           </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 130, paddingRight: 24, borderRight: '1px solid var(--rule)', marginRight: 24, marginBottom: 4 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Open PnL</div>
-          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: pnlColor(totalPnl), lineHeight: 1 }}>
-            {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
-            {positions.length} position{positions.length !== 1 ? 's' : ''} open
-          </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 120, paddingRight: 24, borderRight: '1px solid var(--rule)', marginRight: 24, marginBottom: 4 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Leverage</div>
-          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: acctLeverage > 10 ? 'var(--red)' : 'var(--ink)', lineHeight: 1 }}>
-            {acctLeverage.toFixed(1)}×
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
-            Margin: {marginUsedPct.toFixed(1)}%
-          </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 120, marginBottom: 4 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Closest to Liq.</div>
-          <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 26, color: minLiqDist !== null && minLiqDist < 10 ? 'var(--red)' : 'var(--ink)', lineHeight: 1 }}>
-            {minLiqDist !== null ? `${minLiqDist.toFixed(1)}%` : '—'}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 6, fontFamily: 'var(--mono)' }}>
-            {minLiqDist !== null ? 'away from liquidation' : 'No positions at risk'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+            <span style={{ color: 'var(--ink-mute)' }}>Short</span>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontWeight: 600 }}>{fmtUsd(Math.abs(shortNtl))}</span>
           </div>
         </div>
       </div>
 
-      {/* ── 3-col: HealthRing | Chart | Concentration ────────────────── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        {/* HealthRing */}
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '18px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, flex: '0 0 auto', minWidth: 180 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Margin Health</div>
-          <HealthRing
-            pct={marginUsedPct}
-            label={fmtUsd(perpEquity)}
-            sub={`Free: ${fmtUsd(freeMargin)}`}
-            color={healthColor}
-          />
-          <div style={{ width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
-              <span style={{ color: 'var(--ink-mute)' }}>Long</span>
-              <span style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontWeight: 600 }}>{fmtUsd(longNtl)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-              <span style={{ color: 'var(--ink-mute)' }}>Short</span>
-              <span style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontWeight: 600 }}>{fmtUsd(Math.abs(shortNtl))}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Chart + range */}
-        <div style={{ flex: 1, minWidth: 260, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* ── Portfolio Chart ───────────────────────────────────────────── */}
+      <div style={{ gridArea: 'chart', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0 }}>
+        <div style={{ flex: 1, minHeight: 0 }}>
           <PortfolioChart
             title="Portfolio Value"
             series={data.portfolio[range === '24h' ? 'day' : range === '7d' ? 'week' : range === '30d' ? 'month' : 'allTime']}
             color="var(--blue)"
             range={range}
           />
-          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-            {(['24h', '7d', '30d', 'All'] as ChartRange[]).map(r => (
-              <button key={r} onClick={() => setRange(r)} style={{
-                background: range === r ? 'var(--blue-soft)' : 'transparent',
-                border: '1px solid var(--rule)', borderRadius: 4,
-                color: range === r ? 'var(--blue)' : 'var(--ink-soft)',
-                cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, padding: '3px 10px',
-              }}>{r}</button>
-            ))}
-          </div>
         </div>
-
-        {/* ConcentrationBars */}
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '18px 20px', flex: '0 0 auto', minWidth: 200, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Position Concentration</div>
-          <ConcentrationBars positions={positions} />
-          {positions.length > 0 && (
-            <div style={{ display: 'flex', gap: 10, fontSize: 10, color: 'var(--ink-mute)', marginTop: 'auto' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 1, background: 'var(--green)', display: 'inline-block' }} /> Long
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 6, height: 6, borderRadius: 1, background: 'var(--red)', display: 'inline-block' }} /> Short
-              </span>
-            </div>
-          )}
+        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+          {(['24h', '7d', '30d', 'All'] as ChartRange[]).map(r => (
+            <button key={r} onClick={() => setRange(r)} style={{
+              background: range === r ? 'var(--blue-soft)' : 'transparent',
+              border: '1px solid var(--rule)', borderRadius: 4,
+              color: range === r ? 'var(--blue)' : 'var(--ink-soft)',
+              cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, padding: '3px 10px',
+            }}>{r}</button>
+          ))}
         </div>
       </div>
 
-      {/* ── Positions preview with LiqGauge ──────────────────────────── */}
-      {positions.length > 0 && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Perpetuals</span>
-              <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{positions.length}</span>
-            </div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 14, color: pnlColor(totalPnl) }}>
-              {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)} PnL
-            </div>
+      {/* ── Position Concentration ────────────────────────────────────── */}
+      <div style={{ ...panel, gridArea: 'conc', padding: '14px 16px', gap: 12 }}>
+        <div style={ptitle}>Position Concentration</div>
+        <div style={{ overflowY: 'auto', minHeight: 0, flex: 1 }}>
+          <ConcentrationBars positions={positions} />
+        </div>
+        {positions.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, fontSize: 10, color: 'var(--ink-mute)', flexShrink: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 1, background: 'var(--green)', display: 'inline-block' }} /> Long
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 1, background: 'var(--red)', display: 'inline-block' }} /> Short
+            </span>
           </div>
-          {positions.slice(0, 6).map((p, i) => {
+        )}
+      </div>
+
+      {/* ── Perpetuals ────────────────────────────────────────────────── */}
+      <div style={{ ...panel, gridArea: 'pos' }}>
+        <div style={phead}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Perpetuals</span>
+            <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{positions.length}</span>
+          </div>
+          <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13, color: pnlColor(totalPnl) }}>{totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}</span>
+        </div>
+        <div style={pbody}>
+          {positions.length === 0 && <div style={{ padding: '24px 14px', textAlign: 'center', color: 'var(--ink-mute)', fontSize: 12 }}>No open positions</div>}
+          {positions.map((p, i) => {
             const isLong = parseFloat(p.szi) >= 0
             const ctx = data.assetCtxMap.get(p.coin)
             const risk = liqRisk(ctx?.markPx, p.liquidationPx ?? undefined, isLong)
             const { dex, sym } = splitCoin(p.coin)
             return (
-              <div key={p.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(positions.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <CoinIcon symbol={sym} size={24} />
-                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{sym}</span>
+              <div key={p.coin} style={{ padding: '8px 14px', borderBottom: i < positions.length - 1 ? '1px solid var(--rule-soft)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CoinIcon symbol={sym} size={22} />
+                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 52, fontSize: 12 }}>{sym}</span>
                   <DexTag dex={dex} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)', background: isLong ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '1px 7px' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: isLong ? 'var(--green)' : 'var(--red)', background: isLong ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 4, padding: '1px 6px' }}>
                     {isLong ? 'Long' : 'Short'} {p.leverage.value}×
                   </span>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{fmtUsd(p.positionValue)}</span>
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)' }}>{fmtUsd(p.positionValue)}</span>
                   {(risk === 'critical' || risk === 'high') && <LiqBadge risk={risk} />}
-                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 13, color: pnlColor(p.unrealizedPnl), fontWeight: 600 }}>
+                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 12, color: pnlColor(p.unrealizedPnl), fontWeight: 600 }}>
                     {parseFloat(p.unrealizedPnl) >= 0 ? '+' : ''}{fmtUsd(p.unrealizedPnl)}
                   </span>
                 </div>
                 {p.liquidationPx && ctx && (
-                  <div style={{ marginTop: 5, paddingLeft: 34, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ marginTop: 4, paddingLeft: 30, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <LiqGaugeMini markPx={ctx.markPx} liqPx={p.liquidationPx} isLong={isLong} />
                     <span style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>liq {fmtUsd(p.liquidationPx)}</span>
                   </div>
@@ -1383,25 +1338,26 @@ function OverviewPanel({
               </div>
             )
           })}
-          {positions.length > 6 && (
-            <div style={{ padding: '8px 16px', color: 'var(--ink-mute)', fontSize: 12, textAlign: 'center', borderTop: '1px solid var(--rule-soft)' }}>
-              +{positions.length - 6} more
-            </div>
-          )}
-          <ViewAllFooter label="View all positions" onClick={() => setTab('positions')} />
         </div>
-      )}
+        {positions.length > 0 && footerLink('View all positions', 'positions')}
+      </div>
 
-      {/* ── 2-col: Activity Feed | Analysis ──────────────────────────── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        {/* Activity Feed */}
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', flex: 1, minWidth: 260 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 10 }}>Recent Activity</div>
+      {/* ── Recent Activity ───────────────────────────────────────────── */}
+      <div style={{ ...panel, gridArea: 'act' }}>
+        <div style={phead}>
+          <span style={ptitle}>Recent Activity</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>{fills.length} fills</span>
+        </div>
+        <div style={{ ...pbody, padding: '0 14px 8px' }}>
           <ActivityFeed fills={fills} spotTokenMap={data.spotTokenMap} />
         </div>
-        {/* Analysis */}
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', flex: 1, minWidth: 240 }}>
-          <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 10 }}>Analysis</div>
+        {footerLink('View all trades', 'trades')}
+      </div>
+
+      {/* ── Analysis ──────────────────────────────────────────────────── */}
+      <div style={{ ...panel, gridArea: 'anly' }}>
+        <div style={phead}><span style={ptitle}>Analysis</span></div>
+        <div style={{ ...pbody, padding: '0 14px 10px' }}>
           {[
             { label: 'Trading Style', value: tradingStyle },
             { label: 'PnL Cohort', value: pnlCohort, color: allTimePnl !== null && allTimePnl > 0 ? 'var(--green)' : 'var(--red)' },
@@ -1412,6 +1368,10 @@ function OverviewPanel({
             { label: 'Volume (fills)', value: fmtUsd(totalVolume) },
             { label: 'Account Leverage', value: `${acctLeverage.toFixed(2)}×` },
             { label: 'Net Funding (90d)', value: netFunding90d >= 0 ? '+' + fmtUsd(netFunding90d) : fmtUsd(netFunding90d), color: pnlColor(netFunding90d) },
+            { label: 'Cum. Funding (open)', value: (totalFunding >= 0 ? '+' : '') + fmtUsd(totalFunding), color: pnlColor(totalFunding) },
+            ...(orders.length > 0 ? [{ label: 'Open Orders', value: String(orders.length) }] : []),
+            ...(parseFloat(data.delegatorSummary?.delegated ?? '0') > 0 ? [{ label: 'Staked HYPE', value: fmtNum(data.delegatorSummary?.delegated, 2) }] : []),
+            ...(data.referral && parseFloat(data.referral.unclaimedRewards) > 0 ? [{ label: 'Unclaimed Referral', value: fmtUsd(data.referral.unclaimedRewards), color: 'var(--green)' }] : []),
           ].map(({ label, value, color }) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--rule-soft)' }}>
               <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>{label}</span>
@@ -1419,185 +1379,104 @@ function OverviewPanel({
             </div>
           ))}
         </div>
+        {footerLink('Funding detail', 'funding')}
       </div>
 
-      {/* ── Quick stats row: Orders · Funding ────────────────────────── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {orders.length > 0 && (
-          <div
-            onClick={() => setTab('orders')}
-            style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-          >
-            <div>
-              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Open Orders</div>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{orders.length}</div>
-            </div>
-            <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
-          </div>
-        )}
-        <div
-          onClick={() => setTab('funding')}
-          style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Cum. Funding (open)</div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: pnlColor(totalFunding) }}>
-              {totalFunding >= 0 ? '+' : ''}{fmtUsd(totalFunding)}
-            </div>
-          </div>
-          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
-        </div>
-        <div
-          onClick={() => setTab('trades')}
-          style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <div>
-            <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Recent Fills</div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{fills.length}</div>
-          </div>
-          <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
-        </div>
-        {parseFloat(data.delegatorSummary?.delegated ?? '0') > 0 && (
-          <div
-            onClick={() => setTab('staking')}
-            style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-          >
-            <div>
-              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Staked HYPE</div>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18 }}>{fmtNum(data.delegatorSummary?.delegated, 2)}</div>
-            </div>
-            <span style={{ color: 'var(--blue)', fontSize: 18 }}>→</span>
-          </div>
-        )}
-        {data.referral && parseFloat(data.referral.unclaimedRewards) > 0 && (
-          <div style={{ flex: 1, minWidth: 140, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Unclaimed Referral</div>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 18, color: 'var(--green)' }}>{fmtUsd(data.referral.unclaimedRewards)}</div>
-              <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 2 }}>Vol {fmtUsd(data.referral.cumVlm)}</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── HyperCore ──────────────────────────────────────────────── */}
-      <SectionDivider label="HyperCore" sub="HL L1" />
-
-      {/* Spot */}
-      {spotBalances.length > 0 && (
-        <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>Spot Holdings</span>
+      {/* ── Spot · HyperCore ──────────────────────────────────────────── */}
+      <div style={{ ...panel, gridArea: 'spot' }}>
+        <div style={phead}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: 13 }}>Spot</span>
             <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{spotBalances.length}</span>
           </div>
-          {spotBalances.slice(0, 5).map((b, i) => (
-            <div key={b.coin} style={{ padding: '10px 16px', borderBottom: i < Math.min(spotBalances.length, 5) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <CoinIcon symbol={b.coin} size={24} />
-              <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 56 }}>{b.coin}</span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink-soft)' }}>{fmtNum(b.total, 4)}</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>HyperCore · L1</span>
+        </div>
+        <div style={pbody}>
+          {spotBalances.length === 0 && <div style={{ padding: '24px 14px', textAlign: 'center', color: 'var(--ink-mute)', fontSize: 12 }}>No spot holdings</div>}
+          {spotBalances.map((b, i) => (
+            <div key={b.coin} style={{ padding: '8px 14px', borderBottom: i < spotBalances.length - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CoinIcon symbol={b.coin} size={22} />
+              <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 52, fontSize: 12 }}>{b.coin}</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--ink-soft)' }}>{fmtNum(b.total, 4)}</span>
               {parseFloat(b.entryNtl) > 0 && (
-                <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600 }}>{fmtUsd(b.entryNtl)}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{fmtUsd(b.entryNtl)}</span>
               )}
             </div>
           ))}
-          {spotBalances.length > 5 && (
-            <div style={{ padding: '8px 16px', color: 'var(--ink-mute)', fontSize: 12, textAlign: 'center', borderTop: '1px solid var(--rule-soft)' }}>
-              +{spotBalances.length - 5} more
+        </div>
+        {spotBalances.length > 0 && footerLink('View spot holdings', 'spot')}
+      </div>
+
+      {/* ── HyperEVM · Chain 999 ──────────────────────────────────────── */}
+      <div style={{ ...panel, gridArea: 'evm' }}>
+        <div style={phead}>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>HyperEVM</span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+            {evmData && !evmLoading
+              ? `${fmtEvmAmount(evmData.nativeFormatted, 2)} HYPE · ${evmData.txCount.toLocaleString()} txns${showEvmTotal && hyperEvmValue > 0 ? ` · ${evmApprox ? '≈' : ''}${fmtUsd(hyperEvmValue)}` : ''}`
+              : 'Chain 999'}
+          </span>
+        </div>
+        <div style={pbody}>
+          {evmLoading && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px' }}>
+              {[300, 240, 180].map((w, i) => (
+                <div key={i} style={{ height: 16, width: w, maxWidth: '100%', borderRadius: 4, background: 'var(--rule)', animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.15}s` }} />
+              ))}
             </div>
           )}
-          <ViewAllFooter label="View spot holdings" onClick={() => setTab('spot')} />
-        </div>
-      )}
-
-      {/* ── HyperEVM ──────────────────────────────────────────────── */}
-      <SectionDivider label="HyperEVM" sub="Chain 999" />
-
-      {evmLoading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-          {[300, 240, 180].map((w, i) => (
-            <div key={i} style={{ height: 16, width: w, borderRadius: 4, background: 'var(--rule)', animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.15}s` }} />
-          ))}
-        </div>
-      )}
-
-      {evmError && (
-        <div style={{ background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, color: 'var(--red)', fontSize: 13, padding: '10px 14px', marginBottom: 12 }}>
-          EVM: {evmError}
-        </div>
-      )}
-
-      {evmData && !evmLoading && (
-        <>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
-              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>Native HYPE</div>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtEvmAmount(evmData.nativeFormatted, 4)}</div>
+          {evmError && (
+            <div style={{ margin: '10px 14px', background: 'rgba(192,57,43,0.08)', border: '1px solid rgba(192,57,43,0.25)', borderRadius: 8, color: 'var(--red)', fontSize: 12, padding: '10px 14px' }}>
+              {evmError}
             </div>
-            <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
-              <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>EVM Txns</div>
-              <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{evmData.txCount.toLocaleString()}</div>
-            </div>
-            {showEvmTotal && hyperEvmValue > 0 && (
-              <div style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, padding: '12px 16px' }}>
-                <div style={{ fontSize: 10, color: 'var(--ink-soft)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, marginBottom: 4 }}>EVM Total{evmApprox ? ' (≈)' : ''}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 16 }}>{fmtUsd(hyperEvmValue)}</div>
-              </div>
-            )}
-          </div>
-
-          {Array.from(groupByProtocol(evmData.protocolPositions).entries()).map(([protocol, pos]) => (
-            <div key={protocol} style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{protocol}</span>
-                <span style={{ background: 'rgba(147,51,234,0.08)', color: '#9333ea', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{pos.length} position{pos.length !== 1 ? 's' : ''}</span>
-              </div>
-              {pos.map((p, i) => (
-                <div key={i} style={{ padding: '10px 16px', borderBottom: i < pos.length - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: p.type === 'borrow' ? 'var(--red)' : p.type === 'supply' ? 'var(--blue)' : 'var(--green)', background: p.type === 'borrow' ? 'rgba(244,63,94,0.08)' : p.type === 'supply' ? 'var(--blue-soft)' : 'rgba(34,197,94,0.08)', borderRadius: 4, padding: '2px 7px', textTransform: 'capitalize', minWidth: 52, textAlign: 'center' }}>
-                    {p.type}
-                  </span>
-                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{p.asset}</span>
-                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 13 }}>
-                    {fmtEvmAmount(p.amount, p.decimals > 6 ? 4 : 2)}
-                  </span>
+          )}
+          {evmData && !evmLoading && (
+            <>
+              {Array.from(groupByProtocol(evmData.protocolPositions).entries()).map(([protocol, pos]) => (
+                <div key={protocol}>
+                  <div style={{ padding: '8px 14px 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12 }}>{protocol}</span>
+                    <span style={{ background: 'rgba(147,51,234,0.08)', color: '#9333ea', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{pos.length}</span>
+                  </div>
+                  {pos.map((p, i) => (
+                    <div key={i} style={{ padding: '6px 14px', borderBottom: '1px solid var(--rule-soft)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: p.type === 'borrow' ? 'var(--red)' : p.type === 'supply' ? 'var(--blue)' : 'var(--green)', background: p.type === 'borrow' ? 'rgba(244,63,94,0.08)' : p.type === 'supply' ? 'var(--blue-soft)' : 'rgba(34,197,94,0.08)', borderRadius: 4, padding: '1px 6px', textTransform: 'capitalize', minWidth: 48, textAlign: 'center' }}>
+                        {p.type}
+                      </span>
+                      <span style={{ fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 12 }}>{p.asset}</span>
+                      <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontWeight: 700, fontSize: 12 }}>
+                        {fmtEvmAmount(p.amount, p.decimals > 6 ? 4 : 2)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               ))}
-              <ViewAllFooter label="View on HyperEVM" onClick={() => setTab('evm')} />
-            </div>
-          ))}
-
-          {evmData.tokens.length > 0 && (
-            <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--rule)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>Token Holdings</span>
-                <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{evmData.tokens.length}</span>
-              </div>
-              {evmData.tokens.slice(0, 6).map((t, i) => (
-                <div key={t.address} style={{ padding: '10px 16px', borderBottom: i < Math.min(evmData.tokens.length, 6) - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <CoinIcon symbol={t.symbol} size={22} />
-                  <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 64 }}>{t.symbol}</span>
-                  <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>{t.protocol}</span>
-                  <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 13 }}>
-                    {fmtEvmAmount(t.formatted, t.decimals > 6 ? 4 : 2)}
-                  </span>
-                </div>
-              ))}
-              {evmData.tokens.length > 6 && (
-                <div style={{ padding: '8px 16px', color: 'var(--ink-mute)', fontSize: 12, textAlign: 'center', borderTop: '1px solid var(--rule-soft)' }}>
-                  +{evmData.tokens.length - 6} more
-                </div>
+              {evmData.tokens.length > 0 && (
+                <>
+                  <div style={{ padding: '8px 14px 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 12 }}>Token Holdings</span>
+                    <span style={{ background: 'var(--blue-soft)', color: 'var(--blue)', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>{evmData.tokens.length}</span>
+                  </div>
+                  {evmData.tokens.map((t, i) => (
+                    <div key={t.address} style={{ padding: '6px 14px', borderBottom: i < evmData.tokens.length - 1 ? '1px solid var(--rule-soft)' : 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <CoinIcon symbol={t.symbol} size={20} />
+                      <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, minWidth: 60, fontSize: 12 }}>{t.symbol}</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{t.protocol}</span>
+                      <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 12 }}>
+                        {fmtEvmAmount(t.formatted, t.decimals > 6 ? 4 : 2)}
+                      </span>
+                    </div>
+                  ))}
+                </>
               )}
-              <ViewAllFooter label="View all tokens" onClick={() => setTab('evm')} />
-            </div>
+              {evmData.protocolPositions.length === 0 && evmData.tokens.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--ink-mute)', padding: '24px 14px', fontSize: 12 }}>No EVM activity detected</div>
+              )}
+            </>
           )}
-
-          {evmData.protocolPositions.length === 0 && evmData.tokens.length === 0 && (
-            <div style={{ textAlign: 'center', color: 'var(--ink-mute)', padding: '32px 0', fontSize: 13 }}>
-              No EVM activity detected
-            </div>
-          )}
-        </>
-      )}
+        </div>
+        {evmData && !evmLoading && footerLink('View on HyperEVM', 'evm')}
+      </div>
     </div>
   )
 }
