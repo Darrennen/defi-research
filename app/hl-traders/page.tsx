@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import HypeMarket from './HypeMarket'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
@@ -1065,6 +1066,64 @@ function LiqBadge({ risk }: { risk: LiqRisk }) {
   )
 }
 
+// ── hl.eco-style hero widgets ──────────────────────────────────────────────────
+
+function Sparkline({ values, color, id, height = 36 }: { values: number[]; color: string; id: string; height?: number }) {
+  if (values.length < 2) return <div style={{ height }} />
+  const min = Math.min(...values), max = Math.max(...values)
+  const range = (max - min) || 1
+  const W = 100
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * W},${(height - 1) - ((v - min) / range) * (height - 2)}`).join(' ')
+  const gid = `spk-${id}`
+  return (
+    <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height, display: 'block' }}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={0.30} /><stop offset="100%" stopColor={color} stopOpacity={0} /></linearGradient></defs>
+      <polygon points={`0,${height} ${pts} ${W},${height}`} fill={`url(#${gid})`} />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+
+function GaugeBar({ pct, color }: { pct: number; color: string }) {
+  const c = Math.max(0, Math.min(100, pct))
+  return (
+    <div style={{ height: 7, borderRadius: 4, background: 'var(--rule)', overflow: 'hidden' }}>
+      <div style={{ width: `${c}%`, height: '100%', background: color, borderRadius: 4 }} />
+    </div>
+  )
+}
+
+function CompositionBar({ parts }: { parts: Array<{ label: string; value: number; color: string }> }) {
+  const total = parts.reduce((s, p) => s + Math.max(0, p.value), 0) || 1
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--rule)' }}>
+        {parts.map(p => <div key={p.label} style={{ width: `${Math.max(0, p.value) / total * 100}%`, background: p.color }} />)}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {parts.map(p => (
+          <div key={p.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink-soft)' }}>
+              <span style={{ width: 7, height: 7, borderRadius: 2, background: p.color, display: 'inline-block' }} />{p.label}
+            </span>
+            <span style={{ fontFamily: 'var(--mono)', color: 'var(--ink)' }}>{Math.round(p.value / total * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function HeroCard({ label, value, valueColor, children }: { label: string; value: React.ReactNode; valueColor?: string; children?: React.ReactNode }) {
+  return (
+    <div style={{ background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 22, lineHeight: 1.05, color: valueColor ?? 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+      {children}
+    </div>
+  )
+}
+
 function OverviewPanel({
   data, evmData, evmLoading, evmError, setTab, range, setRange,
 }: {
@@ -1174,11 +1233,25 @@ function OverviewPanel({
   const winCount = closingFills.filter(f => parseFloat(f.closedPnl) > 0).length
   const winRate  = closingFills.length > 0 ? winCount / closingFills.length * 100 : null
 
-  let maxStreak = 0, streak = 0
-  for (const f of [...closingFills].reverse()) {
-    if (parseFloat(f.closedPnl) > 0) { streak++; maxStreak = Math.max(maxStreak, streak) }
-    else streak = 0
+  let maxStreak = 0, worstLossStreak = 0, runW = 0, runL = 0
+  for (const f of [...closingFills].sort((a, b) => a.time - b.time)) {
+    if (parseFloat(f.closedPnl) > 0) { runW++; runL = 0; maxStreak = Math.max(maxStreak, runW) }
+    else { runL++; runW = 0; worstLossStreak = Math.max(worstLossStreak, runL) }
   }
+  let curStreakN = 0, curStreakWin = true
+  for (const f of [...closingFills].sort((a, b) => b.time - a.time)) {
+    const win = parseFloat(f.closedPnl) > 0
+    if (curStreakN === 0) { curStreakWin = win; curStreakN = 1 }
+    else if (win === curStreakWin) curStreakN++
+    else break
+  }
+  const lossCount = closingFills.length - winCount
+  const longCount = positions.filter(p => parseFloat(p.szi) > 0).length
+  const shortCount = positions.filter(p => parseFloat(p.szi) < 0).length
+  const longPnl = positions.filter(p => parseFloat(p.szi) > 0).reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
+  const shortPnl = positions.filter(p => parseFloat(p.szi) < 0).reduce((s, p) => s + parseFloat(p.unrealizedPnl || '0'), 0)
+  const avSeries = (data.portfolio?.month?.accountValueHistory ?? data.portfolio?.week?.accountValueHistory ?? []).map(p => parseFloat(p[1]))
+  const pnlSeries = allTimeSeries.map(p => parseFloat(p[1]))
 
   const tradingStyle = (() => {
     if (fills.length < 3) return 'Unknown'
@@ -1220,26 +1293,58 @@ function OverviewPanel({
   )
 
   const netWorthSub = `L1 ${fmtUsd(hyperCoreValue)}${stakedHypeValue > 0 ? ` · Staked ${fmtUsd(stakedHypeValue)}` : ''}${vaultEquityUsd > 0 ? ` · Vaults ${fmtUsd(vaultEquityUsd)}` : ''}${showEvmTotal && hyperEvmValue > 0 ? ` · EVM ${fmtUsd(hyperEvmValue)}` : ''}`
-  const kpis: Array<{ label: string; value: string; sub: string; color?: string }> = [
-    { label: 'Net Worth', value: `${(showEvmTotal ? evmApprox : false) ? '~' : ''}${fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}`, sub: netWorthSub },
-    { label: 'Open PnL', value: `${totalPnl >= 0 ? '+' : ''}${fmtUsd(totalPnl)}`, color: pnlColor(totalPnl), sub: `${positions.length} position${positions.length !== 1 ? 's' : ''} open` },
-    { label: 'Leverage', value: `${acctLeverage.toFixed(1)}×`, color: acctLeverage > 10 ? 'var(--red)' : 'var(--ink)', sub: `Margin ${marginUsedPct.toFixed(1)}%` },
-    { label: 'Closest to Liq.', value: minLiqDist !== null ? `${minLiqDist.toFixed(1)}%` : '—', color: minLiqDist !== null && minLiqDist < 10 ? 'var(--red)' : 'var(--ink)', sub: minLiqDist !== null ? 'to liquidation' : 'none at risk' },
-    { label: 'All-Time PnL', value: allTimePnl !== null ? `${allTimePnl >= 0 ? '+' : ''}${fmtUsd(allTimePnl)}` : '—', color: allTimePnl !== null ? pnlColor(allTimePnl) : undefined, sub: pnlCohort },
-    { label: 'Win Rate', value: winRate !== null ? `${winRate.toFixed(1)}%` : '—', color: winRate !== null ? (winRate >= 50 ? 'var(--green)' : 'var(--red)') : undefined, sub: tradingStyle },
-  ]
 
   return (
     <div className="ov-root">
-      {/* ── KPI strip ─────────────────────────────────────────────────── */}
-      <div className="ov-kpi">
-        {kpis.map(k => (
-          <div key={k.label} style={{ ...panel, padding: '10px 14px', gap: 4, justifyContent: 'center' }}>
-            <div style={ptitle}>{k.label}</div>
-            <div style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 20, lineHeight: 1, color: k.color ?? 'var(--ink)' }}>{k.value}</div>
-            <div style={{ fontSize: 10, color: 'var(--ink-soft)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={k.sub}>{k.sub}</div>
+      {/* ── Hero metric grid (hl.eco style) ───────────────────────────── */}
+      <div className="hlt-hero">
+        <HeroCard label="Account Value" value={`${(showEvmTotal ? evmApprox : false) ? '~' : ''}${fmtUsd(showEvmTotal ? totalNetWorth : hyperCoreValue)}`}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={netWorthSub}>{netWorthSub}</div>
+          {avSeries.length > 1 && <Sparkline values={avSeries} color="var(--blue)" id="av" />}
+        </HeroCard>
+
+        <HeroCard label="All-Time PnL" value={allTimePnl !== null ? `${allTimePnl >= 0 ? '+' : ''}${fmtUsd(allTimePnl)}` : '—'} valueColor={allTimePnl !== null ? pnlColor(allTimePnl) : undefined}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{pnlCohort}</div>
+          {pnlSeries.length > 1 && <Sparkline values={pnlSeries} color={allTimePnl !== null && allTimePnl < 0 ? 'var(--red)' : 'var(--green)'} id="pnl" />}
+        </HeroCard>
+
+        <HeroCard label="Win Rate" value={winRate !== null ? `${winRate.toFixed(0)}%` : '—'} valueColor={winRate !== null ? (winRate >= 50 ? 'var(--green)' : 'var(--red)') : undefined}>
+          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontFamily: 'var(--mono)' }}>{winCount}W · {lossCount}L · {closingFills.length} trades</div>
+          <GaugeBar pct={winRate ?? 0} color={winRate !== null && winRate >= 50 ? 'var(--green)' : 'var(--red)'} />
+        </HeroCard>
+
+        <HeroCard label="Current Streak" value={closingFills.length > 0 ? `${curStreakN}${curStreakWin ? 'W' : 'L'}` : '—'} valueColor={closingFills.length > 0 ? (curStreakWin ? 'var(--green)' : 'var(--red)') : undefined}>
+          <div style={{ display: 'flex', gap: 12, fontSize: 11, fontFamily: 'var(--mono)' }}>
+            <span style={{ color: 'var(--green)' }}>Best {maxStreak}W</span>
+            <span style={{ color: 'var(--red)' }}>Worst {worstLossStreak}L</span>
           </div>
-        ))}
+        </HeroCard>
+
+        <HeroCard label="Total Volume" value={fmtUsd(totalVolume)}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{fills.length} fills · {tradingStyle}</div>
+        </HeroCard>
+
+        <HeroCard label="Margin Usage" value={`${marginUsedPct.toFixed(1)}%`} valueColor={healthColor}>
+          <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--mono)' }}>{fmtUsd(freeMargin)} withdrawable</div>
+          <GaugeBar pct={marginUsedPct} color={healthColor} />
+        </HeroCard>
+
+        <HeroCard label="Long vs Short PnL" value={<span><span style={{ color: 'var(--green)' }}>{longCount}L</span> <span style={{ color: 'var(--ink-mute)' }}>/</span> <span style={{ color: 'var(--red)' }}>{shortCount}S</span></span>}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, fontFamily: 'var(--mono)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--ink-soft)' }}>Long · {longCount}</span><span style={{ color: pnlColor(longPnl) }}>{longPnl >= 0 ? '+' : ''}{fmtUsd(longPnl)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--ink-soft)' }}>Short · {shortCount}</span><span style={{ color: pnlColor(shortPnl) }}>{shortPnl >= 0 ? '+' : ''}{fmtUsd(shortPnl)}</span></div>
+          </div>
+        </HeroCard>
+
+        <HeroCard label="Balances" value={fmtUsd(hyperCoreValue + (showEvmTotal ? hyperEvmValue : 0))}>
+          <CompositionBar parts={[
+            { label: 'Spot', value: spotValue, color: 'var(--blue)' },
+            { label: 'Perps', value: perpEquity, color: '#f0b95c' },
+            { label: 'Staked/Lending', value: stakedHypeValue, color: 'var(--green)' },
+            { label: 'Vaults', value: vaultEquityUsd, color: '#9b87f5' },
+            ...(showEvmTotal && hyperEvmValue > 0 ? [{ label: 'EVM', value: hyperEvmValue, color: '#5fd0c4' }] : []),
+          ]} />
+        </HeroCard>
       </div>
 
       {/* ── Margin Health ─────────────────────────────────────────────── */}
@@ -1493,6 +1598,7 @@ function HLTraderDashboard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
+  const [view, setView] = useState<'trader' | 'market'>('trader')
   const [range, setRange] = useState<ChartRange>('7d')
   const [history, setHistory] = useState<string[]>([])
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
@@ -1766,7 +1872,29 @@ function HLTraderDashboard() {
         </p>
       </div>
 
+      {/* View toggle */}
+      <div style={{ display: 'inline-flex', gap: 2, background: 'var(--card)', border: '1px solid var(--rule)', borderRadius: 8, padding: 3, marginBottom: 20 }}>
+        {([['trader', '🐳 Trader Explorer'], ['market', '📊 HYPE Market']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setView(id)}
+            style={{
+              background: view === id ? 'var(--blue-soft)' : 'transparent',
+              border: 'none', borderRadius: 6, cursor: 'pointer',
+              color: view === id ? 'var(--blue)' : 'var(--ink-soft)',
+              fontFamily: 'var(--sans)', fontSize: 13, fontWeight: view === id ? 600 : 500,
+              padding: '7px 16px',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'market' && <HypeMarket />}
+
       {/* Search */}
+      {view === 'trader' && (
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, maxWidth: 680 }}>
         <input
           ref={inputRef}
@@ -1794,9 +1922,10 @@ function HLTraderDashboard() {
           </button>
         )}
       </div>
+      )}
 
       {/* Watchlist */}
-      {(watchlist.length > 0 || entities.length > 0) && (() => {
+      {view === 'trader' && (watchlist.length > 0 || entities.length > 0) && (() => {
         const standalone = watchlist.filter(e => !e.entityId)
         const totalAddrs = watchlist.length
         return (
@@ -2274,7 +2403,7 @@ function HLTraderDashboard() {
       })()}
 
       {/* Results */}
-      {data && !loading && (
+      {view === 'trader' && data && !loading && (
         <>
           {/* Snoop banner */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.25)', borderRadius: 8, padding: '10px 16px', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
@@ -2429,7 +2558,7 @@ function HLTraderDashboard() {
                         <button onClick={() => openEntityView(existingEntity.id)} style={{ background: 'var(--blue-soft)', border: '1px solid var(--rule)', borderRadius: 4, color: 'var(--blue)', cursor: 'pointer', fontSize: 11, fontWeight: 600, padding: '4px 12px' }}>View entity →</button>
                       </>
                     ) : (
-                      <button onClick={groupRelatedAsEntity} style={{ background: 'var(--blue)', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: '5px 14px' }}>+ Group as entity</button>
+                      <button onClick={groupRelatedAsEntity} className="hlt-accent-btn" style={{ background: 'var(--blue)', border: 'none', borderRadius: 4, color: '#04211c', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: '5px 14px' }}>+ Group as entity</button>
                     )}
                   </div>
                 )}
@@ -3007,7 +3136,7 @@ function HLTraderDashboard() {
       )}
 
       {/* Empty state */}
-      {!data && !loading && !error && (
+      {view === 'trader' && !data && !loading && !error && (
         <div style={{ border: '1px dashed var(--rule)', borderRadius: 10, padding: '64px 32px', textAlign: 'center', color: 'var(--ink-mute)' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
           <div style={{ fontSize: 15, marginBottom: 8 }}>Enter any Hyperliquid address to explore their wallet</div>
