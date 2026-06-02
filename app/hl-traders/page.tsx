@@ -1659,8 +1659,8 @@ function HLTraderDashboard() {
 
   const lookup = useCallback(async (addr: string, silent = false) => {
     const a = addr.trim().toLowerCase()
-    if (!a.startsWith('0x') || a.length < 10) {
-      setError('Enter a valid 0x Hyperliquid address.')
+    if (!/^0x[0-9a-f]{40}$/.test(a)) {
+      setError('Enter a valid 42-character 0x address.')
       return
     }
     currentAddr.current = a
@@ -1686,7 +1686,7 @@ function HLTraderDashboard() {
     if (!address) return
     const id = setInterval(() => {
       if (currentAddr.current) lookup(currentAddr.current, true)
-    }, 15000)
+    }, 30000)
     return () => clearInterval(id)
   }, [address, lookup])
 

@@ -1,11 +1,16 @@
 const HL_API = '/api/hl'
 
-async function post<T>(body: object): Promise<T> {
+async function post<T>(body: object, attempt = 0): Promise<T> {
   const r = await fetch(HL_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  // Hyperliquid rate-limits by IP; back off and retry transient 429s.
+  if (r.status === 429 && attempt < 2) {
+    await new Promise(res => setTimeout(res, 400 * (attempt + 1)))
+    return post<T>(body, attempt + 1)
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json()
 }
