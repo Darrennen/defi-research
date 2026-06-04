@@ -63,6 +63,24 @@ export async function GET(req: Request) {
   const json = await res.json()
   const positions = json.data?.userByAddress?.marketPositions ?? []
 
+  // Realizable market price for PT collateral, from Pendle. Used for the headline VALUE
+  // (equity / P&L) so the dashboard reconciles with DeBank and reflects what an exit
+  // would actually fetch — distinct from the lending oracle used for liquidation risk.
+  const ptMarketPrice: Record<string, number> = {}
+  try {
+    const pr = await fetch('https://api-v2.pendle.finance/core/v1/1/assets/all', {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      next: { revalidate: 60 },
+    })
+    const pd = await pr.json()
+    const arr = Array.isArray(pd) ? pd : (pd.assets ?? pd.results ?? [])
+    for (const a of arr) {
+      const addr = (a.address || '').toLowerCase().replace(/^\d+-/, '')
+      const usd = a.price?.usd
+      if (addr && typeof usd === 'number') ptMarketPrice[addr] = usd
+    }
+  } catch { /* fall back to the oracle value below */ }
+
   const parsed = positions
     .filter((p: any) => parseFloat(p.state?.borrowAssetsUsd) > 1 || parseFloat(p.state?.supplyAssetsUsd) > 1 || parseFloat(p.state?.collateralUsd) > 1)
     .map((p: any) => {
@@ -76,25 +94,33 @@ export async function GET(req: Request) {
       const supplyApy = parseFloat(p.market.state?.supplyApy) || 0
       const displayPriceUsd = parseFloat(p.market.collateralAsset?.priceUsd) || 0
 
-      // Morpho's API collateralUsd / priceUsd is a conservative display quote. For
-      // illiquid PT collateral it can sit well below the on-chain lending oracle (and
-      // even below the Pendle market price), inflating displayed losses and understating
-      // the liquidation buffer. The lending oracle is what actually governs the loan, and
-      // the API's healthFactor is computed from it, so recover the true oracle value:
-      //   HF = collateralValue * LLTV / borrowValue  =>  collateralValue = HF * borrowValue / LLTV
-      // Fall back to the display value for collateral-only positions (no borrow / no HF).
+      // Morpho's API collateralUsd / priceUsd is a conservative DISPLAY quote that, for
+      // illiquid PT collateral, sits below both the realizable market price and the
+      // on-chain lending oracle. Split the two prices by purpose:
+      //   • VALUE (equity / P&L)    -> realizable market price (matches DeBank / exit value)
+      //   • RISK  (HF / liquidation) -> on-chain lending oracle (what Morpho liquidates against)
+      // PT token count is price-independent, so derive it from the display pair first.
+      const collAmount = displayPriceUsd > 0 ? displayCollUsd / displayPriceUsd : 0
+
+      // Oracle value: HF = collateralValue * LLTV / borrowValue => value = HF * borrow / LLTV.
+      // Falls back to the display value for collateral-only positions (no borrow / no HF).
       const oracleCollUsd = (borrowUsd > 0 && hf > 0 && lltv > 0)
         ? (hf * borrowUsd) / lltv
         : displayCollUsd
-      const collUsd = oracleCollUsd
+      const oraclePrice = collAmount > 0 ? oracleCollUsd / collAmount : displayPriceUsd
 
-      // PT token count is price-independent (display USD / display price), so derive the
-      // true per-unit oracle price from it.
-      const collAmount = displayPriceUsd > 0 ? displayCollUsd / displayPriceUsd : 0
-      const collPriceUsd = collAmount > 0 ? oracleCollUsd / collAmount : displayPriceUsd
+      // Market (realizable) value: Pendle market price for PT collateral; for liquid
+      // collateral, or if the market price is unavailable, fall back to the oracle value.
+      const collAddr = (p.market.collateralAsset?.address || '').toLowerCase()
+      const marketPrice = ptMarketPrice[collAddr] || 0
+      const marketCollUsd = marketPrice > 0 ? collAmount * marketPrice : oracleCollUsd
+
+      // Headline value uses the realizable market basis; liquidation uses the oracle.
+      const collUsd = marketCollUsd
       const ltv = collUsd > 0 ? borrowUsd / collUsd : 0
       const liqPrice = collAmount > 0 ? borrowUsd / (collAmount * lltv) : 0
-      const dropToLiq = collPriceUsd > 0 && liqPrice > 0 ? ((collPriceUsd - liqPrice) / collPriceUsd) * 100 : 0
+      const dropToLiq = oraclePrice > 0 && liqPrice > 0 ? ((oraclePrice - liqPrice) / oraclePrice) * 100 : 0
+      const priceBasis = marketPrice > 0 ? 'market' : (oracleCollUsd !== displayCollUsd ? 'oracle' : 'display')
 
       // Align collateral and borrow time-series via step-interpolation.
       // The two series have different timestamps; naive timestamp-matching creates
@@ -138,16 +164,18 @@ export async function GET(req: Request) {
         loanSymbol: p.market.loanAsset?.symbol || '—',
         lltv: Math.round(lltv * 10000) / 100,
         collUsd,
-        displayCollUsd,
+        marketCollUsd,
         oracleCollUsd,
-        priceBasis: oracleCollUsd !== displayCollUsd ? 'oracle' : 'display',
+        displayCollUsd,
+        priceBasis,
         borrowUsd,
         supplyUsd,
         ltv: Math.round(ltv * 10000) / 100,
         hf,
         borrowApy: Math.round(borrowApy * 10000) / 100,
         supplyApy: Math.round(supplyApy * 10000) / 100,
-        collateralPrice: collPriceUsd,
+        collateralPrice: marketPrice > 0 ? marketPrice : oraclePrice,
+        oraclePrice: Math.round(oraclePrice * 1e6) / 1e6,
         liquidationPrice: Math.round(liqPrice * 100) / 100,
         dropToLiq: Math.round(dropToLiq * 10) / 10,
         dailyCost: Math.round(borrowUsd * borrowApy / 365 * 100) / 100,
@@ -186,11 +214,14 @@ export async function GET(req: Request) {
         p.pt_underlying_apy = m.underlyingApy != null ? Math.round(m.underlyingApy * 10000) / 100 : null
         p.pt_expiry         = expiry ? (expiry as string).slice(0, 10) : null
         p.pt_days_left      = expiry ? Math.max(0, Math.floor((new Date(expiry).getTime() - Date.now()) / 86_400_000)) : null
-        // Maturity projection: collateral grows to face value at expiry
-        if (p.pt_implied_apy != null && p.pt_days_left != null && p.collUsd > 0) {
+        // Maturity projection: PT redeems toward face value at expiry. Grow from the
+        // oracle (fair/hold) value rather than the market headline, since holding to
+        // maturity realizes the redemption value, not the AMM exit price.
+        const maturityBase = p.oracleCollUsd ?? p.collUsd
+        if (p.pt_implied_apy != null && p.pt_days_left != null && maturityBase > 0) {
           const yrs = p.pt_days_left / 365
-          p.pt_maturity_value = Math.round(p.collUsd * Math.pow(1 + p.pt_implied_apy / 100, yrs) * 100) / 100
-          p.pt_locked_profit  = Math.round((p.pt_maturity_value - p.collUsd) * 100) / 100
+          p.pt_maturity_value = Math.round(maturityBase * Math.pow(1 + p.pt_implied_apy / 100, yrs) * 100) / 100
+          p.pt_locked_profit  = Math.round((p.pt_maturity_value - maturityBase) * 100) / 100
           // Net at maturity = PT matures to face value, repay borrow + accrued interest
           const borrowAtExpiry = p.borrowUsd * Math.pow(1 + p.borrowApy / 100, yrs)
           p.pt_net_at_maturity = Math.round((p.pt_maturity_value - borrowAtExpiry) * 100) / 100
