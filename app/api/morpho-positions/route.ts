@@ -67,18 +67,33 @@ export async function GET(req: Request) {
     .filter((p: any) => parseFloat(p.state?.borrowAssetsUsd) > 1 || parseFloat(p.state?.supplyAssetsUsd) > 1 || parseFloat(p.state?.collateralUsd) > 1)
     .map((p: any) => {
       const st = p.state ?? {}
-      const collUsd = parseFloat(st.collateralUsd) || 0
+      const displayCollUsd = parseFloat(st.collateralUsd) || 0
       const borrowUsd = parseFloat(st.borrowAssetsUsd) || 0
       const supplyUsd = parseFloat(st.supplyAssetsUsd) || 0
       const lltv = parseFloat(p.market.lltv) / 1e18
-      const ltv = collUsd > 0 ? borrowUsd / collUsd : 0
       const hf = parseFloat(p.healthFactor) || 0
       const borrowApy = parseFloat(p.market.state?.borrowApy) || 0
       const supplyApy = parseFloat(p.market.state?.supplyApy) || 0
-      const collPriceUsd = parseFloat(p.market.collateralAsset?.priceUsd) || 0
-      const loanPriceUsd = parseFloat(p.market.loanAsset?.priceUsd) || 1
-      const collAmount = collPriceUsd > 0 ? collUsd / collPriceUsd : 0
-      const liqPrice = collAmount > 0 ? (borrowUsd / loanPriceUsd * loanPriceUsd) / (collAmount * lltv) : 0
+      const displayPriceUsd = parseFloat(p.market.collateralAsset?.priceUsd) || 0
+
+      // Morpho's API collateralUsd / priceUsd is a conservative display quote. For
+      // illiquid PT collateral it can sit well below the on-chain lending oracle (and
+      // even below the Pendle market price), inflating displayed losses and understating
+      // the liquidation buffer. The lending oracle is what actually governs the loan, and
+      // the API's healthFactor is computed from it, so recover the true oracle value:
+      //   HF = collateralValue * LLTV / borrowValue  =>  collateralValue = HF * borrowValue / LLTV
+      // Fall back to the display value for collateral-only positions (no borrow / no HF).
+      const oracleCollUsd = (borrowUsd > 0 && hf > 0 && lltv > 0)
+        ? (hf * borrowUsd) / lltv
+        : displayCollUsd
+      const collUsd = oracleCollUsd
+
+      // PT token count is price-independent (display USD / display price), so derive the
+      // true per-unit oracle price from it.
+      const collAmount = displayPriceUsd > 0 ? displayCollUsd / displayPriceUsd : 0
+      const collPriceUsd = collAmount > 0 ? oracleCollUsd / collAmount : displayPriceUsd
+      const ltv = collUsd > 0 ? borrowUsd / collUsd : 0
+      const liqPrice = collAmount > 0 ? borrowUsd / (collAmount * lltv) : 0
       const dropToLiq = collPriceUsd > 0 && liqPrice > 0 ? ((collPriceUsd - liqPrice) / collPriceUsd) * 100 : 0
 
       // Align collateral and borrow time-series via step-interpolation.
@@ -123,6 +138,9 @@ export async function GET(req: Request) {
         loanSymbol: p.market.loanAsset?.symbol || '—',
         lltv: Math.round(lltv * 10000) / 100,
         collUsd,
+        displayCollUsd,
+        oracleCollUsd,
+        priceBasis: oracleCollUsd !== displayCollUsd ? 'oracle' : 'display',
         borrowUsd,
         supplyUsd,
         ltv: Math.round(ltv * 10000) / 100,

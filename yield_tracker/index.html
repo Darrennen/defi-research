@@ -4394,7 +4394,7 @@ footer.site ul a:hover { color: var(--blue); }
   </div>
   <div class="health-bar"><i style="width:${hfPct}%"></i></div>
   <div class="kvs">
-    <div class="kv"><div class="l">Collateral</div><div class="v">${U(p.collUsd)}</div></div>
+    <div class="kv"><div class="l">Collateral${p.priceBasis === 'oracle' ? ' <span style="opacity:.6">(oracle)</span>' : ''}</div><div class="v">${U(p.collUsd)}${p.priceBasis === 'oracle' && p.displayCollUsd ? `<span style="display:block;font-size:9px;color:var(--ink-mute);font-weight:400">Morpho display ${U(p.displayCollUsd)}</span>` : ''}</div></div>
     <div class="kv"><div class="l">Borrowed</div><div class="v">${U(p.borrowUsd)}</div></div>
     <div class="kv"><div class="l">LTV / LLTV</div><div class="v">${p.ltv.toFixed(2)}% / ${p.lltv}%</div></div>
     <div class="kv"><div class="l">Borrow APY</div><div class="v">${P(p.borrowApy)}</div></div>
