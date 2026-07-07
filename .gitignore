@@ -12,3 +12,6 @@ polymarket_bot/trades.log
 polymarket_bot/state.json
 polymarket_bot/hermes_trades.log
 polymarket_bot/hermes_state.json
+polymarket_bot/backtest_summary.json
+polymarket_bot/backtest_equity.csv
+morpho-sentinel/.sentinel_state.json
