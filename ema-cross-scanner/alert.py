@@ -105,6 +105,20 @@ def main():
     scan = load(args.scan)
     coins = scan.get("coins", [])
 
+    # scanner.py sets asset_class from sectors.classify(); if CoinGecko is
+    # unreachable or rate-limited it logs "sector tags unavailable" and leaves
+    # every Binance row untagged. The crypto-only filter would then match
+    # nothing and this script would report "no crosses" indefinitely with no
+    # error. Fail loudly instead -- silence must mean "no crosses", never
+    # "the pipeline broke".
+    binance = [c for c in coins if c.get("venue") == "binance"]
+    if binance and not any(c.get("asset_class") for c in binance):
+        raise SystemExit(
+            "DATA ERROR: no asset_class on any Binance row -- sector tagging "
+            "failed upstream (CoinGecko rate limit?). Refusing to report, "
+            "because the crypto-only filter cannot be applied."
+        )
+
     state = {}
     state_path = Path(args.state)
     if not args.no_state and state_path.exists():
