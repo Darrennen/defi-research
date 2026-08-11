@@ -119,6 +119,22 @@ def main():
             "because the crypto-only filter cannot be applied."
         )
 
+    # scanner.py exits 0 even when most kline fetches failed -- it just writes a
+    # sparse scan.json and prints the error count to stderr. A 2026-08-11 run lost
+    # 2006 of 2130 series to a Binance IP rate-ban and left only 21 of 425 rows
+    # with a usable 1d pane; this script happily reported "no new crosses". A
+    # healthy scan sits near 83% coverage, so refuse below 40%.
+    with_pane = sum(1 for c in binance if daily(c))
+    coverage = with_pane / len(binance) if binance else 0
+    if binance and coverage < 0.40:
+        raise SystemExit(
+            f"DATA ERROR: only {with_pane}/{len(binance)} Binance rows "
+            f"({coverage:.0%}) have a usable 1d pane; a healthy scan is ~83%. "
+            "The scan lost most of its price series (rate-ban?). Refusing to "
+            "report, because 'no crosses' would be indistinguishable from "
+            "'no data'."
+        )
+
     state = {}
     state_path = Path(args.state)
     if not args.no_state and state_path.exists():

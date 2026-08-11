@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ema.watchlist</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/nen/ema-cross-scanner/run_watchlist.sh</string>
+  </array>
+
+  <!-- Monday 08:15 local (Asia/Kuala_Lumpur). Weekly, not daily: with the
+       calibrated gates a qualifying cross appears roughly every 1-2 weeks, and
+       grades live 20 bars = 20 days on the 1d, so a weekly run still catches
+       every cross with ~13 days of life left. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>8</integer>
+    <key>Minute</key><integer>15</integer>
+  </dict>
+
+  <!-- If the Mac was asleep at 08:15 Monday, run once on next wake rather than
+       skipping the week entirely. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/nen/ema-cross-scanner/data/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/nen/ema-cross-scanner/data/launchd.err</string>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/nen/ema-cross-scanner</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/nen/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
