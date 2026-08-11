@@ -8,6 +8,7 @@ so a cross cannot flicker in and out intra-bar.
 
 import argparse
 import json
+import os
 import sys
 import threading
 import time
@@ -19,7 +20,14 @@ from pathlib import Path
 
 import sectors
 
-BASE = "https://api.binance.com"
+# api.binance.com is unreachable from some datacenter IPs (verified 2026-08-11:
+# the Anthropic cloud sandbox cannot connect to it at all). data-api.binance.vision
+# is Binance's public market-data mirror and returns byte-identical klines, so fall
+# through to it rather than failing the scan. Override the order with BINANCE_HOST.
+HOSTS = [h for h in (os.environ.get("BINANCE_HOST"),
+                     "https://api.binance.com",
+                     "https://data-api.binance.vision") if h]
+_host = 0
 DATA = Path(__file__).parent / "data"
 
 TIMEFRAMES = ["1h", "4h", "12h", "1d", "1w"]
@@ -45,12 +53,22 @@ STABLES = {
 LEVERAGED = ("UPUSDT", "DOWNUSDT", "BULLUSDT", "BEARUSDT")
 
 
+def _next_host(why):
+    """Advance to the next Binance host. Benign under concurrency: workers may
+    race to advance, but the index is clamped and every host serves the same data."""
+    global _host
+    if _host + 1 < len(HOSTS):
+        _host += 1
+        print(f"  {why}, falling back to {HOSTS[_host]}", file=sys.stderr)
+        return True
+    return False
+
+
 def get(path, params=None, retries=5):
     """GET with backoff on 429/418 (rate limit) and transient 5xx."""
-    url = BASE + path
-    if params:
-        url += "?" + urllib.parse.urlencode(params)
+    qs = "?" + urllib.parse.urlencode(params) if params else ""
     for attempt in range(retries):
+        url = HOSTS[_host] + path + qs
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "ema-scanner/1.0"})
             with urllib.request.urlopen(req, timeout=20) as r:
@@ -71,8 +89,12 @@ def get(path, params=None, retries=5):
             if 500 <= e.code < 600:
                 time.sleep(2 ** attempt)
                 continue
+            if e.code in (403, 451) and _next_host(f"HTTP {e.code} (geo-block?)"):
+                continue
             raise
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+            if isinstance(e, urllib.error.URLError) and _next_host(f"unreachable ({e.reason})"):
+                continue
             time.sleep(2 ** attempt)
     raise RuntimeError(f"failed after {retries} tries: {url}")
 
