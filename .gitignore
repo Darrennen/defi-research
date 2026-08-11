@@ -15,3 +15,8 @@ polymarket_bot/hermes_state.json
 polymarket_bot/backtest_summary.json
 polymarket_bot/backtest_equity.csv
 morpho-sentinel/.sentinel_state.json
+
+# EMA cross scanner
+ema-cross-scanner/data/
+ema-cross-scanner/__pycache__/
+ema-cross-scanner/.alert_state.json
