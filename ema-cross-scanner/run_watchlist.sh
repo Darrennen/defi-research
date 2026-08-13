@@ -35,23 +35,31 @@ urllib.request.urlopen(req,timeout=20).read()' "$hook" 2>>"$LOG" && { say "deliv
 
 say "--- run start"
 
-# Pick the host and concurrency together. api.binance.com allows 6000 weight/min
-# and takes 10 workers happily. data-api.binance.vision serves identical klines
-# but has a far smaller budget -- at 10 workers it IP-bans within seconds, and
-# the ban shows up as dropped connections rather than a 429, so the scanner's
-# own throttle never sees it (2026-08-11: lost 2006 of 2130 series that way).
-# So probe the fast host and only use the mirror at low concurrency.
-if curl -fsS -m 10 -o /dev/null \
-     "https://api.binance.com/api/v3/ping" 2>/dev/null; then
-    HOST=https://api.binance.com
-    WORKERS=10
-else
-    HOST=https://data-api.binance.vision
-    WORKERS=2
-fi
+# Pinned to the mirror at low concurrency, deliberately, despite being ~10x
+# slower than api.binance.com at 10 workers.
+#
+# api.binance.com is badly intermittent from this network -- observed flapping
+# reachable/unreachable four times over 2026-08-11..13, including MID-SCAN. An
+# earlier version probed it and chose workers to match, but the probe can only
+# see the host at t=0: one run passed the probe, took 10 workers, then flipped
+# to the mirror partway through and got the IP rate-banned, losing 2006 of 2130
+# series. The mirror's budget is far smaller than api.binance.com's 6000/min and
+# the ban arrives as dropped connections, not 429, so the scanner's weight
+# throttle never sees it coming.
+#
+# 2 workers is safe on the mirror (proven: 0 fetch errors twice) and the mirror
+# itself has never once failed. ~20 min for all venues, which is free on a
+# weekly job. Override with BINANCE_HOST/EMA_WORKERS if the main API ever
+# becomes dependable again.
+HOST=${BINANCE_HOST:-https://data-api.binance.vision}
+WORKERS=${EMA_WORKERS:-2}
 say "host=$HOST workers=$WORKERS"
 
-if ! BINANCE_HOST="$HOST" python3 scanner.py --venue binance --workers "$WORKERS" >>"$LOG" 2>&1; then
+# --venue all, not binance: alert.py wants Hyperliquid too, and scanning
+# everything also keeps the :8790 dashboard populated across all venues.
+# alert.py does the venue filtering; the HIP-3 builder dexs are scanned but
+# never alerted on.
+if ! BINANCE_HOST="$HOST" python3 scanner.py --venue all --workers "$WORKERS" >>"$LOG" 2>&1; then
     say "SCAN FAILED"
     notify "Scan failed - see data/run.log" "*EMA watchlist:* scan failed. See \`data/run.log\`."
     exit 1

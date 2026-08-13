@@ -40,12 +40,29 @@ MIN_SCORE = 3
 FRESH_BARS = 20           # grade lifetime; also the horizon the edge was measured over
 TOP_N = 5
 
+# Binance spot is the population the rule was actually measured on. Hyperliquid
+# is reported on request, but the calibration does NOT transfer: re-running the
+# benchmark on HL gives n=51 at p=0.27 for this rule -- worth nothing in either
+# direction -- and HL threw a 1d *death* +5.30pp on n=47 that both calibration
+# passes read as a multiplicity artifact. So HL is a separate section with its
+# own warning, never blended into the Binance rows.
+VENUES = [
+    ("binance", "Binance spot", True),
+    ("hyperliquid", "Hyperliquid perps", False),
+]
+
 DISCLAIMER = (
-    "_Watchlist, not a signal._ 1d golden crosses in this population ran "
+    "_Watchlist, not a signal._ 1d golden crosses on *Binance spot* ran "
     "*+2.2pp median / +7.5pp winsorised mean* over the next 20 bars vs same-day "
     "peers (n=144). Real but unconfirmed: FWER ~0.10, and the edge is tail-driven "
     "— it needs breadth, so cherry-picking a few of these captures none of it. "
     "No direction is claimed."
+)
+
+HL_CAVEAT = (
+    "⚠️ _Hyperliquid is shown on request only._ The rule was fitted on Binance "
+    "spot and does *not* replicate on HL (n=51, p=0.27). Treat these as "
+    "unmeasured — they carry even less evidence than the Binance rows above."
 )
 
 
@@ -58,8 +75,11 @@ def daily(coin):
     return (coin.get("tf") or {}).get("1d", {}).get("50/200")
 
 
-def qualifies(coin, pane, max_bars_since):
-    if coin.get("venue") != "binance" or coin.get("quote_label") != "USDT":
+def qualifies(coin, pane, max_bars_since, venue):
+    if coin.get("venue") != venue:
+        return False
+    # Binance lists the same base against many quotes; HL perps have no quote leg.
+    if venue == "binance" and coin.get("quote_label") != "USDT":
         return False
     if coin.get("asset_class") != "crypto":
         return False
@@ -141,47 +161,71 @@ def main():
         state = json.loads(state_path.read_text())
     seen = set(state.get("seen", []))
 
-    hits, crowding = [], 0
-    for coin in coins:
-        pane = daily(coin)
-        if qualifies(coin, pane, FRESH_BARS):
-            crowding += 1
-        if not qualifies(coin, pane, args.max_age_bars):
+    sections, all_hits, degraded = [], [], []
+    for venue, label, validated in VENUES:
+        rows = [c for c in coins if c.get("venue") == venue]
+        if not rows:
             continue
-        key = f"{coin['symbol']}|1d|{pane.get('cross_time')}"
-        if key in seen:
-            continue
-        hits.append((key, coin, pane))
+        hits, crowding = [], 0
+        for coin in rows:
+            pane = daily(coin)
+            if qualifies(coin, pane, FRESH_BARS, venue):
+                crowding += 1
+            if not qualifies(coin, pane, args.max_age_bars, venue):
+                continue
+            key = f"{coin['symbol']}|{venue}|1d|{pane.get('cross_time')}"
+            if key in seen:
+                continue
+            hits.append((key, coin, pane))
+        hits.sort(key=lambda h: h[1].get("quote_vol_24h", 0), reverse=True)
+        cover = sum(1 for c in rows if daily(c)) / len(rows)
+        if cover < 0.40:
+            degraded.append(f"{label} ({cover:.0%} coverage)")
+        sections.append((label, validated, hits, crowding))
+        all_hits += hits
 
-    if not hits:
+    # A secondary venue that lost its data must not silently kill a good primary
+    # report -- but it also must not be quietly reported as "no crosses". So:
+    # degrade loudly inside the report if there is one, and hard-fail if there
+    # is not, so silence can never mean "the fetch broke".
+    if degraded and not all_hits:
+        raise SystemExit("DATA ERROR: " + ", ".join(degraded)
+                         + " -- too sparse to say whether there were crosses.")
+    if not all_hits:
         return  # silent: nothing new
 
-    hits.sort(key=lambda h: h[1].get("quote_vol_24h", 0), reverse=True)
-    shown = hits[:TOP_N]
-
     age_h = (time.time() * 1000 - scan.get("generated_at", 0)) / 3.6e6
-    out = [f"*📈 EMA 1d golden — watchlist* ({len(hits)} new)"]
-    out.append(f"{btc_regime(coins)}  ·  {crowding} qualifying in trailing 20d")
+    out = [f"*📈 EMA 1d golden — watchlist* ({len(all_hits)} new)"]
+    out.append(btc_regime(coins))
     if age_h > 36:
         out.append(f"⚠️ scan data is {age_h/24:.1f} days old")
-    out.append("")
+    if degraded:
+        out.append("⚠️ incomplete this run, section unreliable: "
+                   + ", ".join(degraded))
 
-    for _, coin, pane in shown:
-        vol = coin.get("quote_vol_24h", 0) / 1e6
-        gates = pane.get("gates") or {}
-        passed = ",".join(g for g, ok in gates.items() if ok) or "none"
-        out.append(
-            f"*{coin['base']}* — crossed {pane.get('bars_since')}d ago @ "
-            f"{pane.get('cross_price')}  ·  now {coin.get('price')} "
-            f"({pane.get('pct_since_cross', 0):+.1f}%)"
-        )
-        out.append(
-            f"   ${vol:,.0f}M/24h · score {pane.get('score')}/4 ({passed}) · "
-            f"{pane.get('bars_available')} bars"
-        )
+    for label, validated, hits, crowding in sections:
+        if not hits:
+            continue
+        out.append("")
+        out.append(f"*{label}* — {len(hits)} new · {crowding} qualifying in trailing 20d")
+        for _, coin, pane in hits[:TOP_N]:
+            vol = coin.get("quote_vol_24h", 0) / 1e6
+            gates = pane.get("gates") or {}
+            passed = ",".join(g for g, ok in gates.items() if ok) or "none"
+            out.append(
+                f"*{coin['base']}* — crossed {pane.get('bars_since')}d ago @ "
+                f"{pane.get('cross_price')}  ·  now {coin.get('price')} "
+                f"({pane.get('pct_since_cross', 0):+.1f}%)"
+            )
+            out.append(
+                f"   ${vol:,.0f}M/24h · score {pane.get('score')}/4 ({passed}) · "
+                f"{pane.get('bars_available')} bars"
+            )
+        if len(hits) > TOP_N:
+            out.append(f"_+{len(hits) - TOP_N} more below the top {TOP_N} by volume_")
+        if not validated:
+            out.append(HL_CAVEAT)
 
-    if len(hits) > TOP_N:
-        out.append(f"_+{len(hits) - TOP_N} more below the top {TOP_N} by volume_")
     out.append("")
     out.append(DISCLAIMER)
     print("\n".join(out))
