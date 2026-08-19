@@ -28,3 +28,20 @@ counted separately as dust and excluded from the flow totals. Do not remove this
 
 - `ata_map.json` — 129 owners -> PUMP token accounts
 - `labels.json` — address -> "PUMP Team 2.08B - Binance exit" style label
+
+## Anomaly detection
+
+The flow totals hide things, so the report ends with a "Worth a look" section that fires only
+when something trips. Five checks:
+
+1. **Dust spray** — one sender hitting 15+ cohort wallets with sub-threshold transfers. Reports
+   how many wallets it reached out of 129. This is how the `5KXDF6Qn…` sniper bot shows up: ~919
+   transfers a day across ~53 wallets, roughly $1,200 total. Attribution spam, not insider flow.
+2. **Behaviour change** — a wallet whose label says "holds all" sending PUMP out for the first
+   time. The single most meaningful thing that can happen in this cohort.
+3. **Exchange deposit** — anything reaching Binance or the unattributed `6LY1JzAF…` terminus,
+   always stated as a deposit rather than a sale, because the fill price is not observable.
+4. **New counterparty** — material outflow to an address absent from `known.json`, with its
+   account age when the account is young enough to date.
+5. **Cohort grew** — either distributor paying an address outside the tracked 129. That happened
+   twice in the August tranche and is how the set should be kept current.
